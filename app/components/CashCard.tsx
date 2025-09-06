@@ -1,12 +1,10 @@
 "use client";
-
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { useSupabaseUser } from "@/lib/useSupabaseUser";
 
 type TxType = "deposit" | "withdrawal" | "fee" | "correction";
-
 interface TxRow {
   id: string;
   user_id: string;
@@ -16,17 +14,16 @@ interface TxRow {
   occurred_at: string;
   note: string | null;
 }
-
-function signAmount(type: TxType, amount: number) {
-  if (type === "deposit") return amount;
-  if (type === "withdrawal" || type === "fee") return -amount;
-  return amount; // correction can be ±
+function signAmount(t: TxType, a: number) {
+  if (t === "deposit") return a;
+  if (t === "withdrawal" || t === "fee") return -a;
+  return a; // correction can be ±
 }
 
 export default function CashCard() {
   const { user } = useSupabaseUser();
   const [rows, setRows] = useState<TxRow[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const run = async () => {
@@ -35,13 +32,13 @@ export default function CashCard() {
         setLoading(false);
         return;
       }
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from("wallet_transactions")
         .select("*")
         .eq("user_id", user.id)
         .order("occurred_at", { ascending: false })
         .limit(400);
-      if (!error && data) setRows(data as unknown as TxRow[]);
+      setRows((data ?? []) as unknown as TxRow[]);
       setLoading(false);
     };
     run();
@@ -52,21 +49,17 @@ export default function CashCard() {
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const yearStart = new Date(now.getFullYear(), 0, 1);
-
     let mtd = 0, ytd = 0;
     for (const r of rows) {
       const d = new Date(r.occurred_at);
-      const val = signAmount(r.type as TxType, Number(r.amount));
+      const val = signAmount(r.type, Number(r.amount));
       if (d >= yearStart && d <= now) ytd += val;
       if (d >= monthStart && d <= now) mtd += val;
     }
-    const currency = rows[0]?.currency ?? "USD";
-    return { mtd, ytd, currency };
+    return { mtd, ytd, currency: rows[0]?.currency ?? "USD" };
   }, [rows]);
 
-  if (!user) {
-    return null;
-  }
+  if (!user) return null;
 
   return (
     <div className="rounded-2xl border p-4 shadow-sm">
