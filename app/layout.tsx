@@ -3,7 +3,6 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import AuthGate from "@/components/AuthGate";
 
-
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -14,20 +13,17 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+export const metadata: Metadata = {
+  title: "Ultimate Scalper Tool – Strategy Console",
+  description: "Trading dashboard",
+};
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className={inter.className}>
-        <AuthGate>
-          <Header />
-          {children}
-          <Footer />
-        </AuthGate>
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+        <AuthGate>{children}</AuthGate>
       </body>
     </html>
-  );
-}
-
   );
 }
