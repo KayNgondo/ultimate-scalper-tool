@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { ensureLocalStorageOnServer } from "@/lib/ssr-localstorage";
+ensureLocalStorageOnServer();
 
 /* shadcn/ui (assumes these exist in your project) */
 import { Button } from "@/components/ui/button";
