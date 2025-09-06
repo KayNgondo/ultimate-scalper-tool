@@ -7,6 +7,8 @@ import { supabase } from "@/lib/supabase";
 import { useSupabaseUser } from "@/lib/useSupabaseUser";
 import type { WalletTransaction } from "@/types/wallet";
 
+type CashType = "deposit" | "withdrawal" | "fee" | "correction";
+
 export default function CashPage() {
   const { user, loading } = useSupabaseUser();
   const router = useRouter();
@@ -15,7 +17,7 @@ export default function CashPage() {
 
   // form state
   const [amount, setAmount] = useState<string>("");
-  const [type, setType] = useState<"deposit"|"withdrawal"|"fee"|"correction">("deposit");
+  const [type, setType] = useState<CashType>("deposit");
   const [currency, setCurrency] = useState("USD");
   const [occurredAt, setOccurredAt] = useState<string>("");
   const [note, setNote] = useState("");
@@ -33,7 +35,7 @@ export default function CashPage() {
       .eq("user_id", user.id)
       .order("occurred_at", { ascending: false })
       .limit(200);
-    if (!error && data) setRows(data as WalletTransaction[]);
+    if (!error && data) setRows(data as unknown as WalletTransaction[]);
   }
 
   useEffect(() => {
@@ -111,7 +113,7 @@ export default function CashPage() {
           <label className="block text-sm mb-1">Type</label>
           <select
             value={type}
-            onChange={(e) => setType(e.target.value as any)}
+            onChange={(e) => setType(e.target.value as CashType)}
             className="w-full border rounded-xl px-3 py-2"
           >
             <option value="deposit">Deposit</option>
