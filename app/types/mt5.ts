@@ -1,18 +1,11 @@
-export type DealPayload = {
-  api_key: string;
-  deal_id: number;
-  order_id?: number | null;
-  position_id?: number | null;
+export type Mt5Side = "buy" | "sell";
+
+export interface Mt5WebhookPayload {
+  api_key: string;      // uuid from public.api_keys
+  deal_id: string | number;
   symbol: string;
-  side: "buy" | "sell";
+  side: Mt5Side;
   volume: number;
   price: number;
-  profit?: number | null;
-  commission?: number | null;
-  swap?: number | null;
-  comment?: string | null;
-  magic?: number | null;
-  account_id?: string | null;
-  broker?: string | null;
-  time: string;
-};
+  time: string;         // ISO8601
+}
