@@ -1,8 +1,10 @@
-// Server-side Supabase client using the service role key
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from '@supabase/supabase-js';
 
+// IMPORTANT: service role key must exist on Vercel (Settings → Environment Variables)
+//   NEXT_PUBLIC_SUPABASE_URL
+//   SUPABASE_SERVICE_ROLE_KEY
 export const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL as string,
-  process.env.SUPABASE_SERVICE_ROLE_KEY as string,
-  { auth: { persistSession: false, autoRefreshToken: false } }
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  { auth: { persistSession: false } }
 );
