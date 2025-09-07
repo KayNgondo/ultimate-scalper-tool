@@ -1,60 +1,55 @@
-import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+// app/api/mt5/webhook/route.ts
+import { NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
 
-type Mt5Side = "buy" | "sell";
-type Payload = {
-  api_key: string;            // from public.api_keys.api_key (uuid)
-  deal_id: string | number;
-  symbol: string;
-  side: Mt5Side;
-  volume: number;
-  price: number;
-  time: string;               // ISO 8601
-};
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY! // server secret
+)
 
-export const runtime = "nodejs";        // ensure Node runtime on Vercel
-export const dynamic = "force-dynamic"; // do not statically optimize
-
+// This receives the JSON your MT5 robot sends
 export async function POST(req: Request) {
   try {
-    const body = (await req.json()) as Payload;
+    const payload = await req.json()
 
-    if (!body?.api_key) {
-      return NextResponse.json({ ok: false, error: "missing api_key" }, { status: 400 });
+    const { api_key, deal_id, symbol, side, volume, price, time } = payload ?? {}
+
+    // 1) Basic checks
+    if (!api_key || !deal_id || !symbol || !side || volume === undefined || price === undefined || !time) {
+      return NextResponse.json({ ok: false, error: 'missing fields' }, { status: 400 })
     }
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY!; // server-only
-    const supabase = createClient(supabaseUrl, serviceRole, { auth: { persistSession: false } });
-
-    // validate api key
+    // 2) Look up the user from your api_keys table
     const { data: keyRow, error: keyErr } = await supabase
-      .from("api_keys")
-      .select("user_id, active")
-      .eq("api_key", body.api_key)
-      .single();
+      .from('api_keys')
+      .select('user_id,label')
+      .eq('api_key', api_key)
+      .single()
 
-    if (keyErr || !keyRow || keyRow.active === false) {
-      return NextResponse.json({ ok: false, error: "invalid api_key" }, { status: 401 });
+    if (keyErr || !keyRow || (keyRow.label && keyRow.label !== 'mt5')) {
+      return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
     }
 
-    // insert deal
-    const { error: insErr } = await supabase.from("mt5_deals").insert({
-      user_id: keyRow.user_id,
-      deal_id: String(body.deal_id),
-      symbol: body.symbol,
-      side: body.side,
-      volume: body.volume,
-      price: body.price,
-      time: body.time,
-    });
+    // 3) Save the deal into public.mt5_deals
+    const { error: insErr } = await supabase
+      .from('mt5_deals')
+      .insert({
+        user_id: keyRow.user_id,
+        deal_id: String(deal_id),
+        symbol,
+        side,
+        volume: Number(volume),
+        price: Number(price),
+        time: new Date(time).toISOString(), // your table’s "time" column
+      })
 
     if (insErr) {
-      return NextResponse.json({ ok: false, error: insErr.message }, { status: 500 });
+      return NextResponse.json({ ok: false, error: insErr.message }, { status: 500 })
     }
 
-    return NextResponse.json({ ok: true });
+    // 4) Tell the robot “OK”
+    return NextResponse.json({ ok: true }, { status: 200 })
   } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message ?? "bad request" }, { status: 400 });
+    return NextResponse.json({ ok: false, error: e?.message ?? 'unknown error' }, { status: 500 })
   }
 }
