@@ -1,10 +1,8 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ensureLocalStorageOnServer } from "@/lib/ssr-localstorage";
-ensureLocalStorageOnServer();
 
-/* shadcn/ui (assumes these exist in your project) */
+/* shadcn/ui */
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -28,57 +26,13 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
-  Tooltip,
+  Tooltip as RTooltip,
   Legend,
 } from "recharts";
-import CashCard from "@/components/CashCard";
-import Link from "next/link";
 
-/* -----------------------------
-   Lightweight in-file Dialog (no external dep)
-   ----------------------------- */
-function Dialog({
-  open,
-  onOpenChange,
-  children,
-}: {
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-  children: React.ReactNode;
-}) {
-  if (!open) return null;
-  return (
-    <div className="fixed inset-0 z-50 grid place-items-center">
-
-      <div className="absolute inset-0 bg-black/40" onClick={() => onOpenChange(false)} />
-      <div className="relative z-10 w-full max-w-lg mx-auto rounded-xl bg-white shadow-xl border">
-        {children}
-      </div>
-    </div>
-  );
-}
-function DialogContent({
-  className = "",
-  children,
-}: {
-  className?: string;
-  children: React.ReactNode;
-}) {
-  return <div className={`p-4 ${className}`}>{children}</div>;
-}
-function DialogHeader({ children }: { children: React.ReactNode }) {
-  return <div className="mb-2 space-y-1">{children}</div>;
-}
-function DialogTitle({ children }: { children: React.ReactNode }) {
-  return <h3 className="text-lg font-semibold leading-none tracking-tight">{children}</h3>;
-}
-function DialogDescription({ children }: { children: React.ReactNode }) {
-  return <p className="text-sm text-slate-600">{children}</p>;
-}
-
-/* -----------------------------
+/* --------------------------------
    Tiny in-file Toast system
-   ----------------------------- */
+----------------------------------- */
 type ToastItem = { id: string; title: string; desc?: string };
 const ToastContext = React.createContext<{
   push: (t: Omit<ToastItem, "id">) => void;
@@ -117,7 +71,7 @@ function useToast() {
 }
 
 /* ===========================================================
-   Ultimate Scalper Tool – Full Page (with Discipline + Goals)
+   Ultimate Scalper Tool – Full Page (with Old Calendar + Leaderboard)
    =========================================================== */
 
 const MARKET_OPTIONS = [
@@ -204,6 +158,13 @@ function calcLotSize(riskAmount: number, market: MarketName, riskPips: number) {
       return Number((riskAmount / adjusted).toFixed(3));
     }
   }
+}
+
+/* ============ OPTIONAL: safe stub (no-op) ============
+   Replace this with your Supabase RPC once ready.
+   Keeps build working during deployment. */
+async function recordSessionToLeaderboard(_pnlDelta: number) {
+  return Promise.resolve();
 }
 
 /* =========================
@@ -395,21 +356,35 @@ function PageInner() {
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <Button onClick={() => newSessionId()}>End Session / Start New</Button>
+          {/* End Session / Start New */}
           <Button
-            onClick={() =>
+            onClick={async () => {
+              try {
+                const pnlDelta = Number((pnl || 0).toFixed(2));
+                await recordSessionToLeaderboard(pnlDelta);
+                newSessionId();
+              } catch (e) {
+                console.error(e);
+                newSessionId();
+              }
+            }}
+          >
+            End Session / Start New
+          </Button>
+
+          {/* New Trade */}
+          <Button
+            onClick={() => {
               addTrade({
                 symbol: "Volatility 75 (1s)",
                 pnl: 0,
                 notes: "New Trade",
-              })
-            }
+              });
+            }}
             disabled={locked && lockOnHit}
           >
             New Trade
           </Button>
-  <Link href="/cash"><Button className="rounded-2xl bg-gray-900 text-white px-4 py-2 hover:opacity-90">Cashier</Button></Link>
-  <Link href="/sign-out"><Button className="rounded-2xl bg-gray-900 text-white px-4 py-2 hover:opacity-90">Sign out</Button></Link>
         </div>
       </div>
 
@@ -418,10 +393,11 @@ function PageInner() {
           <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
           <TabsTrigger value="analyzer">Analyzer</TabsTrigger>
           <TabsTrigger value="analytics">Analytics</TabsTrigger>
-          <TabsTrigger value="risk">Risk & Sizing</TabsTrigger>
+          <TabsTrigger value="risk">Risk &amp; Sizing</TabsTrigger>
           <TabsTrigger value="journal">Trade Journal</TabsTrigger>
           <TabsTrigger value="calendar">Calendar</TabsTrigger>
           <TabsTrigger value="asetups">A-Setups</TabsTrigger>
+          <TabsTrigger value="leaderboard">Leaderboard</TabsTrigger>
         </TabsList>
 
         {/* DASHBOARD */}
@@ -544,7 +520,7 @@ function PageInner() {
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="t" />
                     <YAxis />
-                    <Tooltip />
+                    <RTooltip />
                     <Line type="monotone" dataKey="equity" stroke="#2563eb" dot={false} />
                   </LineChart>
                 </ResponsiveContainer>
@@ -642,12 +618,17 @@ function PageInner() {
 
         {/* CALENDAR */}
         <TabsContent value="calendar">
-          <CalendarMonthly trades={trades} />
+          <OldCalendar trades={trades} />
         </TabsContent>
 
         {/* A-SETUPS */}
         <TabsContent value="asetups">
           <ASetupsGallery />
+        </TabsContent>
+
+        {/* LEADERBOARD (local store version; swap to Supabase later) */}
+        <TabsContent value="leaderboard">
+          <Leaderboard />
         </TabsContent>
       </Tabs>
     </div>
@@ -741,11 +722,13 @@ function BadgeShowcase({
 function MarketSizerRow({ market, riskAmount }: { market: MarketName; riskAmount: number }) {
   const storageKey = `ust-riskpips-${market}`;
   const [riskPips, setRiskPips] = useState<number>(() => {
-    const raw = localStorage.getItem(storageKey);
+    const raw = typeof window !== "undefined" ? localStorage.getItem(storageKey) : null;
     return raw ? Number(raw) : 0;
   });
   useEffect(() => {
-    localStorage.setItem(storageKey, String(riskPips || 0));
+    if (typeof window !== "undefined") {
+      localStorage.setItem(storageKey, String(riskPips || 0));
+    }
   }, [storageKey, riskPips]);
 
   const lot = calcLotSize(riskAmount, market, riskPips);
@@ -990,223 +973,6 @@ function JournalGrouped({
   );
 }
 
-/* ============== Calendar (Notion-style monthly with day drilldown) ============== */
-function CalendarMonthly({ trades }: { trades: TradeRow[] }) {
-  const now = new Date();
-  const [month, setMonth] = useState(now.getMonth());
-  const [year, setYear] = useState(now.getFullYear());
-  const [open, setOpen] = useState(false);
-  const [selected, setSelected] = useState<string | null>(null); // YYYY-MM-DD
-
-  const pnlMap = useMemo(() => {
-    const map = new Map<string, number>();
-    trades.forEach((t) => {
-      if (!t.ts) return;
-      const d = new Date(t.ts);
-      if (d.getMonth() === month && d.getFullYear() === year) {
-        const key = ymdLocal(d);
-        map.set(key, (map.get(key) || 0) + (t.pnl || 0));
-      }
-    });
-    return map;
-  }, [trades, month, year]);
-
-  const selectedTrades = useMemo(() => {
-    if (!selected) return [] as TradeRow[];
-    return trades
-      .filter((t) => t.ts && ymdLocal(new Date(t.ts)) === selected)
-      .sort((a, b) => (a.ts || 0) - (b.ts || 0));
-  }, [trades, selected]);
-  const selectedTotal = useMemo(
-    () => selectedTrades.reduce((a, t) => a + (t.pnl || 0), 0),
-    [selectedTrades]
-  );
-
-  const first = new Date(year, month, 1);
-  const startDay = first.getDay(); // 0-6, Sun first
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-
-  const cells: { date?: number; key: string; pnl?: number }[] = [];
-  for (let i = 0; i < startDay; i++) cells.push({ key: `pad-${i}` });
-  for (let d = 1; d <= daysInMonth; d++) {
-    const key = ymdLocal(new Date(year, month, d));
-    cells.push({ key, date: d, pnl: pnlMap.get(key) || 0 });
-  }
-  while (cells.length % 7 !== 0) cells.push({ key: `pad-end-${cells.length}` });
-
-  function changeMonth(delta: number) {
-    const d = new Date(year, month + delta, 1);
-    setYear(d.getFullYear());
-    setMonth(d.getMonth());
-  }
-  function openDay(key: string) {
-    setSelected(key);
-    setOpen(true);
-  }
-
-  const monthName = new Date(year, month, 1).toLocaleString(undefined, { month: "long", year: "numeric" });
-  const monthTotal = Array.from(pnlMap.values()).reduce((a, b) => a + b, 0);
-
-  function tileClasses(pnl?: number) {
-    if (pnl === undefined) return "border rounded-md p-2 h-24 bg-slate-50";
-    if (pnl > 0)
-      return "border rounded-md p-2 h-24 bg-blue-50/70 ring-1 ring-blue-200 cursor-pointer hover:ring-2";
-    if (pnl < 0)
-      return "border rounded-md p-2 h-24 bg-red-50/70 ring-1 ring-red-200 cursor-pointer hover:ring-2";
-    return "border rounded-md p-2 h-24 bg-white cursor-pointer hover:ring-2 hover:ring-slate-200";
-  }
-  function amountClasses(pnl: number) {
-    if (pnl > 0) return "mt-auto text-sm font-semibold text-blue-700";
-    if (pnl < 0) return "mt-auto text-sm font-semibold text-red-700";
-    return "mt-auto text-sm font-medium text-slate-400";
-  }
-
-  return (
-    <Card>
-      <CardContent className="p-4">
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <h4 className="text-lg font-semibold">Calendar – {monthName}</h4>
-            <div className="text-xs text-slate-500">
-              Month Total:{" "}
-              <span
-                className={
-                  monthTotal > 0
-                    ? "font-semibold text-blue-700"
-                    : monthTotal < 0
-                    ? "font-semibold text-red-700"
-                    : "font-semibold text-slate-500"
-                }
-              >
-                {monthTotal >= 0 ? "+" : ""}
-                {currency(Number(monthTotal.toFixed(2)))}
-              </span>
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => changeMonth(-1)}>
-              Prev
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => {
-                const d = new Date();
-                setYear(d.getFullYear());
-                setMonth(d.getMonth());
-              }}
-            >
-              Today
-            </Button>
-            <Button variant="outline" onClick={() => changeMonth(1)}>
-              Next
-            </Button>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-7 gap-2 text-xs font-medium text-slate-600 mb-2">
-          {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
-            <div key={d} className="text-center">
-              {d}
-            </div>
-          ))}
-        </div>
-
-        <div className="grid grid-cols-7 gap-2">
-          {cells.map((c) =>
-            c.date ? (
-              <div key={c.key} className={tileClasses(c.pnl)} onClick={() => openDay(c.key)}>
-                <div className="flex items-center justify-between text-[11px] text-slate-600">
-                  <span className="font-medium">{c.date}</span>
-                  {ymdLocal(new Date()) === c.key && (
-                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-slate-400" />
-                  )}
-                </div>
-                <div className={amountClasses(c.pnl ?? 0)}>
-                  {c.pnl !== 0 ? (
-                    <>
-                      {c.pnl > 0 ? "+" : ""}
-                      {currency(Number((c.pnl ?? 0).toFixed(2)))}
-                    </>
-                  ) : (
-                    "—"
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div key={c.key} className="border rounded-md p-2 h-24 bg-slate-50" />
-            )
-          )}
-        </div>
-
-        <div className="flex items-center gap-4 mt-3 text-xs text-slate-600">
-          <div className="flex items-center gap-2">
-            <span className="inline-block w-3 h-3 bg-blue-500/60 rounded-sm ring-1 ring-blue-300" />
-            Profit (Blue)
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="inline-block w-3 h-3 bg-red-500/60 rounded-sm ring-1 ring-red-300" />
-            Loss (Red)
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="inline-block w-3 h-3 bg-white rounded-sm ring-1 ring-slate-200" />
-            Flat (—)
-          </div>
-        </div>
-      </CardContent>
-
-      {/* Day detail dialog */}
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>
-              {selected
-                ? new Date(selected).toLocaleDateString(undefined, {
-                    weekday: "long",
-                    month: "long",
-                    day: "numeric",
-                    year: "numeric",
-                  })
-                : "Day"}
-            </DialogTitle>
-            <DialogDescription>
-              {selectedTrades.length ? `${selectedTrades.length} trade(s)` : "No trades logged for this day."}
-            </DialogDescription>
-          </DialogHeader>
-
-          {selectedTrades.length > 0 && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-sm font-medium">
-                <span>Day Total</span>
-                <span className={selectedTotal >= 0 ? "text-blue-700" : "text-red-700"}>
-                  {selectedTotal >= 0 ? "+" : ""}
-                  {currency(Number(selectedTotal.toFixed(2)))}
-                </span>
-              </div>
-              <div className="border rounded-md divide-y bg-white">
-                {selectedTrades.map((t) => (
-                  <div key={t.id} className="p-2 text-sm grid grid-cols-12 gap-2">
-                    <div className="col-span-4 text-slate-600">
-                      {t.ts ? new Date(t.ts).toLocaleTimeString() : "—"}
-                    </div>
-                    <div className="col-span-3">{t.symbol}</div>
-                    <div className="col-span-3 truncate" title={t.notes || "—"}>
-                      {t.notes || "—"}
-                    </div>
-                    <div className={`col-span-2 text-right ${t.pnl >= 0 ? "text-emerald-700" : "text-red-700"}`}>
-                      {t.pnl >= 0 ? "+" : ""}
-                      {currency(t.pnl)}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-    </Card>
-  );
-}
-
 /* ============== Analytics ============== */
 function AnalyticsPanel({ trades }: { trades: TradeRow[] }) {
   const byStrategy = useMemo(() => {
@@ -1238,7 +1004,7 @@ function AnalyticsPanel({ trades }: { trades: TradeRow[] }) {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" />
                 <YAxis />
-                <Tooltip />
+                <RTooltip />
                 <Legend />
                 <Bar dataKey="pnl" fill="#16a34a" />
               </BarChart>
@@ -1256,7 +1022,7 @@ function AnalyticsPanel({ trades }: { trades: TradeRow[] }) {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" />
                 <YAxis />
-                <Tooltip />
+                <RTooltip />
                 <Legend />
                 <Bar dataKey="pnl" fill="#2563eb" />
               </BarChart>
@@ -1477,7 +1243,11 @@ function ASetupsGallery() {
           <Card key={it.id}>
             <CardContent className="p-3 space-y-2">
               <div className="font-semibold">{it.title}</div>
-              <img src={it.dataUrl} alt={it.title} className="w-full rounded-md border object-contain" />
+              <img
+                src={it.dataUrl}
+                alt={it.title}
+                className="w-full rounded-md border object-contain"
+              />
               {it.notes && <div className="text-xs text-slate-600">{it.notes}</div>}
               <div className="flex justify-end">
                 <Button variant="destructive" onClick={() => setItems(items.filter((x) => x.id !== it.id))}>
@@ -1527,6 +1297,7 @@ function csvEscape(s: string) {
   if (/[,"\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
   return s;
 }
+
 /* ============== Goal progress bar ============== */
 function GoalProgress({
   label,
@@ -1555,9 +1326,7 @@ function GoalProgress({
 
       <div className="w-full h-2 rounded-full bg-slate-200 mt-2 overflow-hidden">
         <div
-          className={`h-2 transition-all ${
-            reached ? "bg-emerald-600" : "bg-indigo-500"
-          }`}
+          className={`h-2 transition-all ${reached ? "bg-emerald-600" : "bg-indigo-500"}`}
           style={{ width: `${pct}%` }}
         />
       </div>
@@ -1574,4 +1343,299 @@ function GoalProgress({
       )}
     </div>
   );
+}
+
+/* =========================
+   Old Calendar Component (with Daily PnL)
+   ========================= */
+function OldCalendar({ trades }: { trades: { ts?: number; pnl?: number }[] }) {
+  // Sum PnL per yyyy-mm-dd
+  const { tradeDays, dailyTotals } = useMemo(() => {
+    const set = new Set<string>();
+    const totals = new Map<string, number>();
+    trades.forEach((t) => {
+      if (!t.ts) return;
+      const d = new Date(t.ts);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+        d.getDate()
+      ).padStart(2, "0")}`;
+      set.add(key);
+      const prev = totals.get(key) || 0;
+      totals.set(key, prev + (t.pnl ?? 0));
+    });
+    return { tradeDays: set, dailyTotals: totals };
+  }, [trades]);
+
+  const [viewDate, setViewDate] = useState(() => {
+    const d = new Date();
+    d.setDate(1);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  });
+
+  function startOfMonth(d: Date) {
+    const x = new Date(d);
+    x.setDate(1);
+    x.setHours(0, 0, 0, 0);
+    return x;
+  }
+  function startOfCalendar(d: Date) {
+    const x = startOfMonth(d);
+    const dow = (x.getDay() + 6) % 7; // Monday=0
+    x.setDate(x.getDate() - dow);
+    return x;
+  }
+
+  const days = useMemo(() => {
+    const start = startOfCalendar(viewDate);
+    const arr: Date[] = [];
+    for (let i = 0; i < 42; i++) {
+      const x = new Date(start);
+      x.setDate(start.getDate() + i);
+      arr.push(x);
+    }
+    return arr;
+  }, [viewDate]);
+
+  const monthLabel = viewDate.toLocaleDateString(undefined, {
+    month: "long",
+    year: "numeric",
+  });
+
+  function keyOf(d: Date) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+      d.getDate()
+    ).padStart(2, "0")}`;
+  }
+
+  const todayKey = keyOf(new Date());
+  const viewMonth = viewDate.getMonth();
+
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <div className="flex items-center justify-between mb-3">
+          <Button
+            variant="outline"
+            onClick={() => {
+              const d = new Date(viewDate);
+              d.setMonth(d.getMonth() - 1);
+              setViewDate(startOfMonth(d));
+            }}
+          >
+            ← Prev
+          </Button>
+
+          <div className="text-lg font-semibold">{monthLabel}</div>
+
+          <Button
+            variant="outline"
+            onClick={() => {
+              const d = new Date(viewDate);
+              d.setMonth(d.getMonth() + 1);
+              setViewDate(startOfMonth(d));
+            }}
+          >
+            Next →
+          </Button>
+        </div>
+
+        <div className="grid grid-cols-7 text-xs font-medium text-slate-600 mb-1">
+          <div className="p-2 text-center">Mon</div>
+          <div className="p-2 text-center">Tue</div>
+          <div className="p-2 text-center">Wed</div>
+          <div className="p-2 text-center">Thu</div>
+          <div className="p-2 text-center">Fri</div>
+          <div className="p-2 text-center">Sat</div>
+          <div className="p-2 text-center">Sun</div>
+        </div>
+
+        <div className="grid grid-cols-7 gap-[6px]">
+          {days.map((d, i) => {
+            const k = keyOf(d);
+            const inMonth = d.getMonth() === viewMonth;
+            const isToday = k === todayKey;
+            const hasTrades = tradeDays.has(k);
+            const dayPnl = dailyTotals.get(k) ?? 0;
+
+            return (
+              <div
+                key={i}
+                className={[
+                  "h-20 rounded-md border p-2 flex flex-col justify-between bg-white",
+                  inMonth ? "" : "opacity-40",
+                  isToday ? "border-indigo-500 ring-2 ring-indigo-200" : "",
+                ].join(" ")}
+                title={hasTrades ? `${dayPnl >= 0 ? "+" : ""}${currency(Number(dayPnl.toFixed(2)))}` : undefined}
+              >
+                <div className="text-xs">{d.getDate()}</div>
+
+                {hasTrades && (
+                  <div className="flex justify-end">
+                    <span
+                      className={[
+                        "inline-flex items-center gap-1 rounded-full border px-2 py-[2px] text-[10px]",
+                        dayPnl > 0
+                          ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                          : dayPnl < 0
+                          ? "bg-rose-50 text-rose-700 border-rose-200"
+                          : "bg-slate-50 text-slate-700 border-slate-200",
+                      ].join(" ")}
+                    >
+                      {dayPnl >= 0 ? "+" : ""}
+                      {currency(Number(dayPnl.toFixed(2)))}
+                    </span>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ============== Leaderboard (local version) ============== */
+type LBUser = {
+  id: string;
+  name: string;
+  startBalance: number;
+  totalPnl: number;      // all-time pnl
+  sessions: number;      // sessions completed
+  lastActive?: number;   // timestamp (optional)
+};
+
+function Leaderboard() {
+  // Persist a simple multi-user store in localStorage (replace with Supabase query later)
+  const [users, setUsers] = useLocalStorage<LBUser[]>("ust-leaderboard-users", []);
+
+  // Add new user form
+  const [uName, setUName] = useState("");
+  const [uStart, setUStart] = useState<number>(1000);
+  const [uPnl, setUPnl] = useState<number>(0);
+  const [uSessions, setUSessions] = useState<number>(0);
+
+  function addUser() {
+    if (!uName.trim()) return;
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+    setUsers([{ id, name: uName.trim(), startBalance: uStart, totalPnl: uPnl, sessions: uSessions, lastActive: Date.now() }, ...users]);
+    setUName("");
+    setUStart(1000);
+    setUPnl(0);
+    setUSessions(0);
+  }
+
+  function removeUser(id: string) {
+    setUsers(users.filter(u => u.id !== id));
+  }
+
+  // Ranking logic
+  const ranked = useMemo(() => {
+    const rows = users.map(u => {
+      const equity = Number((u.startBalance + u.totalPnl).toFixed(2));
+      const badge = badgeForSessions(u.sessions);
+      return { ...u, equity, badge };
+    });
+    rows.sort((a, b) => {
+      if (b.equity !== a.equity) return b.equity - a.equity;
+      if (b.sessions !== a.sessions) return b.sessions - a.sessions;
+      return (b.lastActive || 0) - (a.lastActive || 0);
+    });
+    return rows;
+  }, [users]);
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardContent className="p-4">
+          <h3 className="text-xl font-semibold">Leaderboard</h3>
+          <p className="text-sm text-slate-600">
+            Rank traders by <strong>equity</strong> and break ties with <strong>sessions</strong>. Badges are awarded by total sessions.
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="p-4">
+          <h4 className="text-lg font-semibold mb-3">Add / Update User</h4>
+          <div className="grid md:grid-cols-12 gap-3 items-end">
+            <div className="md:col-span-3">
+              <Label>Name</Label>
+              <Input value={uName} onChange={(e) => setUName(e.target.value)} placeholder="Trader Neo" />
+            </div>
+            <div className="md:col-span-3">
+              <Label>Starting Capital</Label>
+              <Input type="number" value={uStart} onChange={(e) => setUStart(Number(e.target.value))} />
+            </div>
+            <div className="md:col-span-3">
+              <Label>All-time PnL</Label>
+              <Input type="number" value={uPnl} onChange={(e) => setUPnl(Number(e.target.value))} />
+            </div>
+            <div className="md:col-span-2">
+              <Label>Sessions</Label>
+              <Input type="number" value={uSessions} onChange={(e) => setUSessions(Number(e.target.value))} />
+            </div>
+            <div className="md:col-span-1">
+              <Button onClick={addUser}>Save</Button>
+            </div>
+          </div>
+          <div className="text-xs text-slate-500 mt-2">
+            Equity = Starting Capital + All-time PnL. You can edit by re-adding the same user name and removing the old entry.
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="p-0">
+          <div className="px-3 py-2 border-b bg-slate-50 text-sm font-medium">Rankings</div>
+          <div className="grid grid-cols-12 px-3 py-2 text-xs font-medium bg-slate-50">
+            <div className="col-span-1">#</div>
+            <div className="col-span-3">Trader</div>
+            <div className="col-span-3">Badge</div>
+            <div className="col-span-2 text-right">Sessions</div>
+            <div className="col-span-2 text-right">Equity</div>
+            <div className="col-span-1 text-right pr-1">Actions</div>
+          </div>
+
+          {ranked.length ? ranked.map((u, idx) => (
+            <div key={u.id} className="grid grid-cols-12 px-3 py-2 border-t text-sm items-center bg-white">
+              <div className="col-span-1 font-semibold">
+                {idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : idx + 1}
+              </div>
+              <div className="col-span-3">{u.name}</div>
+              <div className="col-span-3 flex items-center gap-2">
+                <img
+                  src={u.badge.imagePath}
+                  alt={u.badge.name}
+                  className="h-6 w-6 object-contain"
+                />
+                <span className="text-xs text-slate-700">{u.badge.name}</span>
+              </div>
+              <div className="col-span-2 text-right">{u.sessions}</div>
+              <div className={`col-span-2 text-right ${u.equity >= u.startBalance ? "text-emerald-600" : "text-rose-600"}`}>
+                {u.equity.toLocaleString(undefined, { style: "currency", currency: "USD" })}
+              </div>
+              <div className="col-span-1 text-right">
+                <Button variant="destructive" size="sm" onClick={() => removeUser(u.id)}>Remove</Button>
+              </div>
+            </div>
+          )) : (
+            <div className="p-4 text-sm text-slate-600">No users yet. Add your first trader above.</div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// Badge helper shared with the rest of the app’s tiers
+function badgeForSessions(sessions: number): { name: string; imagePath: string } {
+  if (sessions >= 30) return { name: "Legendary • 30 Sessions Untouchable", imagePath: "/badges/legendary.png" };
+  if (sessions >= 25) return { name: "Elite • 25 Sessions Mastered", imagePath: "/badges/elite.png" };
+  if (sessions >= 20) return { name: "Diamond • 20 Sessions Mastered", imagePath: "/badges/diamond.png" };
+  if (sessions >= 15) return { name: "Platinum • 15 Sessions Dominated", imagePath: "/badges/platinum.png" };
+  if (sessions >= 10) return { name: "Gold • 10 Sessions Conquered", imagePath: "/badges/gold.png" };
+  if (sessions >= 5)  return { name: "Silver • 5 Sessions Survived", imagePath: "/badges/silver.png" };
+  return { name: "Starter", imagePath: "/badges/silver.png" };
 }

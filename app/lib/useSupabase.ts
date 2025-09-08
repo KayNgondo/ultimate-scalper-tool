@@ -1,30 +1,48 @@
-// lib/useSupabase.ts
-"use client";
+// app/lib/useSupabase.ts
+'use client';
+import useSupabase from '@/lib/useSupabase';
+// or (if you don’t use the @ alias)
+import useSupabase from '../../lib/useSupabase';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
-import { useEffect, useState } from "react";
-import { supabase } from "./supabase";
-import type { User } from "@supabase/supabase-js";
+/**
+ * If you have generated DB types, replace `any` with your Database type:
+ *   import type { Database } from '@/types/database';
+ *   type DB = Database;
+ */
+type DB = any;
 
-export function useSupabaseUser() {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+// Keep one instance for the entire browser session
+let _client: SupabaseClient<DB> | null = null;
 
-  useEffect(() => {
-    // initial session
-    supabase.auth.getSession().then(({ data }) => {
-      setUser(data.session?.user ?? null);
-      setLoading(false);
-    });
+/**
+ * useSupabase()
+ * Returns a singleton Supabase browser client for Client Components.
+ * Requires NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.
+ */
+export default function useSupabase(): SupabaseClient<DB> {
+  if (_client) return _client;
 
-    // listen for changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-    });
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-    return () => subscription.unsubscribe();
-  }, []);
+  if (!url || !anon) {
+    throw new Error(
+      '[useSupabase] Missing env vars. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.'
+    );
+  }
 
-  return { user, loading };
+  _client = createClient<DB>(url, anon, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+      flowType: 'pkce',
+    },
+  });
+
+  return _client;
 }
+
+/** Optional convenience alias */
+export const getSupabase = () => useSupabase();
