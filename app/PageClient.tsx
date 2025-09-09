@@ -405,37 +405,32 @@ function PageInner() {
 <Button
   onClick={async () => {
     try {
-      // signed-in user id (from Supabase)
-      const userId = user?.id ?? "";
-
-      // session PnL for the current session
+      const userId = user?.id;
       const pnlNumber = Number((pnl || 0).toFixed(2));
-
-      // derive session start time from our local sessionId (we store a timestamp string)
-      const startedAtISO = sessionId
-        ? new Date(Number(sessionId)).toISOString()
-        : undefined;
-
-      // end time is now
+      const startedAtISO = new Date(Number(sessionId || Date.now())).toISOString();
       const endedAtISO = new Date().toISOString();
 
-      // write to the API only if we have a user
       if (userId) {
         await recordSessionToLeaderboard(userId, pnlNumber, startedAtISO, endedAtISO);
-      } else {
-        console.warn("No signed-in user; skipping leaderboard write.");
       }
-
-      // start a fresh session in the app
-      newSessionId();
+      newSessionId(); // start fresh
     } catch (e) {
       console.error(e);
-      newSessionId(); // still rotate session on error
+      newSessionId(); // still start fresh on error
     }
   }}
 >
   End Session / Start New
 </Button>
+
+<Tabs defaultValue="dashboard">
+  {/* … your existing TabsList, TabsTrigger, TabsContent … */}
+</Tabs>
+
+</div>
+);
+}
+
 
    
       <Tabs defaultValue="dashboard">
