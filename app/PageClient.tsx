@@ -1,4 +1,5 @@
 "use client";
+import AuthGate from "@/components/AuthGate";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
@@ -173,7 +174,9 @@ async function recordSessionToLeaderboard(_pnlDelta: number) {
 export default function Page() {
   return (
     <ToastProvider>
-      <PageInner />
+      <AuthGate>
+        <PageInner />
+      </AuthGate>
     </ToastProvider>
   );
 }
@@ -397,7 +400,16 @@ function PageInner() {
           <TabsTrigger value="journal">Trade Journal</TabsTrigger>
           <TabsTrigger value="calendar">Calendar</TabsTrigger>
           <TabsTrigger value="asetups">A-Setups</TabsTrigger>
-          <TabsTrigger value="leaderboard">Leaderboard</TabsTrigger>
+          
+          <a
+  href="/leaderboard"
+  className="inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium ring-offset-background transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50"
+>
+  Leaderboard
+</a>
+
+
+
         </TabsList>
 
         {/* DASHBOARD */}
@@ -626,11 +638,7 @@ function PageInner() {
           <ASetupsGallery />
         </TabsContent>
 
-        {/* LEADERBOARD (local store version; swap to Supabase later) */}
-        <TabsContent value="leaderboard">
-          <Leaderboard />
-        </TabsContent>
-      </Tabs>
+             </Tabs>
     </div>
   );
 }
@@ -1496,146 +1504,4 @@ function OldCalendar({ trades }: { trades: { ts?: number; pnl?: number }[] }) {
   );
 }
 
-/* ============== Leaderboard (local version) ============== */
-type LBUser = {
-  id: string;
-  name: string;
-  startBalance: number;
-  totalPnl: number;      // all-time pnl
-  sessions: number;      // sessions completed
-  lastActive?: number;   // timestamp (optional)
-};
 
-function Leaderboard() {
-  // Persist a simple multi-user store in localStorage (replace with Supabase query later)
-  const [users, setUsers] = useLocalStorage<LBUser[]>("ust-leaderboard-users", []);
-
-  // Add new user form
-  const [uName, setUName] = useState("");
-  const [uStart, setUStart] = useState<number>(1000);
-  const [uPnl, setUPnl] = useState<number>(0);
-  const [uSessions, setUSessions] = useState<number>(0);
-
-  function addUser() {
-    if (!uName.trim()) return;
-    const id = `${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
-    setUsers([{ id, name: uName.trim(), startBalance: uStart, totalPnl: uPnl, sessions: uSessions, lastActive: Date.now() }, ...users]);
-    setUName("");
-    setUStart(1000);
-    setUPnl(0);
-    setUSessions(0);
-  }
-
-  function removeUser(id: string) {
-    setUsers(users.filter(u => u.id !== id));
-  }
-
-  // Ranking logic
-  const ranked = useMemo(() => {
-    const rows = users.map(u => {
-      const equity = Number((u.startBalance + u.totalPnl).toFixed(2));
-      const badge = badgeForSessions(u.sessions);
-      return { ...u, equity, badge };
-    });
-    rows.sort((a, b) => {
-      if (b.equity !== a.equity) return b.equity - a.equity;
-      if (b.sessions !== a.sessions) return b.sessions - a.sessions;
-      return (b.lastActive || 0) - (a.lastActive || 0);
-    });
-    return rows;
-  }, [users]);
-
-  return (
-    <div className="space-y-4">
-      <Card>
-        <CardContent className="p-4">
-          <h3 className="text-xl font-semibold">Leaderboard</h3>
-          <p className="text-sm text-slate-600">
-            Rank traders by <strong>equity</strong> and break ties with <strong>sessions</strong>. Badges are awarded by total sessions.
-          </p>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardContent className="p-4">
-          <h4 className="text-lg font-semibold mb-3">Add / Update User</h4>
-          <div className="grid md:grid-cols-12 gap-3 items-end">
-            <div className="md:col-span-3">
-              <Label>Name</Label>
-              <Input value={uName} onChange={(e) => setUName(e.target.value)} placeholder="Trader Neo" />
-            </div>
-            <div className="md:col-span-3">
-              <Label>Starting Capital</Label>
-              <Input type="number" value={uStart} onChange={(e) => setUStart(Number(e.target.value))} />
-            </div>
-            <div className="md:col-span-3">
-              <Label>All-time PnL</Label>
-              <Input type="number" value={uPnl} onChange={(e) => setUPnl(Number(e.target.value))} />
-            </div>
-            <div className="md:col-span-2">
-              <Label>Sessions</Label>
-              <Input type="number" value={uSessions} onChange={(e) => setUSessions(Number(e.target.value))} />
-            </div>
-            <div className="md:col-span-1">
-              <Button onClick={addUser}>Save</Button>
-            </div>
-          </div>
-          <div className="text-xs text-slate-500 mt-2">
-            Equity = Starting Capital + All-time PnL. You can edit by re-adding the same user name and removing the old entry.
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardContent className="p-0">
-          <div className="px-3 py-2 border-b bg-slate-50 text-sm font-medium">Rankings</div>
-          <div className="grid grid-cols-12 px-3 py-2 text-xs font-medium bg-slate-50">
-            <div className="col-span-1">#</div>
-            <div className="col-span-3">Trader</div>
-            <div className="col-span-3">Badge</div>
-            <div className="col-span-2 text-right">Sessions</div>
-            <div className="col-span-2 text-right">Equity</div>
-            <div className="col-span-1 text-right pr-1">Actions</div>
-          </div>
-
-          {ranked.length ? ranked.map((u, idx) => (
-            <div key={u.id} className="grid grid-cols-12 px-3 py-2 border-t text-sm items-center bg-white">
-              <div className="col-span-1 font-semibold">
-                {idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : idx + 1}
-              </div>
-              <div className="col-span-3">{u.name}</div>
-              <div className="col-span-3 flex items-center gap-2">
-                <img
-                  src={u.badge.imagePath}
-                  alt={u.badge.name}
-                  className="h-6 w-6 object-contain"
-                />
-                <span className="text-xs text-slate-700">{u.badge.name}</span>
-              </div>
-              <div className="col-span-2 text-right">{u.sessions}</div>
-              <div className={`col-span-2 text-right ${u.equity >= u.startBalance ? "text-emerald-600" : "text-rose-600"}`}>
-                {u.equity.toLocaleString(undefined, { style: "currency", currency: "USD" })}
-              </div>
-              <div className="col-span-1 text-right">
-                <Button variant="destructive" size="sm" onClick={() => removeUser(u.id)}>Remove</Button>
-              </div>
-            </div>
-          )) : (
-            <div className="p-4 text-sm text-slate-600">No users yet. Add your first trader above.</div>
-          )}
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-// Badge helper shared with the rest of the app’s tiers
-function badgeForSessions(sessions: number): { name: string; imagePath: string } {
-  if (sessions >= 30) return { name: "Legendary • 30 Sessions Untouchable", imagePath: "/badges/legendary.png" };
-  if (sessions >= 25) return { name: "Elite • 25 Sessions Mastered", imagePath: "/badges/elite.png" };
-  if (sessions >= 20) return { name: "Diamond • 20 Sessions Mastered", imagePath: "/badges/diamond.png" };
-  if (sessions >= 15) return { name: "Platinum • 15 Sessions Dominated", imagePath: "/badges/platinum.png" };
-  if (sessions >= 10) return { name: "Gold • 10 Sessions Conquered", imagePath: "/badges/gold.png" };
-  if (sessions >= 5)  return { name: "Silver • 5 Sessions Survived", imagePath: "/badges/silver.png" };
-  return { name: "Starter", imagePath: "/badges/silver.png" };
-}
