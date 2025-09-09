@@ -1,118 +1,179 @@
 "use client";
+
 import { useState } from "react";
-import { supabase } from "@/lib/supabase";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { createClient } from "@/lib/supabase/browser"; // your browser helper
 
 export default function SignInPage() {
-  const router = useRouter();
+  const supabase = createClient();
 
+  const [mode, setMode] = useState<"sign-in" | "sign-up">("sign-in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [name, setName] = useState(""); // NEW name field
-  const [loading, setLoading] = useState(false);
-  const [isSignUp, setIsSignUp] = useState(false);
+  const [name, setName] = useState(""); // used on sign up
+  const [busy, setBusy] = useState(false);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSignIn(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true);
-
+    setBusy(true);
     try {
-      if (isSignUp) {
-        // Create new account
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-        });
-
-        if (error) throw error;
-
-        const user = data.user;
-        if (user) {
-          // Store the name in "profiles" table
-          const { error: profileError } = await supabase.from("profiles").upsert({
-            id: user.id,
-            email: user.email,
-            name, // save the name
-          });
-
-          if (profileError) throw profileError;
-        }
-
-        alert("Account created! You can now sign in.");
-        setIsSignUp(false);
-      } else {
-        // Sign in existing user
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-        router.push("/"); // go to dashboard
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) {
+        alert(error.message);
+        return;
       }
-    } catch (err: any) {
-      alert(err.message);
+      // success -> Next.js middleware/route will redirect to /
+      window.location.href = "/";
     } finally {
-      setLoading(false);
+      setBusy(false);
+    }
+  }
+
+  async function handleSignUp(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      // ✅ ONLY pass the name in metadata; DO NOT insert into profiles here.
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          // this is read by the DB trigger: raw_user_meta_data->>'name'
+          data: { name: name?.trim() || "Trader" },
+          emailRedirectTo: `${window.location.origin}/reset`, // optional (also used for password recovery)
+        },
+      });
+
+      if (error) {
+        alert(error.message);
+        return;
+      }
+
+      // If email confirmations are ON, Supabase sends a confirmation email.
+      // If OFF, user is signed in immediately.
+      if (!data.session) {
+        alert("Check your inbox to confirm your email, then sign in.");
+      } else {
+        window.location.href = "/";
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleForgotPassword() {
+    if (!email) {
+      alert("Enter your email first, then click Forgot password.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset`,
+      });
+      if (error) {
+        alert(error.message);
+        return;
+      }
+      alert("Password reset email sent. Please check your inbox.");
+    } finally {
+      setBusy(false);
     }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-      <div className="max-w-md w-full bg-white p-6 rounded-lg shadow">
-        <h1 className="text-2xl font-bold mb-4">{isSignUp ? "Create Account" : "Sign in"}</h1>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {isSignUp && (
+    <div className="min-h-screen grid place-items-center bg-slate-50 px-4">
+      <div className="w-full max-w-md rounded-xl border bg-white p-6 shadow-sm">
+        <h1 className="text-2xl font-semibold mb-1">{mode === "sign-in" ? "Sign in" : "Create Account"}</h1>
+        <p className="text-slate-600 mb-6">
+          Use your email and password to access Ultimate Scalper Tool.
+        </p>
+
+        <form onSubmit={mode === "sign-in" ? handleSignIn : handleSignUp} className="space-y-4">
+          {mode === "sign-up" && (
             <div>
-              <label className="block text-sm font-medium">Name</label>
+              <label className="block text-sm font-medium mb-1">Name</label>
               <input
-                type="text"
+                className="w-full rounded-md border px-3 py-2"
+                placeholder="Your name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
-                className="w-full mt-1 p-2 border rounded"
-                placeholder="Your name"
               />
             </div>
           )}
 
           <div>
-            <label className="block text-sm font-medium">Email</label>
+            <label className="block text-sm font-medium mb-1">Email</label>
             <input
               type="email"
+              className="w-full rounded-md border px-3 py-2"
+              placeholder="you@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full mt-1 p-2 border rounded"
-              placeholder="you@example.com"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium">Password</label>
+            <label className="block text-sm font-medium mb-1">Password</label>
             <input
               type="password"
+              className="w-full rounded-md border px-3 py-2"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              className="w-full mt-1 p-2 border rounded"
+              minLength={6}
             />
           </div>
 
+          {mode === "sign-in" && (
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={handleForgotPassword}
+                className="text-sm text-indigo-600 hover:underline"
+                disabled={busy}
+              >
+                Forgot password?
+              </button>
+            </div>
+          )}
+
           <button
             type="submit"
-            disabled={loading}
-            className="w-full py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700"
+            className="w-full rounded-md bg-indigo-600 text-white py-2 font-semibold disabled:opacity-60"
+            disabled={busy}
           >
-            {loading ? "Loading..." : isSignUp ? "Create Account" : "Sign in"}
+            {busy ? "Loading..." : mode === "sign-in" ? "Sign in" : "Create account"}
           </button>
         </form>
 
-        <p className="mt-4 text-sm text-gray-600">
-          {isSignUp ? "Already have an account?" : "Don't have an account?"}{" "}
-          <button
-            onClick={() => setIsSignUp(!isSignUp)}
-            className="text-indigo-600 hover:underline"
-          >
-            {isSignUp ? "Sign in" : "Create one"}
-          </button>
-        </p>
+        <div className="mt-4 text-sm text-slate-600">
+          {mode === "sign-in" ? (
+            <>
+              Don&apos;t have an account?{" "}
+              <button className="text-indigo-600 hover:underline" onClick={() => setMode("sign-up")}>
+                Create account
+              </button>
+            </>
+          ) : (
+            <>
+              Already have an account?{" "}
+              <button className="text-indigo-600 hover:underline" onClick={() => setMode("sign-in")}>
+                Sign in
+              </button>
+            </>
+          )}
+        </div>
+
+        <div className="mt-4 text-xs text-rose-600">
+          Anonymous sign-ins are disabled
+        </div>
+
+        <div className="mt-2 text-xs text-slate-500">
+          After signing in you’ll be redirected to the dashboard <code>/</code>.
+        </div>
       </div>
     </div>
   );
