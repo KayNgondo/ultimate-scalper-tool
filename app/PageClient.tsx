@@ -404,14 +404,14 @@ function PageInner() {
               newSessionId();
             }
           }}
-        >
+        
           End Session / Start New
         </Button>
-      </div>
+    </div>
 
-      {/* Tabs */}
-      <Tabs defaultValue="dashboard">
-        <TabsList className="mb-3">
+    {/* Tabs */}
+    <Tabs defaultValue="dashboard">
+      <TabsList className="mb-3">
           <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
           <TabsTrigger value="analyzer">Analyzer</TabsTrigger>
           <TabsTrigger value="analytics">Analytics</TabsTrigger>
