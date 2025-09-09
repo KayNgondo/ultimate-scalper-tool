@@ -164,9 +164,29 @@ function calcLotSize(riskAmount: number, market: MarketName, riskPips: number) {
 /* ============ OPTIONAL: safe stub (no-op) ============
    Replace this with your Supabase RPC once ready.
    Keeps build working during deployment. */
-async function recordSessionToLeaderboard(_pnlDelta: number) {
-  return Promise.resolve();
+// ---- Replace your previous stub with this real implementation ----
+async function recordSessionToLeaderboard(
+  supabaseUserId: string,
+  pnl: number,
+  startedAtISO?: string,
+  endedAtISO?: string
+) {
+  try {
+    await fetch("/api/sessions/close", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId: supabaseUserId,
+        pnl,
+        startedAt: startedAtISO,
+        endedAt: endedAtISO,
+      }),
+    });
+  } catch (e) {
+    console.error("Failed to insert session:", e);
+  }
 }
+
 
 /* =========================
    Root Page (provider first)
@@ -361,19 +381,26 @@ function PageInner() {
         <div className="flex items-center gap-2">
           {/* End Session / Start New */}
           <Button
-            onClick={async () => {
-              try {
-                const pnlDelta = Number((pnl || 0).toFixed(2));
-                await recordSessionToLeaderboard(pnlDelta);
-                newSessionId();
-              } catch (e) {
-                console.error(e);
-                newSessionId();
-              }
-            }}
-          >
-            End Session / Start New
-          </Button>
+  onClick={async () => {
+    try {
+      const userId = user?.id;   // signed-in user
+      const pnl = Number(pnl || 0);
+      const startedAtISO = currentSession.startedAt?.toISOString();
+      const endedAtISO = new Date().toISOString();
+
+      if (userId) {
+        await recordSessionToLeaderboard(userId, pnl, startedAtISO, endedAtISO);
+      }
+
+      newSessionId(); // reset/start fresh
+    } catch (e) {
+      console.error(e);
+      newSessionId();
+    }
+  }}
+>
+  End Session / Start New
+</Button>
 
           {/* New Trade */}
           <Button
