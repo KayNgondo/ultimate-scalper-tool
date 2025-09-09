@@ -193,6 +193,24 @@ export default function Page() {
    Main page content
 ============================================================================ */
 function PageInner() {
+  
+  import { createClient } from "@/lib/supabase/browser"; // already used in sign-in
+
+function PageInner() {
+  const supabase = createClient();
+
+  async function handleSignOut() {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      console.error("Sign out error:", error.message);
+    } else {
+      window.location.href = "/sign-in"; // redirect back to sign-in page
+    }
+  }
+
+  // ... rest of your dashboard code
+
+  
   const { user } = useSupabaseUser();
   const { push } = useToast();
 
@@ -332,24 +350,43 @@ function PageInner() {
     return ts;
   }
 
-  return (
+  rreturn (
     <div className="max-w-7xl mx-auto px-4 py-6 space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <h1 className="text-3xl md:text-4xl font-bold">Ultimate Scalper Tool – Strategy Console</h1>
+          <h1 className="text-3xl md:text-4xl font-bold">
+            Ultimate Scalper Tool – Strategy Console
+          </h1>
           <span
             className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full border ${
               locked && lockOnHit
                 ? "bg-rose-50 text-rose-700 border-rose-200"
                 : "bg-emerald-50 text-emerald-700 border-emerald-200"
             }`}
-            title={locked && lockOnHit ? "Trading locked for today (max loss hit)" : "Active"}
+            title={
+              locked && lockOnHit
+                ? "Trading locked for today (max loss hit)"
+                : "Active"
+            }
           >
-            <span className={`h-2 w-2 rounded-full ${locked && lockOnHit ? "bg-rose-500" : "bg-emerald-500"}`} />
+            <span
+              className={`h-2 w-2 rounded-full ${
+                locked && lockOnHit ? "bg-rose-500" : "bg-emerald-500"
+              }`}
+            />
             {locked && lockOnHit ? "Locked" : "Active"}
           </span>
         </div>
+
+        {/* Sign out button on the right */}
+        <button
+          onClick={handleSignOut}
+          className="rounded-md border px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+        >
+          Sign out
+        </button>
+      </div>
 
         <Button
           onClick={async () => {
