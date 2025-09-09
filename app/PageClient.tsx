@@ -442,7 +442,6 @@ function PageInner() {
 >
   End Session / Start New
 </Button>
-</div>
    
       <Tabs defaultValue="dashboard">
         <TabsList className="mb-3">
