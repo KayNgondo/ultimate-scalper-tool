@@ -2,6 +2,28 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
+
+export default function LeaderboardPage() {
+  return (
+    <div className="p-6">
+      {/* Back button */}
+      <div className="mb-4">
+        <Link
+          href="/"
+          className="text-sm text-blue-600 hover:underline"
+        >
+          ← Back to Dashboard
+        </Link>
+      </div>
+
+      <h1 className="text-2xl font-bold mb-6">Leaderboard</h1>
+      <p className="text-slate-600 mb-6">
+        Route is working. We’ll wire up Supabase data next.
+      </p>
+    </div>
+  );
+}
 
 type Row = {
   id: string | number;
