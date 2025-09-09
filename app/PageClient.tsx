@@ -349,7 +349,7 @@ function PageInner() {
     return ts;
   }
 
-  rreturn (
+  return (
     <div className="max-w-7xl mx-auto px-4 py-6 space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between gap-3">
@@ -410,24 +410,26 @@ function PageInner() {
     </div>
 
     {/* Tabs */}
-    <Tabs defaultValue="dashboard">
-      <TabsList className="mb-3">
-          <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
-          <TabsTrigger value="analyzer">Analyzer</TabsTrigger>
-          <TabsTrigger value="analytics">Analytics</TabsTrigger>
-          <TabsTrigger value="risk">Risk &amp; Sizing</TabsTrigger>
-          <TabsTrigger value="journal">Trade Journal</TabsTrigger>
-          <TabsTrigger value="calendar">Calendar</TabsTrigger>
-          <TabsTrigger value="asetups">A-Setups</TabsTrigger>
+<Tabs defaultValue="dashboard">
+  <TabsList className="mb-3">
+    <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
+    <TabsTrigger value="analyzer">Analyzer</TabsTrigger>
+    <TabsTrigger value="analytics">Analytics</TabsTrigger>
+    <TabsTrigger value="risk">Risk &amp; Sizing</TabsTrigger>
+    <TabsTrigger value="journal">Trade Journal</TabsTrigger>
+    <TabsTrigger value="calendar">Calendar</TabsTrigger>
+    <TabsTrigger value="asetups">A-Setups</TabsTrigger>
+  </TabsList>
 
-          {/* External link to dedicated page */}
-          <a
-            href="/leaderboard"
-            className="inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium ring-offset-background transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-          >
-            Leaderboard
-          </a>
-        </TabsList>
+  {/* Place your link OUTSIDE TabsList */}
+  <a
+    href="/leaderboard"
+    className="ml-2 inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium ring-offset-background transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+  >
+    Leaderboard
+  </a>
+</Tabs>
+
 
         {/* DASHBOARD */}
         <TabsContent value="dashboard" className="space-y-4">
