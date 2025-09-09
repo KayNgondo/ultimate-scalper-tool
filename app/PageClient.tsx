@@ -1,12 +1,13 @@
 "use client";
 
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/browser"; // already used in sign-in
-import { useEffect, useMemo, useRef, useState } from "react";
-import AuthGate from "@/components/AuthGate";
-import { useSupabaseUser } from "@/lib/useSupabaseUser";
 
-/* ========== shadcn/ui ========== */
+import { useSupabaseUser } from "@/lib/useSupabaseUser";
+import AuthGate from "@/components/AuthGate";
+import { createClient } from "@/lib/supabase/browser";
+
+/* shadcn/ui */
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -20,7 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-/* ========== recharts ========== */
+/* recharts */
 import {
   ResponsiveContainer,
   LineChart,
@@ -34,11 +35,10 @@ import {
   Legend,
 } from "recharts";
 
-/* =========================================================================
-   Tiny Toasts (local, no external deps)
-============================================================================ */
+/* --------------------------------
+   Tiny in-file Toast system
+----------------------------------- */
 type ToastItem = { id: string; title: string; desc?: string };
-import React from "react";
 const ToastContext = React.createContext<{
   push: (t: Omit<ToastItem, "id">) => void;
 } | null>(null);
@@ -47,7 +47,8 @@ function ToastProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<ToastItem[]>([]);
   function push(t: Omit<ToastItem, "id">) {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    setItems((s) => [...s, { id, ...t }]);
+    const item = { id, ...t };
+    setItems((s) => [...s, item]);
     setTimeout(() => setItems((s) => s.filter((x) => x.id !== id)), 4000);
   }
   return (
@@ -55,7 +56,11 @@ function ToastProvider({ children }: { children: React.ReactNode }) {
       {children}
       <div className="fixed top-4 right-4 z-[60] space-y-2">
         {items.map((t) => (
-          <div key={t.id} className="rounded-lg border bg-white shadow px-3 py-2 w-72">
+          <div
+            key={t.id}
+            className="rounded-lg border bg-white shadow px-3 py-2 w-72"
+            role="status"
+          >
             <div className="text-sm font-medium">{t.title}</div>
             {t.desc && <div className="text-xs text-slate-600 mt-0.5">{t.desc}</div>}
           </div>
@@ -70,16 +75,9 @@ function useToast() {
   return ctx;
 }
 
-/* =========================================================================
-   Utils / State
-============================================================================ */
-type TradeRow = {
-  id: string;
-  symbol: string;
-  pnl: number;
-  notes?: string;
-  ts?: number;
-};
+/* ===========================================================
+   Ultimate Scalper Tool – Full Page (with Old Calendar + Leaderboard)
+   =========================================================== */
 
 const MARKET_OPTIONS = [
   "Step Index",
@@ -93,8 +91,45 @@ type MarketName = (typeof MARKET_OPTIONS)[number];
 const STRATEGIES = ["Ultimate M1 Trend setup", "Ultimate M1 Range setup"] as const;
 type StrategyName = (typeof STRATEGIES)[number];
 
+type TradeRow = {
+  id: string;
+  symbol: string;
+  pnl: number;
+  notes?: string;
+  ts?: number;
+  risk?: number;
+  tags?: string[];
+};
+
 type ASetup = { id: string; title: string; dataUrl: string; notes?: string };
 
+const currency = (n: number) =>
+  n.toLocaleString(undefined, { style: "currency", currency: "USD" });
+const fmt = (n: number) => (isFinite(n) ? n.toFixed(2) : "0.00");
+
+function ymdLocal(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+function isSameMonth(a: Date, b: Date) {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth();
+}
+function getMonday(d: Date) {
+  const x = new Date(d);
+  const day = (x.getDay() + 6) % 7; // 0 = Mon
+  x.setDate(x.getDate() - day);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+function isSameISOWeek(a: Date, b: Date) {
+  const ma = getMonday(a).getTime();
+  const mb = getMonday(b).getTime();
+  return ma === mb;
+}
+
+/* LocalStorage helper */
 function useLocalStorage<T>(key: string, defaultValue: T) {
   const [state, setState] = useState<T>(() => {
     if (typeof window === "undefined") return defaultValue;
@@ -113,31 +148,6 @@ function useLocalStorage<T>(key: string, defaultValue: T) {
   return [state, setState] as const;
 }
 
-const currency = (n: number) =>
-  n.toLocaleString(undefined, { style: "currency", currency: "USD" });
-
-const fmt = (n: number) => (isFinite(n) ? n.toFixed(2) : "0.00");
-
-function ymdLocal(d: Date) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-function getMonday(d: Date) {
-  const x = new Date(d);
-  const day = (x.getDay() + 6) % 7; // Mon=0
-  x.setDate(x.getDate() - day);
-  x.setHours(0, 0, 0, 0);
-  return x;
-}
-function isSameISOWeek(a: Date, b: Date) {
-  return getMonday(a).getTime() === getMonday(b).getTime();
-}
-function isSameMonth(a: Date, b: Date) {
-  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth();
-}
-
 /* Lot-size formulas */
 function calcLotSize(riskAmount: number, market: MarketName, riskPips: number) {
   if (!riskAmount || !riskPips) return 0;
@@ -153,9 +163,10 @@ function calcLotSize(riskAmount: number, market: MarketName, riskPips: number) {
       return Number((riskAmount / adjusted).toFixed(3));
     }
   }
+  return 0;
 }
 
-/* Send session close → API (Supabase RPC behind it) */
+/* ============ Backend call to record session close ============ */
 async function recordSessionToLeaderboard(
   supabaseUserId: string,
   pnl: number,
@@ -178,10 +189,13 @@ async function recordSessionToLeaderboard(
   }
 }
 
-/* =========================================================================
-   Page wrapper
-============================================================================ */
+/* =========================
+   Root Page (provider first)
+   ========================= */
 export default function Page() {
+  useEffect(() => {
+    document.title = "Ultimate Scalper Tool";
+  }, []);
   return (
     <ToastProvider>
       <AuthGate>
@@ -195,8 +209,6 @@ export default function Page() {
    Main page content
 ============================================================================ */
 function PageInner() {
-  
-function PageInner() {
   const supabase = createClient();
 
   async function handleSignOut() {
@@ -204,13 +216,10 @@ function PageInner() {
     if (error) {
       console.error("Sign out error:", error.message);
     } else {
-      window.location.href = "/sign-in"; // redirect back to sign-in page
+      window.location.href = "/sign-in";
     }
   }
 
-  // ... rest of your dashboard code
-
-  
   const { user } = useSupabaseUser();
   const { push } = useToast();
 
@@ -228,7 +237,7 @@ function PageInner() {
   const [weeklyTarget, setWeeklyTarget] = useLocalStorage<number>("ust-weekly-target", 0);
   const [monthlyTarget, setMonthlyTarget] = useLocalStorage<number>("ust-monthly-target", 0);
 
-  /* Derived */
+  /* Equity + Risk */
   const totalPnlAllTime = useMemo(
     () => trades.reduce((acc, t) => acc + (t.pnl || 0), 0),
     [trades]
@@ -237,6 +246,7 @@ function PageInner() {
   const riskAmount = useMemo(() => (equity * riskPct) / 100, [equity, riskPct]);
   const allTimeGrowthPct = startBalance ? ((equity - startBalance) / startBalance) * 100 : 0;
 
+  /* Session-scope */
   const sessionTrades = useMemo(
     () => trades.filter((t) => !sessionId || (t.ts || 0) >= Number(sessionId)),
     [trades, sessionId]
@@ -248,6 +258,7 @@ function PageInner() {
   const bes = sessionTrades.filter((t) => (t.pnl || 0) === 0).length;
   const winRate = closed ? (wins / closed) * 100 : 0;
 
+  /* Today / Week / Month */
   const today = new Date();
   const todayKey = ymdLocal(today);
   const todayPnl = useMemo(
@@ -258,14 +269,23 @@ function PageInner() {
     [trades, todayKey]
   );
 
-  // Lock when max-loss hit
+  // Lock when threshold hit
+  const prevLocked = useRef<boolean>(locked);
   useEffect(() => {
     if (!lockOnHit || maxLoss <= 0) return;
-    if (todayPnl <= -Math.abs(maxLoss) && !locked) {
-      setLocked(true);
-      push({ title: "Trading locked for today", desc: `Daily max loss (${currency(maxLoss)}) reached.` });
+    if (todayPnl <= -Math.abs(maxLoss)) {
+      if (!locked) {
+        setLocked(true);
+        push({
+          title: "Trading locked for today",
+          desc: `Daily max loss (${currency(maxLoss)}) reached.`,
+        });
+      }
     }
   }, [todayPnl, maxLoss, lockOnHit, locked, setLocked, push]);
+  useEffect(() => {
+    prevLocked.current = locked;
+  }, [locked]);
 
   // Auto-unlock at local midnight
   useEffect(() => {
@@ -287,14 +307,18 @@ function PageInner() {
   }
 
   const weeklyProgress = useMemo(
-    () => trades.filter((t) => t.ts && isSameISOWeek(new Date(t.ts), today)).reduce((a, t) => a + (t.pnl || 0), 0),
-    [trades, today]
+    () =>
+      trades
+        .filter((t) => t.ts && isSameISOWeek(new Date(t.ts), today))
+        .reduce((a, t) => a + (t.pnl || 0), 0),
+    [trades]
   );
   const monthlyProgress = useMemo(
     () => trades.filter((t) => t.ts && isSameMonth(new Date(t.ts), today)).reduce((a, t) => a + (t.pnl || 0), 0),
-    [trades, today]
+    [trades]
   );
 
+  /* Badges */
   const sessionsCount = useMemo(() => {
     const raw = localStorage.getItem("ust-session-history");
     const hist: string[] = raw ? JSON.parse(raw) : [];
@@ -315,6 +339,7 @@ function PageInner() {
     else setBadge(null);
   }, [sessionsCount]);
 
+  /* Equity series (all time) */
   const equitySeries = useMemo(() => {
     const sorted = [...trades].sort((a, b) => (a.ts || 0) - (b.ts || 0));
     const pts: { t: string; equity: number }[] = [];
@@ -353,86 +378,72 @@ function PageInner() {
   return (
     <div className="max-w-7xl mx-auto px-4 py-6 space-y-4">
       {/* Header */}
-      {/* HEADER */}
-<div className="flex items-center justify-between gap-3">
-  <div className="flex items-center gap-3">
-    <h1 className="text-3xl md:text-4xl font-bold">Ultimate Scalper Tool – Strategy Console</h1>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <h1 className="text-3xl md:text-4xl font-bold">
+            Ultimate Scalper Tool – Strategy Console
+          </h1>
+          <span
+            className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full border ${
+              locked && lockOnHit
+                ? "bg-rose-50 text-rose-700 border-rose-200"
+                : "bg-emerald-50 text-emerald-700 border-emerald-200"
+            }`}
+            title={locked && lockOnHit ? "Trading locked for today (max loss hit)" : "Active"}
+          >
+            <span className={`h-2 w-2 rounded-full ${locked && lockOnHit ? "bg-rose-500" : "bg-emerald-500"}`} />
+            {locked && lockOnHit ? "Locked" : "Active"}
+          </span>
+        </div>
 
-    {/* Status chip */}
-    <span
-      className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full border ${
-        locked && lockOnHit
-          ? "bg-rose-50 text-rose-700 border-rose-200"
-          : "bg-emerald-50 text-emerald-700 border-emerald-200"
-      }`}
-      title={locked && lockOnHit ? "Trading locked for today (max loss hit)" : "Active"}
-    >
-      <span
-        className={`h-2 w-2 rounded-full ${
-          locked && lockOnHit ? "bg-rose-500" : "bg-emerald-500"
-        }`}
-      />
-      {locked && lockOnHit ? "Locked" : "Active"}
-    </span>
-  </div>
+        {/* Right actions */}
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={async () => {
+              try {
+                const pnlNumber =
+                  typeof pnl === "number" ? Number(pnl.toFixed(2)) : Number(pnl || 0);
+                const startedAtISO = undefined; // set if you track it
+                const endedAtISO = new Date().toISOString();
 
-  {/* Right-side actions */}
-  <div className="flex items-center gap-2">
-    <Button
-      onClick={async () => {
-        try {
-          // If you track session times, set these here; otherwise they’ll be undefined.
-          const pnlNumber = Number((pnl ?? 0).toFixed?.(2) ?? pnl ?? 0);
-          const startedAtISO = undefined; // plug in when you track it
-          const endedAtISO = new Date().toISOString();
+                if (user?.id) {
+                  await recordSessionToLeaderboard(user.id, pnlNumber, startedAtISO, endedAtISO);
+                }
+              } catch (e) {
+                console.error(e);
+              } finally {
+                newSessionId(); // reset/start fresh
+              }
+            }}
+          >
+            End Session / Start New
+          </Button>
 
-          if (user?.id) {
-            await recordSessionToLeaderboard(user.id, pnlNumber, startedAtISO, endedAtISO);
-          }
-        } catch (e) {
-          console.error(e);
-        } finally {
-          newSessionId();
-        }
-      }}
-    >
-      End Session / Start New
-    </Button>
+          <Button variant="outline" onClick={handleSignOut}>
+            Sign out
+          </Button>
+        </div>
+      </div>
 
-    <Button
-      variant="outline"
-      onClick={async () => {
-        try {
-          await supabase.auth.signOut();
-          window.location.href = "/sign-in";
-        } catch (e) {
-          console.error("Sign out failed", e);
-        }
-      }}
-    >
-      Sign out
-    </Button>
-  </div>
-</div>
+      {/* Tabs */}
+      <Tabs defaultValue="dashboard">
+        <TabsList className="mb-3">
+          <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
+          <TabsTrigger value="analyzer">Analyzer</TabsTrigger>
+          <TabsTrigger value="analytics">Analytics</TabsTrigger>
+          <TabsTrigger value="risk">Risk &amp; Sizing</TabsTrigger>
+          <TabsTrigger value="journal">Trade Journal</TabsTrigger>
+          <TabsTrigger value="calendar">Calendar</TabsTrigger>
+          <TabsTrigger value="asetups">A-Setups</TabsTrigger>
 
-{/* Tabs */}
-<Tabs defaultValue="dashboard">
-  <TabsList className="mb-3">
-    <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
-    <TabsTrigger value="analyzer">Analyzer</TabsTrigger>
-    <TabsTrigger value="analytics">Analytics</TabsTrigger>
-    <TabsTrigger value="risk">Risk &amp; Sizing</TabsTrigger>
-    <TabsTrigger value="journal">Trade Journal</TabsTrigger>
-    <TabsTrigger value="calendar">Calendar</TabsTrigger>
-    <TabsTrigger value="asetups">A-Setups</TabsTrigger>
-  </TabsList>
-
-  {/* Put the external nav OUTSIDE TabsList so Radix doesn’t choke */}
-  </Tabs>
-
-<Link href="/leaderboard" className="hidden sm:block">
-  <Button variant="outline">Leaderboard</Button>
-</Link>
+          {/* External link to dedicated page */}
+          <Link
+            href="/leaderboard"
+            className="inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium ring-offset-background transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          >
+            Leaderboard
+          </Link>
+        </TabsList>
 
         {/* DASHBOARD */}
         <TabsContent value="dashboard" className="space-y-4">
@@ -443,12 +454,17 @@ function PageInner() {
             <DashCard title="Equity" value={currency(equity)} hint={`Start: ${currency(startBalance)}`} />
           </div>
 
+          {/* SUMMARY ROW */}
           <div className="grid md:grid-cols-3 gap-4">
             <DashCard title="Starting Capital" value={currency(startBalance)} />
-            <DashCard title="All-time PnL" value={`${totalPnlAllTime >= 0 ? "+" : ""}${currency(Number(totalPnlAllTime.toFixed(2)))}`} />
+            <DashCard
+              title="All-time PnL"
+              value={`${totalPnlAllTime >= 0 ? "+" : ""}${currency(Number(totalPnlAllTime.toFixed(2)))}`}
+            />
             <DashCard title="All-time Growth" value={`${fmt(allTimeGrowthPct)}%`} hint="Based on starting capital" />
           </div>
 
+          {/* Discipline & Goals */}
           <div className="grid lg:grid-cols-2 gap-4">
             <Card>
               <CardContent className="p-5 space-y-3">
@@ -461,7 +477,9 @@ function PageInner() {
                   <div className="md:col-span-1">
                     <Label>Stop trading at -Max Loss</Label>
                     <Select value={String(lockOnHit)} onValueChange={(v: string) => setLockOnHit(v === "true")}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="true">Enabled</SelectItem>
                         <SelectItem value="false">Disabled</SelectItem>
@@ -482,7 +500,6 @@ function PageInner() {
                     </div>
                   </div>
                 </div>
-
                 <div
                   className={`rounded-md border p-3 text-sm ${
                     locked && lockOnHit
@@ -495,7 +512,9 @@ function PageInner() {
                       <strong>Status:</strong> {locked && lockOnHit ? "Locked for today (max loss hit)" : "Active"}
                     </span>
                     <div className="flex gap-2">
-                      <Button variant="outline" onClick={resetDailyLock}>Reset Lock</Button>
+                      <Button variant="outline" onClick={resetDailyLock}>
+                        Reset Lock
+                      </Button>
                       {locked && lockOnHit && (
                         <Button
                           onClick={() => {
@@ -503,15 +522,15 @@ function PageInner() {
                             push({ title: "Override", desc: "Lock disabled for today." });
                           }}
                         >
-                          Override
+                          Override (Disable lock)
                         </Button>
                       )}
                     </div>
                   </div>
                 </div>
-
                 <div className="text-xs text-slate-500">
-                  When enabled, Quick Logger and New Trade are disabled once today&apos;s PnL ≤ -Daily Max Loss. Auto-unlocks at local midnight.
+                  When enabled, Quick Logger and New Trade are disabled once today&apos;s PnL ≤ -Daily Max Loss.
+                  Auto-unlocks at local midnight.
                 </div>
               </CardContent>
             </Card>
@@ -535,8 +554,8 @@ function PageInner() {
             </Card>
           </div>
 
+          {/* Badge + Equity */}
           <BadgeShowcase badge={badge} sessionsCount={sessionsCount} />
-
           <Card>
             <CardContent className="p-5">
               <h4 className="text-lg font-semibold mb-2">Equity Curve (All Time)</h4>
@@ -582,7 +601,7 @@ function PageInner() {
                 />
                 {trades.length > 0 && (
                   <div className="text-xs text-slate-500 mt-1">
-                    Locked after first trade.{" "}
+                    Locked after first trade{" "}
                     <button
                       className="underline text-rose-600"
                       onClick={() => {
@@ -630,19 +649,15 @@ function PageInner() {
               </CardContent>
             </Card>
           )}
-
           <MultiQuickLogger
             initialRows={3}
             maxRows={4}
             locked={locked && lockOnHit}
             onLogged={(rows) => {
               if (locked && lockOnHit) return;
-              rows.forEach((row) =>
-                addTrade({ symbol: row.market, notes: row.strategy, pnl: row.pnl })
-              );
+              rows.forEach((row) => addTrade({ symbol: row.market, notes: row.strategy, pnl: row.pnl }));
             }}
           />
-
           <JournalGrouped trades={trades} onDelete={deleteTrade} sessionId={sessionId} />
         </TabsContent>
 
@@ -660,9 +675,7 @@ function PageInner() {
   );
 }
 
-/* =========================================================================
-   Reusable UI blocks
-============================================================================ */
+/* ============== UI helpers ============== */
 function DashCard({ title, value, hint }: { title: string; value: string; hint?: string }) {
   return (
     <Card>
@@ -683,9 +696,7 @@ function InfoStat({ label, value }: { label: string; value: string }) {
   );
 }
 
-/* =========================================================================
-   Badge Showcase
-============================================================================ */
+/* ============== Big Badge ============== */
 function BadgeShowcase({
   badge,
   sessionsCount,
@@ -701,7 +712,8 @@ function BadgeShowcase({
     { key: "Elite", name: "Elite • 25 Sessions Mastered", at: 25, img: "/badges/elite.png" },
     { key: "Legendary", name: "Legendary • 30 Sessions Untouchable", at: 30, img: "/badges/legendary.png" },
   ];
-  const current = badge ?? (sessionsCount >= 5 ? { name: tiers[0].name, imagePath: tiers[0].img } : null);
+  const current =
+    badge ?? (sessionsCount >= 5 ? { name: tiers[0].name, imagePath: tiers[0].img } : null);
   const nextTier = tiers.find((t) => sessionsCount < t.at);
   const pct = nextTier ? Math.min(100, Math.round((sessionsCount / nextTier.at) * 100)) : 100;
   const left = nextTier ? Math.max(0, nextTier.at - sessionsCount) : 0;
@@ -746,9 +758,7 @@ function BadgeShowcase({
   );
 }
 
-/* =========================================================================
-   Risk rows
-============================================================================ */
+/* ============== Risk rows ============== */
 function MarketSizerRow({ market, riskAmount }: { market: MarketName; riskAmount: number }) {
   const storageKey = `ust-riskpips-${market}`;
   const [riskPips, setRiskPips] = useState<number>(() => {
@@ -781,9 +791,7 @@ function MarketSizerRow({ market, riskAmount }: { market: MarketName; riskAmount
   );
 }
 
-/* =========================================================================
-   Multi Quick Logger
-============================================================================ */
+/* ============== Multi Quick Logger ============== */
 function MultiQuickLogger({
   initialRows = 3,
   maxRows = 4,
@@ -851,11 +859,15 @@ function MultiQuickLogger({
 
               <div className="md:col-span-3">
                 <Label>Market</Label>
-                <Select value={r.market} onValueChange={(v: MarketName) => updateRow(r.id, { market: v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                <Select value={r.market} onValueChange={(v: string) => updateRow(r.id, { market: v as MarketName })}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     {MARKET_OPTIONS.map((m) => (
-                      <SelectItem key={m} value={m}>{m}</SelectItem>
+                      <SelectItem key={m} value={m}>
+                        {m}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -863,11 +875,18 @@ function MultiQuickLogger({
 
               <div className="md:col-span-5">
                 <Label>Strategy</Label>
-                <Select value={r.strategy} onValueChange={(v: StrategyName) => updateRow(r.id, { strategy: v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                <Select
+                  value={r.strategy}
+                  onValueChange={(v: string) => updateRow(r.id, { strategy: v as StrategyName })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     {STRATEGIES.map((s) => (
-                      <SelectItem key={s} value={s}>{s}</SelectItem>
+                      <SelectItem key={s} value={s}>
+                        {s}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -896,9 +915,7 @@ function MultiQuickLogger({
   );
 }
 
-/* =========================================================================
-   Journal (grouped by session)
-============================================================================ */
+/* ============== Journal Grouped by Session ============== */
 function JournalGrouped({
   trades,
   onDelete,
@@ -999,9 +1016,7 @@ function JournalGrouped({
   );
 }
 
-/* =========================================================================
-   Analytics
-============================================================================ */
+/* ============== Analytics ============== */
 function AnalyticsPanel({ trades }: { trades: TradeRow[] }) {
   const byStrategy = useMemo(() => {
     const map: Record<string, number> = {};
@@ -1062,9 +1077,7 @@ function AnalyticsPanel({ trades }: { trades: TradeRow[] }) {
   );
 }
 
-/* =========================================================================
-   Setup Analyzer
-============================================================================ */
+/* ============== Setup Analyzer ============== */
 function SetupAnalyzer() {
   type SetupKind = "Trend Buy" | "Trend Sell" | "Range Buy" | "Range Sell";
   const [setup, setSetup] = useState<SetupKind>("Trend Buy");
@@ -1094,8 +1107,10 @@ function SetupAnalyzer() {
         <div className="grid md:grid-cols-3 gap-3">
           <div>
             <Label>Setup</Label>
-            <Select value={setup} onValueChange={(v: SetupKind) => setSetup(v)}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+            <Select value={setup} onValueChange={(v: string) => setSetup(v as SetupKind)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="Trend Buy">Ultimate Trend Buy A-Setup</SelectItem>
                 <SelectItem value="Trend Sell">Ultimate Trend Sell A-Setup</SelectItem>
@@ -1124,7 +1139,11 @@ function SetupAnalyzer() {
           </div>
         </div>
 
-        <div className={`rounded-lg p-3 text-sm ${pass ? "bg-emerald-50 border border-emerald-200" : "bg-rose-50 border border-rose-200"}`}>
+        <div
+          className={`rounded-lg p-3 text-sm ${
+            pass ? "bg-emerald-50 border border-emerald-200" : "bg-rose-50 border border-rose-200"
+          }`}
+        >
           <strong>{pass ? "GO" : "NO-GO"}:</strong>{" "}
           {pass ? "All key checklist items passed for this setup." : "One or more required checklist items are not met."}
         </div>
@@ -1156,9 +1175,7 @@ function Chk({
   );
 }
 
-/* =========================================================================
-   Market Analyzer
-============================================================================ */
+/* ============== Market Analyzer ============== */
 function MarketAnalyzer({ riskAmount }: { riskAmount: number }) {
   const [market, setMarket] = useState<MarketName>("Volatility 75 (1s)");
   const [mode, setMode] = useState<"Trending" | "Ranging">("Trending");
@@ -1174,19 +1191,25 @@ function MarketAnalyzer({ riskAmount }: { riskAmount: number }) {
         <div className="grid md:grid-cols-3 gap-3">
           <div>
             <Label>Market</Label>
-            <Select value={market} onValueChange={(v: MarketName) => setMarket(v)}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+            <Select value={market} onValueChange={(v: string) => setMarket(v as MarketName)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 {MARKET_OPTIONS.map((m) => (
-                  <SelectItem key={m} value={m}>{m}</SelectItem>
+                  <SelectItem key={m} value={m}>
+                    {m}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
           <div>
             <Label>State</Label>
-            <Select value={mode} onValueChange={(v: "Trending" | "Ranging") => setMode(v)}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+            <Select value={mode} onValueChange={(v: string) => setMode(v as "Trending" | "Ranging")}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="Trending">Trending</SelectItem>
                 <SelectItem value="Ranging">Ranging</SelectItem>
@@ -1209,9 +1232,7 @@ function MarketAnalyzer({ riskAmount }: { riskAmount: number }) {
   );
 }
 
-/* =========================================================================
-   A-Setups Gallery
-============================================================================ */
+/* ============== A-Setups ============== */
 function ASetupsGallery() {
   const [items, setItems] = useLocalStorage<ASetup[]>("ust-asetups", []);
   const [title, setTitle] = useState("");
@@ -1245,7 +1266,9 @@ function ASetupsGallery() {
             <input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} />
           </div>
           <div className="md:col-span-2 self-end">
-            <Button disabled={!file} onClick={addItem}>Upload</Button>
+            <Button disabled={!file} onClick={addItem}>
+              Upload
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -1263,7 +1286,11 @@ function ASetupsGallery() {
           <Card key={it.id}>
             <CardContent className="p-3 space-y-2">
               <div className="font-semibold">{it.title}</div>
-              <img src={it.dataUrl} alt={it.title} className="w-full rounded-md border object-contain" />
+              <img
+                src={it.dataUrl}
+                alt={it.title}
+                className="w-full rounded-md border object-contain"
+              />
               {it.notes && <div className="text-xs text-slate-600">{it.notes}</div>}
               <div className="flex justify-end">
                 <Button variant="destructive" onClick={() => setItems(items.filter((x) => x.id !== it.id))}>
@@ -1287,9 +1314,7 @@ async function fileToDataUrl(file: File): Promise<string> {
   });
 }
 
-/* =========================================================================
-   CSV Export
-============================================================================ */
+/* ============== CSV Export ============== */
 function exportCsv(trades: TradeRow[]) {
   try {
     const headers = ["time", "market", "strategy", "pnl"];
@@ -1316,17 +1341,15 @@ function csvEscape(s: string) {
   return s;
 }
 
-/* =========================================================================
-   Goal Progress
-============================================================================ */
+/* ============== Goal progress bar ============== */
 function GoalProgress({
   label,
   progress,
   target,
 }: {
   label: string;
-  progress: number;
-  target: number;
+  progress: number; // current PnL within the period
+  target: number;   // goal for the period
 }) {
   const pct = useMemo(() => {
     if (!target || !isFinite(target)) return 0;
@@ -1339,11 +1362,16 @@ function GoalProgress({
     <div className="rounded-lg border bg-white p-3">
       <div className="flex items-end justify-between">
         <div className="text-sm font-medium">{label}</div>
-        <div className="text-xs text-slate-600">{target ? `${pct.toFixed(0)}%` : "—"}</div>
+        <div className="text-xs text-slate-600">
+          {target ? `${pct.toFixed(0)}%` : "—"}
+        </div>
       </div>
 
       <div className="w-full h-2 rounded-full bg-slate-200 mt-2 overflow-hidden">
-        <div className={`h-2 transition-all ${reached ? "bg-emerald-600" : "bg-indigo-500"}`} style={{ width: `${pct}%` }} />
+        <div
+          className={`h-2 transition-all ${reached ? "bg-emerald-600" : "bg-indigo-500"}`}
+          style={{ width: `${pct}%` }}
+        />
       </div>
 
       <div className="mt-2 text-xs text-slate-600 flex items-center justify-between">
@@ -1351,27 +1379,32 @@ function GoalProgress({
         <span>Target: <strong>{currency(Number((target || 0).toFixed(2)))}</strong></span>
       </div>
 
-      {reached && <div className="mt-1 text-[11px] text-emerald-700">🎯 Goal reached for this period — nice work!</div>}
+      {reached && (
+        <div className="mt-1 text-[11px] text-emerald-700">
+          🎯 Goal reached for this period — nice work!
+        </div>
+      )}
     </div>
   );
 }
 
-/* =========================================================================
-   Old Calendar (with daily PnL chips)
-============================================================================ */
+/* =========================
+   Old Calendar Component (with Daily PnL)
+   ========================= */
 function OldCalendar({ trades }: { trades: { ts?: number; pnl?: number }[] }) {
+  // Sum PnL per yyyy-mm-dd
   const { tradeDays, dailyTotals } = useMemo(() => {
     const set = new Set<string>();
     const totals = new Map<string, number>();
     trades.forEach((t) => {
       if (!t.ts) return;
       const d = new Date(t.ts);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(
-        2,
-        "0"
-      )}`;
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+        d.getDate()
+      ).padStart(2, "0")}`;
       set.add(key);
-      totals.set(key, (totals.get(key) || 0) + (t.pnl ?? 0));
+      const prev = totals.get(key) || 0;
+      totals.set(key, prev + (t.pnl ?? 0));
     });
     return { tradeDays: set, dailyTotals: totals };
   }, [trades]);
@@ -1407,9 +1440,15 @@ function OldCalendar({ trades }: { trades: { ts?: number; pnl?: number }[] }) {
     return arr;
   }, [viewDate]);
 
-  const monthLabel = viewDate.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  const monthLabel = viewDate.toLocaleDateString(undefined, {
+    month: "long",
+    year: "numeric",
+  });
+
   function keyOf(d: Date) {
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+      d.getDate()
+    ).padStart(2, "0")}`;
   }
 
   const todayKey = keyOf(new Date());
@@ -1430,7 +1469,7 @@ function OldCalendar({ trades }: { trades: { ts?: number; pnl?: number }[] }) {
             ← Prev
           </Button>
 
-          <div className="text-lg font-semibold">{monthLabel}</div>
+        <div className="text-lg font-semibold">{monthLabel}</div>
 
           <Button
             variant="outline"
@@ -1473,6 +1512,7 @@ function OldCalendar({ trades }: { trades: { ts?: number; pnl?: number }[] }) {
                 title={hasTrades ? `${dayPnl >= 0 ? "+" : ""}${currency(Number(dayPnl.toFixed(2)))}` : undefined}
               >
                 <div className="text-xs">{d.getDate()}</div>
+
                 {hasTrades && (
                   <div className="flex justify-end">
                     <span
