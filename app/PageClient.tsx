@@ -442,10 +442,8 @@ function PageInner() {
 >
   End Session / Start New
 </Button>
-
-        </div>
-      </div>
-
+</div>
+   
       <Tabs defaultValue="dashboard">
         <TabsList className="mb-3">
           <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
