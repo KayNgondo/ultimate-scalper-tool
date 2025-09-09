@@ -401,47 +401,42 @@ function PageInner() {
     }
   }}
 >
-  End Session / Start New
+  {/* End Session / Start New */}
 <Button
   onClick={async () => {
     try {
-      // make sure you have the current session numbers/times here
-      const pnlNumber =
-        typeof pnl === "number"
-          ? Number(pnl.toFixed(2))
-          : Number(pnl || 0);
+      // signed-in user id (from Supabase)
+      const userId = user?.id ?? "";
 
-      const startedAtISO =
-        currentSession?.startedAt?.toISOString?.() ??
-        new Date().toISOString(); // fallback if you don't track it yet
+      // session PnL for the current session
+      const pnlNumber = Number((pnl || 0).toFixed(2));
 
+      // derive session start time from our local sessionId (we store a timestamp string)
+      const startedAtISO = sessionId
+        ? new Date(Number(sessionId)).toISOString()
+        : undefined;
+
+      // end time is now
       const endedAtISO = new Date().toISOString();
 
-      if (!user?.id) {
-        console.warn("No signed-in user; cannot record session close.");
-        // optionally show a toast/toaster here
-        return;
+      // write to the API only if we have a user
+      if (userId) {
+        await recordSessionToLeaderboard(userId, pnlNumber, startedAtISO, endedAtISO);
+      } else {
+        console.warn("No signed-in user; skipping leaderboard write.");
       }
 
-      // IMPORTANT: match the function signature you implemented
-      // If your function takes an object {supabaseUserId, pnl, startedAtISO, endedAtISO}:
-      await recordSessionToLeaderboard({
-        supabaseUserId: user.id,
-        pnl: pnlNumber,
-        startedAtISO,
-        endedAtISO,
-      });
-
-      // your existing "start a new session / reset" logic
+      // start a fresh session in the app
       newSessionId();
     } catch (e) {
       console.error(e);
-      newSessionId(); // keep your previous fallback flow
+      newSessionId(); // still rotate session on error
     }
   }}
 >
   End Session / Start New
 </Button>
+
    
       <Tabs defaultValue="dashboard">
         <TabsList className="mb-3">
@@ -688,12 +683,13 @@ function PageInner() {
         {/* A-SETUPS */}
         <TabsContent value="asetups">
           <ASetupsGallery />
-        </TabsContent>
-
-             </Tabs>
+            </TabsContent>
+      </Tabs>
     </div>
   );
 }
+
+
 
 /* ============== UI helpers ============== */
 function DashCard({ title, value, hint }: { title: string; value: string; hint?: string }) {
