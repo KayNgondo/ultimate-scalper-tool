@@ -1,5 +1,6 @@
 "use client";
 
+import { createClient } from "@/lib/supabase/browser"; // already used in sign-in
 import { useEffect, useMemo, useRef, useState } from "react";
 import AuthGate from "@/components/AuthGate";
 import { useSupabaseUser } from "@/lib/useSupabaseUser";
@@ -194,8 +195,6 @@ export default function Page() {
 ============================================================================ */
 function PageInner() {
   
-  import { createClient } from "@/lib/supabase/browser"; // already used in sign-in
-
 function PageInner() {
   const supabase = createClient();
 
