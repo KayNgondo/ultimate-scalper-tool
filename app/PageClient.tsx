@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/browser"; // already used in sign-in
 import { useEffect, useMemo, useRef, useState } from "react";
 import AuthGate from "@/components/AuthGate";
@@ -427,15 +428,11 @@ function PageInner() {
   </TabsList>
 
   {/* Put the external nav OUTSIDE TabsList so Radix doesn’t choke */}
-  <a
-    href="/leaderboard"
-    className="inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium ring-offset-background transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-  >
-    Leaderboard
-  </a>
+  </Tabs>
 
-</Tabs>
-
+<Link href="/leaderboard" className="hidden sm:block">
+  <Button variant="outline">Leaderboard</Button>
+</Link>
 
         {/* DASHBOARD */}
         <TabsContent value="dashboard" className="space-y-4">
