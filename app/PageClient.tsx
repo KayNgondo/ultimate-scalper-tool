@@ -1,4 +1,5 @@
 "use client";
+import { useSupabaseUser } from "@/lib/useSupabaseUser";
 import AuthGate from "@/components/AuthGate";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -205,6 +206,7 @@ export default function Page() {
    Inner page (uses toast)
    ========================= */
 function PageInner() {
+  const { user } = useSupabaseUser();
   useEffect(() => {
     document.title = "Ultimate Scalper Tool";
   }, []);
@@ -400,21 +402,47 @@ function PageInner() {
   }}
 >
   End Session / Start New
+<Button
+  onClick={async () => {
+    try {
+      // make sure you have the current session numbers/times here
+      const pnlNumber =
+        typeof pnl === "number"
+          ? Number(pnl.toFixed(2))
+          : Number(pnl || 0);
+
+      const startedAtISO =
+        currentSession?.startedAt?.toISOString?.() ??
+        new Date().toISOString(); // fallback if you don't track it yet
+
+      const endedAtISO = new Date().toISOString();
+
+      if (!user?.id) {
+        console.warn("No signed-in user; cannot record session close.");
+        // optionally show a toast/toaster here
+        return;
+      }
+
+      // IMPORTANT: match the function signature you implemented
+      // If your function takes an object {supabaseUserId, pnl, startedAtISO, endedAtISO}:
+      await recordSessionToLeaderboard({
+        supabaseUserId: user.id,
+        pnl: pnlNumber,
+        startedAtISO,
+        endedAtISO,
+      });
+
+      // your existing "start a new session / reset" logic
+      newSessionId();
+    } catch (e) {
+      console.error(e);
+      newSessionId(); // keep your previous fallback flow
+    }
+  }}
+>
+  End Session / Start New
 </Button>
 
-          {/* New Trade */}
-          <Button
-            onClick={() => {
-              addTrade({
-                symbol: "Volatility 75 (1s)",
-                pnl: 0,
-                notes: "New Trade",
-              });
-            }}
-            disabled={locked && lockOnHit}
-          >
-            New Trade
-          </Button>
         </div>
       </div>
 
