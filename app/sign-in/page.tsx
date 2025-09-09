@@ -1,107 +1,117 @@
-// app/sign-in/page.tsx
 "use client";
-
 import { useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { createClient } from "@supabase/supabase-js";
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
-
-<button
-  onClick={async () => {
-    await supabase.auth.signOut();
-    window.location.href = "/sign-in";
-  }}
-  className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50"
->
-  Sign out
-</button>
+import { supabase } from "@/lib/supabase";
+import { useRouter } from "next/navigation";
 
 export default function SignInPage() {
   const router = useRouter();
-  const params = useSearchParams();
-  const redirectTo = params.get("redirect") || "/";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [name, setName] = useState(""); // NEW name field
   const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
+  const [isSignUp, setIsSignUp] = useState(false);
 
-  async function signIn() {
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
     setLoading(true);
-    setErr(null);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    setLoading(false);
-    if (error) {
-      setErr(error.message);
-      return;
-    }
-    router.replace(redirectTo);
-  }
 
-  async function signUp() {
-    setLoading(true);
-    setErr(null);
-    const { error } = await supabase.auth.signUp({ email, password });
-    setLoading(false);
-    if (error) {
-      setErr(error.message);
-      return;
+    try {
+      if (isSignUp) {
+        // Create new account
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+        });
+
+        if (error) throw error;
+
+        const user = data.user;
+        if (user) {
+          // Store the name in "profiles" table
+          const { error: profileError } = await supabase.from("profiles").upsert({
+            id: user.id,
+            email: user.email,
+            name, // save the name
+          });
+
+          if (profileError) throw profileError;
+        }
+
+        alert("Account created! You can now sign in.");
+        setIsSignUp(false);
+      } else {
+        // Sign in existing user
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        router.push("/"); // go to dashboard
+      }
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setLoading(false);
     }
-    // Immediately try to sign in (or you can ask to verify email, depending on your Supabase settings)
-    await signIn();
   }
 
   return (
-    <div className="min-h-screen grid place-items-center bg-slate-50">
-      <div className="w-full max-w-sm rounded-xl border bg-white p-6 shadow-sm">
-        <h1 className="mb-1 text-xl font-semibold">Sign in</h1>
-        <p className="mb-6 text-sm text-slate-600">
-          Use your email and password to access Ultimate Scalper Tool.
-        </p>
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+      <div className="max-w-md w-full bg-white p-6 rounded-lg shadow">
+        <h1 className="text-2xl font-bold mb-4">{isSignUp ? "Create Account" : "Sign in"}</h1>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {isSignUp && (
+            <div>
+              <label className="block text-sm font-medium">Name</label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                className="w-full mt-1 p-2 border rounded"
+                placeholder="Your name"
+              />
+            </div>
+          )}
 
-        <label className="mb-1 block text-sm font-medium">Email</label>
-        <input
-          className="mb-3 w-full rounded-md border px-3 py-2"
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="you@example.com"
-        />
+          <div>
+            <label className="block text-sm font-medium">Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              className="w-full mt-1 p-2 border rounded"
+              placeholder="you@example.com"
+            />
+          </div>
 
-        <label className="mb-1 block text-sm font-medium">Password</label>
-        <input
-          className="mb-4 w-full rounded-md border px-3 py-2"
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder="••••••••"
-        />
+          <div>
+            <label className="block text-sm font-medium">Password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              className="w-full mt-1 p-2 border rounded"
+            />
+          </div>
 
-        {err && <div className="mb-3 text-sm text-rose-600">{err}</div>}
-
-        <div className="flex gap-2">
           <button
-            onClick={signIn}
+            type="submit"
             disabled={loading}
-            className="inline-flex flex-1 items-center justify-center rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+            className="w-full py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700"
           >
-            {loading ? "Signing in…" : "Sign in"}
+            {loading ? "Loading..." : isSignUp ? "Create Account" : "Sign in"}
           </button>
-          <button
-            onClick={signUp}
-            disabled={loading}
-            className="inline-flex flex-1 items-center justify-center rounded-md border px-3 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-50"
-          >
-            Create account
-          </button>
-        </div>
+        </form>
 
-        <p className="mt-4 text-xs text-slate-500">
-          After signing in you’ll be redirected to <code>{redirectTo}</code>.
+        <p className="mt-4 text-sm text-gray-600">
+          {isSignUp ? "Already have an account?" : "Don't have an account?"}{" "}
+          <button
+            onClick={() => setIsSignUp(!isSignUp)}
+            className="text-indigo-600 hover:underline"
+          >
+            {isSignUp ? "Sign in" : "Create one"}
+          </button>
         </p>
       </div>
     </div>
