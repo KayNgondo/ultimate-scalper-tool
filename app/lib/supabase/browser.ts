@@ -1,13 +1,32 @@
-import { createBrowserClient } from "@supabase/ssr";
+"use client";
 
-let _client: ReturnType<typeof createBrowserClient> | null = null;
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
-export function getBrowserSupabase() {
-  if (!_client) {
-    _client = createBrowserClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+let browserClient: SupabaseClient | null = null;
+
+export function getBrowserSupabase(): SupabaseClient {
+  // Read envs from the public build-time variables
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!url || !anon) {
+    // Do not hard-crash—log and create a dummy client that won’t run auth calls
+    console.error(
+      "[UST] Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY"
     );
+    throw new Error("Supabase environment variables are not configured.");
   }
-  return _client;
+
+  if (!browserClient) {
+    browserClient = createClient(url, anon, {
+      auth: {
+        // Unique storage key avoids “Multiple GoTrueClient instances” noise
+        storageKey: "ust-auth",
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+      },
+    });
+  }
+  return browserClient;
 }

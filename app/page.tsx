@@ -7,14 +7,7 @@ export default async function HomePage() {
   const supabase = await createServerSupabase();
 
   // ✅ now supabase is a SupabaseClient
-  const {
-    data: { session },
-    error,
-  } = await supabase.auth.getSession();
-
-  if (error || !session) {
-    redirect("/sign-in");
-  }
+  const { data: { session } } = await supabase.auth.getSession();
 
   return <PageClient />;
 }
