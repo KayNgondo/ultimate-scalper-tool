@@ -1,56 +1,30 @@
-// app/api/sessions/close/route.ts
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-
-/**
- * SERVER-SIDE Supabase client (service key) – bypasses RLS for this one insert.
- * DO NOT expose SUPABASE_SERVICE_ROLE_KEY on the client.
- */
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY! // server env only
-);
-
-type Body = {
-  userId: string;           // required (profiles.id / auth.user.id)
-  pnl: number;              // PnL for the session (USD)
-  startedAt?: string;       // ISO; optional (defaults to now - 1h)
-  endedAt?: string;         // ISO; optional (defaults to now)
-};
+import { createClient } from "@/lib/supabase/server"; // 👈 use your server-side supabase client
 
 export async function POST(req: Request) {
+  const supabase = createClient();
+
   try {
-    const body = (await req.json()) as Body;
+    const { userId, pnl, startingCapital, startedAt, endedAt } = await req.json();
 
-    if (!body?.userId || typeof body.pnl !== "number") {
-      return NextResponse.json(
-        { error: "userId and pnl are required" },
-        { status: 400 }
-      );
-    }
-
-    const started =
-      body.startedAt ? new Date(body.startedAt) : new Date(Date.now() - 60 * 60 * 1000);
-    const ended = body.endedAt ? new Date(body.endedAt) : new Date();
-
-    // Insert CLOSED session
-    const { error } = await supabase.from("sessions").insert({
-      user_id: body.userId,
-      status: "closed",
-      pnl: body.pnl,
-      started_at: started.toISOString(),
-      ended_at: ended.toISOString(),
-    });
+    const { error } = await supabase
+      .from("sessions") // 👈 your table that feeds leaderboard
+      .insert({
+        user_id: userId,
+        pnl,
+        starting_capital: startingCapital,
+        started_at: startedAt,
+        ended_at: endedAt,
+      });
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      console.error("DB insert error:", error.message);
+      return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true }, { status: 200 });
   } catch (err: any) {
-    return NextResponse.json(
-      { error: err?.message ?? "Unexpected error" },
-      { status: 500 }
-    );
+    console.error("API error:", err.message);
+    return NextResponse.json({ error: "Unexpected error" }, { status: 500 });
   }
 }
