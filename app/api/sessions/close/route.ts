@@ -2,99 +2,65 @@
 import { NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase/server";
 
-type ClosePayload = {
-  sessionPnl?: number;
-  startingCapital?: number | null;
-  startedAt?: string | null;
-  endedAt?: string | null;
-};
-
 export async function POST(req: Request) {
   try {
     const supabase = createServerSupabase();
+    const body = await req.json().catch(() => ({}));
 
-    // Ensure we have an authenticated user
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    const sessionPnl: number = Number(body.sessionPnl ?? 0);
+    const startingCapital: number | null =
+      body.startingCapital !== undefined ? Number(body.startingCapital) : null;
 
+    // current user
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
-      return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Parse and sanitize the incoming body
-    const body = (await req.json().catch(() => ({}))) as ClosePayload;
-
-    const pnl = Number(body.sessionPnl);
-    const sessionPnl = Number.isFinite(pnl) ? pnl : 0;
-
-    // If not provided, we’ll use 0 (your new rule).
-    const providedStart = Number(body.startingCapital);
-    const requestedStartingCapital =
-      Number.isFinite(providedStart) ? providedStart : 0;
-
-    const endedAt = body.endedAt ?? new Date().toISOString();
-
-    // Load any existing profile values so we can accumulate correctly.
-    const { data: existing, error: fetchErr } = await supabase
-      .from("profiles")
-      .select("starting_capital,total_pnl,sessions")
-      .eq("id", user.id)
-      .maybeSingle();
-
-    if (fetchErr) {
-      return NextResponse.json(
-        { ok: false, error: fetchErr.message },
-        { status: 400 }
-      );
+    // upsert profile totals (default starting capital is 0)
+    if (startingCapital !== null) {
+      await supabase
+        .from("profiles")
+        .update({
+          total_pnl: (supabase as any).__PLACEHOLDER__ ?? undefined, // NO-OP; left for clarity
+        });
     }
 
-    const prevStarting = Number(existing?.starting_capital);
-    const prevTotal = Number(existing?.total_pnl);
-    const prevSessions = Number(existing?.sessions);
+    // increment total pnl, optionally set starting capital if not set
+    const updates: Record<string, any> = {
+      total_pnl: sessionPnl, // will be added via RPC below
+      last_active: new Date().toISOString(),
+    };
+    if (startingCapital !== null) updates.starting_capital = startingCapital;
 
-    const starting_capital =
-      Number.isFinite(prevStarting) && prevStarting !== 0
-        ? prevStarting
-        : requestedStartingCapital; // keep existing if set, otherwise use requested (default 0)
-
-    const total_pnl = (Number.isFinite(prevTotal) ? prevTotal : 0) + sessionPnl;
-    const sessions = (Number.isFinite(prevSessions) ? prevSessions : 0) + 1;
-
-    // Upsert profile row
-    const { error: upsertErr } = await supabase.from("profiles").upsert(
-      {
-        id: user.id,
-        starting_capital,
-        total_pnl,
-        sessions,
-        last_active: endedAt,
-      },
-      { onConflict: "id" }
-    );
-
-    if (upsertErr) {
-      return NextResponse.json(
-        { ok: false, error: upsertErr.message },
-        { status: 400 }
-      );
-    }
-
-    return NextResponse.json({
-      ok: true,
-      profile: {
-        id: user.id,
-        starting_capital,
-        total_pnl,
-        sessions,
-        last_active: endedAt,
-      },
+    // We’ll do the accumulation in SQL to avoid race conditions:
+    //   update profiles set
+    //     total_pnl = coalesce(total_pnl,0) + :sessionPnl,
+    //     starting_capital = coalesce(starting_capital, :startingCapital, starting_capital),
+    //     last_active = now()
+    //   where id = :userId
+    const { error: updErr } = await supabase.rpc("increment_profile_totals", {
+      p_user_id: user.id,
+      p_session_pnl: sessionPnl,
+      p_starting_capital: startingCapital,
     });
+
+    // If you don’t have the RPC yet, comment the rpc() above and use this simple update:
+    // await supabase
+    //   .from("profiles")
+    //   .update({
+    //     total_pnl: (currentTotal ?? 0) + sessionPnl,
+    //     last_active: new Date().toISOString(),
+    //     ...(startingCapital !== null ? { starting_capital: startingCapital } : {}),
+    //   })
+    //   .eq("id", user.id);
+
+    if (updErr) {
+      return NextResponse.json({ error: updErr.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ ok: true });
   } catch (e: any) {
-    return NextResponse.json(
-      { ok: false, error: e?.message ?? "Unexpected error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: e?.message ?? "Server error" }, { status: 500 });
   }
 }
