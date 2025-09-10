@@ -1,13 +1,19 @@
+import { createServerSupabase } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import PageClient from "./PageClient";
-import { createServerSupabase } from "@/lib/supabase/server";
 
 export default async function HomePage() {
-  // ✅ await the client creation
+  // 👇 IMPORTANT: await if your helper is async
   const supabase = await createServerSupabase();
 
-  // ✅ now supabase is a SupabaseClient
-  const { data: { session } } = await supabase.auth.getSession();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
 
+  if (!session) {
+    redirect("/sign-in");
+  }
+
+  // If you need to pass server data to the client, do it via props to PageClient
   return <PageClient />;
 }
