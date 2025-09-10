@@ -1,33 +1,20 @@
-// app/page.tsx
-"use client";
+import { redirect } from "next/navigation";
+import PageClient from "./PageClient";
+import { createServerSupabase } from "@/lib/supabase/server";
 
-import { useEffect, useState } from "react";
-import type { Session } from "@supabase/supabase-js";
-import { getBrowserSupabase } from "@/lib/supabase/browser";
+export default async function HomePage() {
+  // ✅ await the client creation
+  const supabase = await createServerSupabase();
 
-export default function HomePage() {
-  const supabase = getBrowserSupabase();
-  const [ready, setReady] = useState(false);
+  // ✅ now supabase is a SupabaseClient
+  const {
+    data: { session },
+    error,
+  } = await supabase.auth.getSession();
 
-  useEffect(() => {
-    let mounted = true;
+  if (error || !session) {
+    redirect("/sign-in");
+  }
 
-    supabase.auth
-      .getSession()
-      .then(({ data }: { data: { session: Session | null } }) => {
-        if (!mounted) return;
-        if (!data.session) {
-          // Not signed in -> go to sign-in
-          window.location.replace("/sign-in");
-        } else {
-          setReady(true);
-        }
-      });
-
-    return () => {
-      mounted = false;
-    };
-  }, [supabase]);
-
-  return ready ? <div>Dashboard content here</div> : null;
+  return <PageClient />;
 }
