@@ -170,6 +170,7 @@ function calcLotSize(riskAmount: number, market: MarketName, riskPips: number) {
 async function recordSessionToLeaderboard(
   supabaseUserId: string,
   pnl: number,
+  startingCapital: number,
   startedAtISO?: string,
   endedAtISO?: string
 ) {
@@ -180,6 +181,7 @@ async function recordSessionToLeaderboard(
       body: JSON.stringify({
         userId: supabaseUserId,
         pnl,
+        startingCapital,   // NEW: include this
         startedAt: startedAtISO,
         endedAt: endedAtISO,
       }),
@@ -399,25 +401,27 @@ function PageInner() {
         {/* Right actions */}
         <div className="flex items-center gap-2">
           <Button
-            onClick={async () => {
-              try {
-                const pnlNumber =
-                  typeof pnl === "number" ? Number(pnl.toFixed(2)) : Number(pnl || 0);
-                const startedAtISO = undefined; // set if you track it
-                const endedAtISO = new Date().toISOString();
+  onClick={async () => {
+    try {
+      const userId = user?.id;
+      const pnlNumber = Number(pnl || 0);
+      const startedAtISO = new Date(Number(sessionId)).toISOString(); // session start
+      const endedAtISO = new Date().toISOString();
 
-                if (user?.id) {
-                  await recordSessionToLeaderboard(user.id, pnlNumber, startedAtISO, endedAtISO);
-                }
-              } catch (e) {
-                console.error(e);
-              } finally {
-                newSessionId(); // reset/start fresh
-              }
-            }}
-          >
-            End Session / Start New
-          </Button>
+      if (userId) {
+        await recordSessionToLeaderboard(userId, pnlNumber, startBalance, startedAtISO, endedAtISO);
+      }
+
+      newSessionId();
+    } catch (e) {
+      console.error(e);
+      newSessionId();
+    }
+  }}
+>
+  End Session / Start New
+</Button>
+
 
           <Button variant="outline" onClick={handleSignOut}>
             Sign out
