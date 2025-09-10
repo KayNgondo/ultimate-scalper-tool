@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/browser"; // your browser helper
+import { getBrowserSupabase } from "@/lib/supabase/browser";
 
 export default function SignInPage() {
-  const supabase = createClient();
+ const supabase = getBrowserSupabase();
 
   const [mode, setMode] = useState<"sign-in" | "sign-up">("sign-in");
   const [email, setEmail] = useState("");

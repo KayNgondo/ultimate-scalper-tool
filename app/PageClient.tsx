@@ -5,7 +5,7 @@ import Link from "next/link";
 
 import { useSupabaseUser } from "@/lib/useSupabaseUser";
 import AuthGate from "@/components/AuthGate";
-import { createClient } from "@/lib/supabase/browser";
+import { getBrowserSupabase } from "@/lib/supabase/browser";
 
 /* shadcn/ui */
 import { Button } from "@/components/ui/button";
@@ -211,7 +211,7 @@ export default function Page() {
    Main page content
 ============================================================================ */
 function PageInner() {
-  const supabase = createClient();
+  const supabase = getBrowserSupabase();
 
   async function handleSignOut() {
     const { error } = await supabase.auth.signOut();

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/browser";
+import { getBrowserSupabase } from "@/lib/supabase/browser";
 
 type LbRow = {
   id: string;
@@ -15,7 +15,7 @@ type LbRow = {
 };
 
 export default function LeaderboardPage() {
-  const supabase = createClient();
+  const supabase = getBrowserSupabase();
   const [rows, setRows] = useState<LbRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);

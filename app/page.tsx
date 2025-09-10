@@ -2,27 +2,32 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/browser";
-import PageClient from "./PageClient"; // your existing dashboard UI component
+import type { Session } from "@supabase/supabase-js";
+import { getBrowserSupabase } from "@/lib/supabase/browser";
 
 export default function HomePage() {
-  const supabase = createClient();
+  const supabase = getBrowserSupabase();
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
     let mounted = true;
-    supabase.auth.getSession().then(({ data }) => {
-      if (!mounted) return;
-      if (!data?.session) {
-        // Not signed in -> go to sign-in
-        window.location.replace("/sign-in");
-      } else {
-        setReady(true);
-      }
-    });
-    return () => { mounted = false; };
+
+    supabase.auth
+      .getSession()
+      .then(({ data }: { data: { session: Session | null } }) => {
+        if (!mounted) return;
+        if (!data.session) {
+          // Not signed in -> go to sign-in
+          window.location.replace("/sign-in");
+        } else {
+          setReady(true);
+        }
+      });
+
+    return () => {
+      mounted = false;
+    };
   }, [supabase]);
 
-  if (!ready) return null; // or a small spinner
-  return <PageClient />;
+  return ready ? <div>Dashboard content here</div> : null;
 }

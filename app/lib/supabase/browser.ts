@@ -1,10 +1,5 @@
-// app/lib/supabase/browser.ts
 import { createBrowserClient } from "@supabase/ssr";
 
-/**
- * Singleton browser Supabase client.
- * Use in client components/pages only.
- */
 let _client: ReturnType<typeof createBrowserClient> | null = null;
 
 export function getBrowserSupabase() {
