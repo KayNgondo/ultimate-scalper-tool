@@ -400,7 +400,7 @@ function PageInner() {
 
         {/* Right actions */}
         <div className="flex items-center gap-2">
-          <Button
+<Button
   onClick={async () => {
     try {
       const userId = user?.id;
@@ -409,18 +409,31 @@ function PageInner() {
       const endedAtISO = new Date().toISOString();
 
       if (userId) {
-        await recordSessionToLeaderboard(userId, pnlNumber, startBalance, startedAtISO, endedAtISO);
+        // ✅ Call your new API route to save the session into Supabase
+        await fetch("/api/sessions/close", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId,              // Supabase user id
+            sessionPnl: pnlNumber,
+            startingCapital: startBalance,
+            startedAt: startedAtISO,
+            endedAt: endedAtISO,
+          }),
+        });
       }
 
+      // Reset to new session locally
       newSessionId();
     } catch (e) {
-      console.error(e);
+      console.error("Error ending session:", e);
       newSessionId();
     }
   }}
 >
   End Session / Start New
 </Button>
+
 
 
           <Button variant="outline" onClick={handleSignOut}>
