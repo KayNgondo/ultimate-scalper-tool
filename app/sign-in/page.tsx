@@ -14,20 +14,25 @@ export default function SignInPage() {
   const [busy, setBusy] = useState(false);
 
   async function handleSignIn(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) {
-        alert(error.message);
-        return;
-      }
-      // success -> Next.js middleware/route will redirect to /
-      window.location.href = "/";
-    } finally {
-      setBusy(false);
+  e.preventDefault();
+  setBusy(true);
+  try {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      alert(error.message);
+      return;
     }
+
+    // Ensure the session is available before navigating
+    await supabase.auth.getSession();
+
+    // Hard reload to "/" so the server sees the fresh auth cookie
+    window.location.assign("/");
+  } finally {
+    setBusy(false);
   }
+}
+
 
   async function handleSignUp(e: React.FormEvent) {
     e.preventDefault();
