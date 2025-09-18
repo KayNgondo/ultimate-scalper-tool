@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import AuthGate from "@/components/AuthGate";
 import { useSupabaseUser } from "@/lib/useSupabaseUser";
 
@@ -85,7 +85,7 @@ const MARKET_OPTIONS = [
   "Volatility 75",
   "Volatility 25 (1s)",
   "Volatility 25",
-  "Volatility 10 (1s)", // ✅ added
+  "Volatility 10 (1s)", // added market
   "Withdrawals",
 ] as const;
 type MarketName = (typeof MARKET_OPTIONS)[number];
@@ -145,7 +145,7 @@ function isSameMonth(a: Date, b: Date) {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth();
 }
 
-/* Lot-size formulas — now defensive & supports V10(1s) */
+/* Lot-size formulas — defensive & supports V10(1s) */
 function calcLotSize(riskAmount: number, market: MarketName, riskPips: number) {
   const ra = Number(riskAmount) || 0;
   const rp = Number(riskPips) || 0;
@@ -158,7 +158,7 @@ function calcLotSize(riskAmount: number, market: MarketName, riskPips: number) {
     case "Volatility 75 (1s)":
     case "Volatility 75":
     case "Volatility 25 (1s)":
-    case "Volatility 10 (1s)": // ✅ treat like other (1s) markets
+    case "Volatility 10 (1s)":
       return +((ra / rp) * 100).toFixed(3);
 
     case "Volatility 25": {
@@ -167,8 +167,7 @@ function calcLotSize(riskAmount: number, market: MarketName, riskPips: number) {
     }
 
     default:
-      // Non-tradable rows like "Withdrawals"
-      return 0;
+      return 0; // e.g. Withdrawals
   }
 }
 
@@ -248,6 +247,16 @@ function PageInner() {
   const losses = sessionTrades.filter((t) => (t.pnl || 0) < 0).length;
   const bes = sessionTrades.filter((t) => (t.pnl || 0) === 0).length;
   const winRate = closed ? (wins / closed) * 100 : 0;
+
+  // session % base = startBalance + pnl from trades BEFORE sessionId
+  const priorPnl = useMemo(() => {
+    if (!sessionId) return 0;
+    return trades
+      .filter((t) => (t.ts || 0) < Number(sessionId))
+      .reduce((a, t) => a + (t.pnl || 0), 0);
+  }, [trades, sessionId]);
+  const sessionBaseEquity = startBalance + priorPnl;
+  const sessionPct = formatPct(pnl, sessionBaseEquity);
 
   const today = new Date();
   const todayKey = ymdLocal(today);
@@ -416,7 +425,11 @@ function PageInner() {
         <TabsContent value="dashboard" className="space-y-4">
           <div className="grid md:grid-cols-4 gap-4">
             <DashCard title="Win rate" value={`${fmt(winRate)}%`} hint={`${wins}W / ${losses}L / ${bes}BE`} />
-            <DashCard title="PNL (this session)" value={currency(pnl)} hint={`Closed trades: ${closed}`} />
+            <DashCard
+              title="PNL (this session)"
+              value={currency(pnl)}
+              hint={`Closed trades: ${closed}${sessionPct ? ` • ${sessionPct}` : ""}`}
+            />
             <DashCard title="Sessions" value={`${sessionsCount}`} hint={badge ? badge.name : "Starter"} />
             <DashCard title="Equity" value={currency(equity)} hint={`Start: ${currency(startBalance)}`} />
           </div>
@@ -592,7 +605,7 @@ function PageInner() {
               <p className="text-sm text-slate-600">Enter risk pips for each market. Risk amount uses current equity × risk%.</p>
               <div className="space-y-3">
                 {MARKET_OPTIONS
-                  .filter((m) => m !== "Withdrawals") /* hide non-tradable row here */
+                  .filter((m) => m !== "Withdrawals")
                   .map((mkt) => (
                     <MarketSizerRow key={mkt} market={mkt} riskAmount={riskAmount} />
                   ))}
@@ -752,7 +765,7 @@ function MarketSizerRow({ market, riskAmount }: { market: MarketName; riskAmount
         <Input
           type="number"
           value={riskPips}
-          onChange={(e) => setRiskPips(Number(e.target.value) || 0)} // ✅ coerce empty → 0
+          onChange={(e) => setRiskPips(Number(e.target.value) || 0)}
         />
       </div>
       <div className="md:col-span-4">
@@ -1177,7 +1190,7 @@ function MarketAnalyzer({ riskAmount }: { riskAmount: number }) {
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 {MARKET_OPTIONS
-                  .filter((m) => m !== "Withdrawals") /* avoid non-tradable here */
+                  .filter((m) => m !== "Withdrawals")
                   .map((m) => (
                     <SelectItem key={m} value={m}>{m}</SelectItem>
                   ))}
