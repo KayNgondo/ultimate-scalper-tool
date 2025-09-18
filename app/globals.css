@@ -1,0 +1,8 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* optional little reset so you can tell Tailwind loaded */
+html, body {
+  @apply min-h-screen bg-white text-slate-900;
+}
