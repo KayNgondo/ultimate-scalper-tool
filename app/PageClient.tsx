@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import AuthGate from "@/components/AuthGate";
 import { useSupabaseUser } from "@/lib/useSupabaseUser";
 
@@ -85,12 +85,12 @@ const MARKET_OPTIONS = [
   "Volatility 75",
   "Volatility 25 (1s)",
   "Volatility 25",
-  "Volatility 10 (1s)", // ✅ added
+  "Volatility 10 (1s)", // added market
   "Withdrawals",
 ] as const;
 type MarketName = (typeof MARKET_OPTIONS)[number];
 
-const STRATEGIES = ["Ultimate M1 Trend setup", "Ultimate M1 Range setup","Withdrawals"] as const;
+const STRATEGIES = ["Ultimate M1 Trend setup", "Ultimate M1 Range setup", "Withdrawals"] as const;
 type StrategyName = (typeof STRATEGIES)[number];
 
 type ASetup = { id: string; title: string; dataUrl: string; notes?: string };
@@ -118,10 +118,11 @@ const currency = (n: number) =>
 
 const fmt = (n: number) => (isFinite(n) ? n.toFixed(2) : "0.00");
 
-// "% helper" – returns "12.34%" or null if denominator is invalid
+// % helper — returns "12.34%" or null if denominator invalid
 function formatPct(numerator: number, denominator?: number | null) {
-  if (!denominator || !isFinite(denominator) || denominator === 0) return null;
-  return `${((numerator / denominator) * 100).toFixed(2)}%`;
+  const den = Number(denominator) || 0;
+  if (den <= 0) return null;
+  return `${((Number(numerator) / den) * 100).toFixed(2)}%`;
 }
 
 function ymdLocal(d: Date) {
@@ -144,24 +145,30 @@ function isSameMonth(a: Date, b: Date) {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth();
 }
 
-/* Lot-size formulas */
+/* Lot-size formulas — defensive & supports V10(1s) */
 function calcLotSize(riskAmount: number, market: MarketName, riskPips: number) {
-  if (!riskAmount || !riskPips) return 0;
+  const ra = Number(riskAmount) || 0;
+  const rp = Number(riskPips) || 0;
+  if (ra <= 0 || rp <= 0) return 0;
+
   switch (market) {
     case "Step Index":
-      return Number((riskAmount / riskPips).toFixed(3));
+      return +(ra / rp).toFixed(3);
+
     case "Volatility 75 (1s)":
     case "Volatility 75":
     case "Volatility 25 (1s)":
-    case "Volatility 10 (1s)": // ✅ added: treat like other (1s) markets
-      return Number(((riskAmount / riskPips) * 100).toFixed(3));
+    case "Volatility 10 (1s)":
+      return +((ra / rp) * 100).toFixed(3);
+
     case "Volatility 25": {
-      const adjusted = riskPips / 1000;
-      return Number((riskAmount / adjusted).toFixed(3));
+      // 1/1000 pip scale
+      return +(ra / (rp / 1000)).toFixed(3);
     }
+
+    default:
+      return 0; // e.g. Withdrawals
   }
-  // ✅ safe default (covers "Withdrawals" and any unknowns)
-  return 0;
 }
 
 /* Send session close → API (Supabase RPC behind it) */
@@ -240,6 +247,16 @@ function PageInner() {
   const losses = sessionTrades.filter((t) => (t.pnl || 0) < 0).length;
   const bes = sessionTrades.filter((t) => (t.pnl || 0) === 0).length;
   const winRate = closed ? (wins / closed) * 100 : 0;
+
+  // session % base = startBalance + pnl from trades BEFORE sessionId
+  const priorPnl = useMemo(() => {
+    if (!sessionId) return 0;
+    return trades
+      .filter((t) => (t.ts || 0) < Number(sessionId))
+      .reduce((a, t) => a + (t.pnl || 0), 0);
+  }, [trades, sessionId]);
+  const sessionBaseEquity = startBalance + priorPnl;
+  const sessionPct = formatPct(pnl, sessionBaseEquity);
 
   const today = new Date();
   const todayKey = ymdLocal(today);
@@ -395,7 +412,7 @@ function PageInner() {
           <TabsTrigger value="calendar">Calendar</TabsTrigger>
           <TabsTrigger value="asetups">A-Setups</TabsTrigger>
 
-        {/* External link to dedicated page */}
+          {/* External link to dedicated page */}
           <a
             href="/leaderboard"
             className="inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium ring-offset-background transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
@@ -408,7 +425,11 @@ function PageInner() {
         <TabsContent value="dashboard" className="space-y-4">
           <div className="grid md:grid-cols-4 gap-4">
             <DashCard title="Win rate" value={`${fmt(winRate)}%`} hint={`${wins}W / ${losses}L / ${bes}BE`} />
-            <DashCard title="PNL (this session)" value={currency(pnl)} hint={`Closed trades: ${closed}`} />
+            <DashCard
+              title="PNL (this session)"
+              value={currency(pnl)}
+              hint={`Closed trades: ${closed}${sessionPct ? ` • ${sessionPct}` : ""}`}
+            />
             <DashCard title="Sessions" value={`${sessionsCount}`} hint={badge ? badge.name : "Starter"} />
             <DashCard title="Equity" value={currency(equity)} hint={`Start: ${currency(startBalance)}`} />
           </div>
@@ -426,7 +447,7 @@ function PageInner() {
                 <div className="grid md:grid-cols-3 gap-3 items-end">
                   <div className="md:col-span-1">
                     <Label>Daily Max Loss (USD)</Label>
-                    <Input type="number" value={maxLoss} onChange={(e) => setMaxLoss(Number(e.target.value))} />
+                    <Input type="number" value={maxLoss} onChange={(e) => setMaxLoss(Number(e.target.value) || 0)} />
                   </div>
                   <div className="md:col-span-1">
                     <Label>Stop trading at -Max Loss</Label>
@@ -492,11 +513,11 @@ function PageInner() {
                 <div className="grid md:grid-cols-2 gap-3">
                   <div>
                     <Label>Weekly Target (USD)</Label>
-                    <Input type="number" value={weeklyTarget} onChange={(e) => setWeeklyTarget(Number(e.target.value))} />
+                    <Input type="number" value={weeklyTarget} onChange={(e) => setWeeklyTarget(Number(e.target.value) || 0)} />
                   </div>
                   <div>
                     <Label>Monthly Target (USD)</Label>
-                    <Input type="number" value={monthlyTarget} onChange={(e) => setMonthlyTarget(Number(e.target.value))} />
+                    <Input type="number" value={monthlyTarget} onChange={(e) => setMonthlyTarget(Number(e.target.value) || 0)} />
                   </div>
                 </div>
                 <GoalProgress label="Weekly Progress" progress={Number(weeklyProgress.toFixed(2))} target={weeklyTarget || 0} />
@@ -547,7 +568,7 @@ function PageInner() {
                 <Input
                   type="number"
                   value={startBalance}
-                  onChange={(e) => setStartBalance(Number(e.target.value))}
+                  onChange={(e) => setStartBalance(Number(e.target.value) || 0)}
                   disabled={trades.length > 0}
                 />
                 {trades.length > 0 && (
@@ -571,7 +592,7 @@ function PageInner() {
               </div>
               <div className="md:col-span-1">
                 <Label>Risk % per Trade</Label>
-                <Input type="number" step="0.1" value={riskPct} onChange={(e) => setRiskPct(Number(e.target.value))} />
+                <Input type="number" step="0.1" value={riskPct} onChange={(e) => setRiskPct(Number(e.target.value) || 0)} />
               </div>
               <InfoStat label="Current Equity" value={currency(equity)} />
               <InfoStat label="Risk Amount (auto)" value={currency(riskAmount)} />
@@ -583,9 +604,11 @@ function PageInner() {
               <h4 className="text-lg font-semibold">Per-Market Lot Size</h4>
               <p className="text-sm text-slate-600">Enter risk pips for each market. Risk amount uses current equity × risk%.</p>
               <div className="space-y-3">
-                {MARKET_OPTIONS.map((mkt) => (
-                  <MarketSizerRow key={mkt} market={mkt} riskAmount={riskAmount} />
-                ))}
+                {MARKET_OPTIONS
+                  .filter((m) => m !== "Withdrawals")
+                  .map((mkt) => (
+                    <MarketSizerRow key={mkt} market={mkt} riskAmount={riskAmount} />
+                  ))}
               </div>
             </CardContent>
           </Card>
@@ -613,7 +636,7 @@ function PageInner() {
             }}
           />
 
-          {/* ✅ pass startBalance so we can compute session % */}
+          {/* Pass startBalance for session % calc */}
           <JournalGrouped trades={trades} onDelete={deleteTrade} sessionId={sessionId} startBalance={startBalance} />
         </TabsContent>
 
@@ -739,7 +762,11 @@ function MarketSizerRow({ market, riskAmount }: { market: MarketName; riskAmount
       <div className="md:col-span-5 font-medium">{market}</div>
       <div className="md:col-span-3">
         <Label>Risk Pips</Label>
-        <Input type="number" value={riskPips} onChange={(e) => setRiskPips(Number(e.target.value))} />
+        <Input
+          type="number"
+          value={riskPips}
+          onChange={(e) => setRiskPips(Number(e.target.value) || 0)}
+        />
       </div>
       <div className="md:col-span-4">
         <Label>Lot Size (auto)</Label>
@@ -850,7 +877,7 @@ function MultiQuickLogger({
                   type="number"
                   step="0.01"
                   value={r.pnl}
-                  onChange={(e) => updateRow(r.id, { pnl: Number(e.target.value) })}
+                  onChange={(e) => updateRow(r.id, { pnl: Number(e.target.value) || 0 })}
                 />
               </div>
 
@@ -868,13 +895,13 @@ function MultiQuickLogger({
 }
 
 /* =========================================================================
-   Journal (grouped by session) – now with % next to totals
+   Journal (grouped by session) – with % next to totals
 ============================================================================ */
 function JournalGrouped({
   trades,
   onDelete,
   sessionId,
-  startBalance, // ✅ added
+  startBalance,
 }: {
   trades: TradeRow[];
   onDelete: (id: string) => void;
@@ -907,7 +934,7 @@ function JournalGrouped({
       if (rows.length) buckets.push({ title: titleFor(start, i), rows, startTs: start });
     }
   } else {
-    if (all.length) buckets.push({ title: "All Trades", rows: all }); // no sessions tracked yet
+    if (all.length) buckets.push({ title: "All Trades", rows: all });
   }
 
   const totalAll = (rows: TradeRow[]) => rows.reduce((a, t) => a + (t.pnl || 0), 0);
@@ -1162,9 +1189,11 @@ function MarketAnalyzer({ riskAmount }: { riskAmount: number }) {
             <Select value={market} onValueChange={(v: MarketName) => setMarket(v)}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                {MARKET_OPTIONS.map((m) => (
-                  <SelectItem key={m} value={m}>{m}</SelectItem>
-                ))}
+                {MARKET_OPTIONS
+                  .filter((m) => m !== "Withdrawals")
+                  .map((m) => (
+                    <SelectItem key={m} value={m}>{m}</SelectItem>
+                  ))}
               </SelectContent>
             </Select>
           </div>
@@ -1180,7 +1209,7 @@ function MarketAnalyzer({ riskAmount }: { riskAmount: number }) {
           </div>
           <div>
             <Label>Risk Pips</Label>
-            <Input type="number" value={riskPips} onChange={(e) => setRiskPips(Number(e.target.value))} />
+            <Input type="number" value={riskPips} onChange={(e) => setRiskPips(Number(e.target.value) || 0)} />
           </div>
         </div>
 
