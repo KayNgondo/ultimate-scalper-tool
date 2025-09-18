@@ -89,7 +89,7 @@ const MARKET_OPTIONS = [
 ] as const;
 type MarketName = (typeof MARKET_OPTIONS)[number];
 
-const STRATEGIES = ["Ultimate M1 Trend setup", "Ultimate M1 Range setup"] as const;
+const STRATEGIES = ["Ultimate M1 Trend setup", "Ultimate M1 Range setup","Withdrawals"] as const;
 type StrategyName = (typeof STRATEGIES)[number];
 
 type ASetup = { id: string; title: string; dataUrl: string; notes?: string };
