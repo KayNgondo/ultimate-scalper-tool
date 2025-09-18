@@ -151,20 +151,29 @@ function useLocalStorage<T>(key: string, defaultValue: T) {
 
 /* Lot-size formulas */
 function calcLotSize(riskAmount: number, market: MarketName, riskPips: number) {
-  if (!riskAmount || !riskPips) return 0;
+  const ra = Number(riskAmount) || 0;
+  const rp = Number(riskPips) || 0;
+  if (ra <= 0 || rp <= 0) return 0;
+
   switch (market) {
     case "Step Index":
-      return Number((riskAmount / riskPips).toFixed(3));
+      return +(ra / rp).toFixed(3);
+
     case "Volatility 75 (1s)":
     case "Volatility 75":
     case "Volatility 25 (1s)":
-      return Number(((riskAmount / riskPips) * 100).toFixed(3));
+    case "Volatility 10 (1s)": // handled same as other (1s) markets
+      return +((ra / rp) * 100).toFixed(3);
+
     case "Volatility 25": {
-      const adjusted = riskPips / 1000;
-      return Number((riskAmount / adjusted).toFixed(3));
+      // This market uses 1/1000 pip scale
+      return +(ra / (rp / 1000)).toFixed(3);
     }
+
+    default:
+      // Non-tradable rows like "Withdrawals"
+      return 0;
   }
-  return 0;
 }
 
 /* ============ Backend call to record session close ============ */
