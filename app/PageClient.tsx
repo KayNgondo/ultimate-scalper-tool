@@ -85,6 +85,7 @@ const MARKET_OPTIONS = [
   "Volatility 75",
   "Volatility 25 (1s)",
   "Volatility 25",
+  "Volatility 10 (1s)", // ✅ added
   "Withdrawals",
 ] as const;
 type MarketName = (typeof MARKET_OPTIONS)[number];
@@ -117,6 +118,12 @@ const currency = (n: number) =>
 
 const fmt = (n: number) => (isFinite(n) ? n.toFixed(2) : "0.00");
 
+// "% helper" – returns "12.34%" or null if denominator is invalid
+function formatPct(numerator: number, denominator?: number | null) {
+  if (!denominator || !isFinite(denominator) || denominator === 0) return null;
+  return `${((numerator / denominator) * 100).toFixed(2)}%`;
+}
+
 function ymdLocal(d: Date) {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -146,12 +153,15 @@ function calcLotSize(riskAmount: number, market: MarketName, riskPips: number) {
     case "Volatility 75 (1s)":
     case "Volatility 75":
     case "Volatility 25 (1s)":
+    case "Volatility 10 (1s)": // ✅ added: treat like other (1s) markets
       return Number(((riskAmount / riskPips) * 100).toFixed(3));
     case "Volatility 25": {
       const adjusted = riskPips / 1000;
       return Number((riskAmount / adjusted).toFixed(3));
     }
   }
+  // ✅ safe default (covers "Withdrawals" and any unknowns)
+  return 0;
 }
 
 /* Send session close → API (Supabase RPC behind it) */
@@ -385,7 +395,7 @@ function PageInner() {
           <TabsTrigger value="calendar">Calendar</TabsTrigger>
           <TabsTrigger value="asetups">A-Setups</TabsTrigger>
 
-          {/* External link to dedicated page */}
+        {/* External link to dedicated page */}
           <a
             href="/leaderboard"
             className="inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium ring-offset-background transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
@@ -603,7 +613,8 @@ function PageInner() {
             }}
           />
 
-          <JournalGrouped trades={trades} onDelete={deleteTrade} sessionId={sessionId} />
+          {/* ✅ pass startBalance so we can compute session % */}
+          <JournalGrouped trades={trades} onDelete={deleteTrade} sessionId={sessionId} startBalance={startBalance} />
         </TabsContent>
 
         {/* CALENDAR */}
@@ -857,22 +868,25 @@ function MultiQuickLogger({
 }
 
 /* =========================================================================
-   Journal (grouped by session)
+   Journal (grouped by session) – now with % next to totals
 ============================================================================ */
 function JournalGrouped({
   trades,
   onDelete,
   sessionId,
+  startBalance, // ✅ added
 }: {
   trades: TradeRow[];
   onDelete: (id: string) => void;
   sessionId: string | null;
+  startBalance: number;
 }) {
   const histRaw = typeof window !== "undefined" ? localStorage.getItem("ust-session-history") : "[]";
   const hist: string[] = histRaw ? JSON.parse(histRaw) : [];
   const sessionsSorted = [...hist].map(Number).sort((a, b) => a - b);
 
-  const buckets: { title: string; rows: TradeRow[] }[] = [];
+  type Bucket = { title: string; rows: TradeRow[]; startTs?: number };
+  const buckets: Bucket[] = [];
   const all = [...trades].sort((a, b) => (a.ts || 0) - (b.ts || 0));
 
   function titleFor(ts: number, idx: number) {
@@ -890,13 +904,15 @@ function JournalGrouped({
       const start = sessionsSorted[i];
       const end = i < sessionsSorted.length - 1 ? sessionsSorted[i + 1] : Infinity;
       const rows = all.filter((t) => (t.ts || 0) >= start && (t.ts || 0) < end);
-      if (rows.length) buckets.push({ title: titleFor(start, i), rows });
+      if (rows.length) buckets.push({ title: titleFor(start, i), rows, startTs: start });
     }
   } else {
-    if (all.length) buckets.push({ title: "All Trades", rows: all });
+    if (all.length) buckets.push({ title: "All Trades", rows: all }); // no sessions tracked yet
   }
 
   const totalAll = (rows: TradeRow[]) => rows.reduce((a, t) => a + (t.pnl || 0), 0);
+  const priorPnlBefore = (ts: number) =>
+    all.filter((t) => (t.ts || 0) < ts).reduce((a, t) => a + (t.pnl || 0), 0);
 
   return (
     <Card>
@@ -912,45 +928,54 @@ function JournalGrouped({
           buckets
             .slice()
             .reverse()
-            .map((b, i) => (
-              <div key={i} className="border-b">
-                <div className="flex items-center justify-between px-3 py-2 text-sm font-medium bg-white">
-                  <div>{b.title}</div>
-                  <div className={`${totalAll(b.rows) >= 0 ? "text-indigo-600" : "text-rose-600"}`}>
-                    {totalAll(b.rows) >= 0 ? "+" : ""}
-                    {currency(totalAll(b.rows))}
-                  </div>
-                </div>
+            .map((b, i) => {
+              const total = totalAll(b.rows);
+              const baseEquity = b.startTs ? startBalance + priorPnlBefore(b.startTs) : startBalance;
+              const pct = formatPct(total, baseEquity);
 
-                <div className="grid grid-cols-12 px-3 py-2 text-xs font-medium bg-slate-50">
-                  <div className="col-span-3">Time</div>
-                  <div className="col-span-3">Market</div>
-                  <div className="col-span-4">Strategy / Notes</div>
-                  <div className="col-span-1 text-right">PnL</div>
-                  <div className="col-span-1 text-right pr-1">Actions</div>
-                </div>
-
-                {b.rows
-                  .slice()
-                  .reverse()
-                  .map((t) => (
-                    <div key={t.id} className="grid grid-cols-12 px-3 py-2 border-t text-sm">
-                      <div className="col-span-3">{t.ts ? new Date(t.ts).toLocaleString() : "—"}</div>
-                      <div className="col-span-3">{t.symbol}</div>
-                      <div className="col-span-4">{t.notes || "—"}</div>
-                      <div className={`col-span-1 text-right ${t.pnl >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
-                        {t.pnl >= 0 ? "+" : ""}
-                        {currency(t.pnl)}
+              return (
+                <div key={i} className="border-b">
+                  <div className="flex items-center justify-between px-3 py-2 text-sm font-medium bg-white">
+                    <div>{b.title}</div>
+                    <div className="flex items-baseline gap-2">
+                      <div className={`${total >= 0 ? "text-indigo-600" : "text-rose-600"}`}>
+                        {total >= 0 ? "+" : ""}
+                        {currency(total)}
                       </div>
-                      <div className="col-span-1 text-right">
-                        <Button variant="destructive" onClick={() => onDelete(t.id)} size="sm">
-                          Delete
-                        </Button>
-                      </div>
+                      {pct && <span className="text-xs text-slate-500">({pct})</span>}
                     </div>
-                  ))}
-              </div>
-            ))
+                  </div>
+
+                  <div className="grid grid-cols-12 px-3 py-2 text-xs font-medium bg-slate-50">
+                    <div className="col-span-3">Time</div>
+                    <div className="col-span-3">Market</div>
+                    <div className="col-span-4">Strategy / Notes</div>
+                    <div className="col-span-1 text-right">PnL</div>
+                    <div className="col-span-1 text-right pr-1">Actions</div>
+                  </div>
+
+                  {b.rows
+                    .slice()
+                    .reverse()
+                    .map((t) => (
+                      <div key={t.id} className="grid grid-cols-12 px-3 py-2 border-t text-sm">
+                        <div className="col-span-3">{t.ts ? new Date(t.ts).toLocaleString() : "—"}</div>
+                        <div className="col-span-3">{t.symbol}</div>
+                        <div className="col-span-4">{t.notes || "—"}</div>
+                        <div className={`col-span-1 text-right ${t.pnl >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                          {t.pnl >= 0 ? "+" : ""}
+                          {currency(t.pnl)}
+                        </div>
+                        <div className="col-span-1 text-right">
+                          <Button variant="destructive" onClick={() => onDelete(t.id)} size="sm">
+                            Delete
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              );
+            })
         ) : (
           <div className="p-4 text-sm text-slate-600">No trades yet. Use Quick Logger above.</div>
         )}
