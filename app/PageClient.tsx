@@ -85,6 +85,7 @@ const MARKET_OPTIONS = [
   "Volatility 75",
   "Volatility 25 (1s)",
   "Volatility 25",
+  "Withdrawals",
 ] as const;
 type MarketName = (typeof MARKET_OPTIONS)[number];
 
