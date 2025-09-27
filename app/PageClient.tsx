@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import AuthGate from "@/components/AuthGate";
 import { useSupabaseUser } from "@/lib/useSupabaseUser";
+import { supabase } from "@/lib/supabase"; // added
 
 /* ========== shadcn/ui ========== */
 import { Button } from "@/components/ui/button";
@@ -379,7 +380,8 @@ function PageInner() {
           </span>
         </div>
 
-        <Button
+        <div className="flex items-center gap-2">
+<Button
           onClick={async () => {
             try {
               if (!user?.id) {
@@ -399,6 +401,40 @@ function PageInner() {
         >
           End Session / Start New
         </Button>
+
+          {user && (
+
+            <Button
+
+              variant="outline"
+
+              onClick={async () => {
+
+                try {
+
+                  await supabase.auth.signOut();
+
+                  push({ title: "Signed out", desc: "See you next session." });
+
+                } catch (e) {
+
+                  console.error(e);
+
+                  push({ title: "Sign out failed", desc: "Please try again." });
+
+                }
+
+              }}
+
+            >
+
+              Sign Out
+
+            </Button>
+
+          )}
+
+        </div>
       </div>
 
       {/* Tabs */}
@@ -642,7 +678,7 @@ function PageInner() {
 
         {/* CALENDAR */}
         <TabsContent value="calendar">
-          <OldCalendar trades={trades} />
+          <OldCalendar trades={trades} startBalance={startBalance} />
         </TabsContent>
 
         {/* A-SETUPS */}
