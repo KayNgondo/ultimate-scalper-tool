@@ -270,19 +270,23 @@ function PageInner() {
 
   // ==== Profit-Only Governor derived helpers ====
   const sessionLossSoFar = useMemo(() => {
-    return sessionTrades
+    const list = Array.isArray(sessionTrades) ? sessionTrades : [];
+    return list
       .filter((t) => (t.pnl || 0) < 0)
       .reduce((a, t) => a + (t.pnl || 0), 0);
   }, [sessionTrades]);
-
-  const todayLossSoFar = useMemo(() => {
-    const key = ymdLocal(new Date());
-    return trades
-      .filter((t) => t.ts && ymdLocal(new Date(t.ts)) === key && (t.pnl || 0) < 0)
+const todayLossSoFar = useMemo(() => {
+    const today = new Date();
+    const isSameLocalDay = (a: Date, b: Date) =>
+      a.getFullYear() === b.getFullYear() &&
+      a.getMonth() === b.getMonth() &&
+      a.getDate() === b.getDate();
+    const list = Array.isArray(trades) ? trades : [];
+    return list
+      .filter((t) => t && t.ts && (t.pnl || 0) < 0 && isSameLocalDay(new Date(t.ts), today))
       .reduce((a, t) => a + (t.pnl || 0), 0);
   }, [trades]);
-
-  const governor = useRiskGovernor({
+const governor = useRiskGovernor({
     startBalance,
     equity,
     sessionLossSoFar,
