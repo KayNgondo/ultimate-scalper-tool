@@ -1,9 +1,10 @@
+/* PageClient.tsx — Ultimate Scalper Tool (3× Risk & Sizing) */
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
 import AuthGate from "@/components/AuthGate";
 import { useSupabaseUser } from "@/lib/useSupabaseUser";
-import { supabase } from "@/lib/supabase"; // added
+import { supabase } from "@/lib/supabase";
 
 /* ========== shadcn/ui ========== */
 import { Button } from "@/components/ui/button";
@@ -86,12 +87,16 @@ const MARKET_OPTIONS = [
   "Volatility 75",
   "Volatility 25 (1s)",
   "Volatility 25",
-  "Volatility 10 (1s)", // added market
+  "Volatility 10 (1s)",
   "Withdrawals",
 ] as const;
 type MarketName = (typeof MARKET_OPTIONS)[number];
 
-const STRATEGIES = ["Ultimate M1 Trend setup", "Ultimate M1 Range setup", "Withdrawals"] as const;
+const STRATEGIES = [
+  "Ultimate M1 Trend setup",
+  "Ultimate M1 Range setup",
+  "Withdrawals",
+] as const;
 type StrategyName = (typeof STRATEGIES)[number];
 
 type ASetup = { id: string; title: string; dataUrl: string; notes?: string };
@@ -146,8 +151,8 @@ function isSameMonth(a: Date, b: Date) {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth();
 }
 
-/* Lot-size formulas — defensive & supports V10(1s) */
-function calcLotSize(riskAmount: number, market: MarketName, riskPips: number) {
+/* Lot-size formulas — Deriv */
+function calcLotSizeDeriv(riskAmount: number, market: MarketName, riskPips: number) {
   const ra = Number(riskAmount) || 0;
   const rp = Number(riskPips) || 0;
   if (ra <= 0 || rp <= 0) return 0;
@@ -162,14 +167,27 @@ function calcLotSize(riskAmount: number, market: MarketName, riskPips: number) {
     case "Volatility 10 (1s)":
       return +((ra / rp) * 100).toFixed(3);
 
-    case "Volatility 25": {
-      // 1/1000 pip scale
+    case "Volatility 25":
       return +(ra / (rp / 1000)).toFixed(3);
-    }
 
     default:
-      return 0; // e.g. Withdrawals
+      return 0; // Withdrawals
   }
+}
+
+/* Universal lot-size formula (FX / Metals / Indices / Crypto)
+   Lot = riskAmount / (riskPips * pipValuePerLotUSD)
+*/
+function calcLotSizeUniversal(
+  riskAmount: number,
+  riskPips: number,
+  pipValuePerLotUSD: number
+) {
+  const ra = Number(riskAmount) || 0;
+  const rp = Number(riskPips) || 0;
+  const pv = Number(pipValuePerLotUSD) || 0;
+  if (ra <= 0 || rp <= 0 || pv <= 0) return 0;
+  return +(ra / (rp * pv)).toFixed(3);
 }
 
 /* Send session close → API (Supabase RPC behind it) */
@@ -381,59 +399,47 @@ function PageInner() {
         </div>
 
         <div className="flex items-center gap-2">
-<Button
-          onClick={async () => {
-            try {
-              if (!user?.id) {
-                push({ title: "Please sign in", desc: "You need to sign in to save sessions." });
-                return;
+          <Button
+            onClick={async () => {
+              try {
+                if (!user?.id) {
+                  const { push } = useToast();
+                  push({ title: "Please sign in", desc: "You need to sign in to save sessions." });
+                  return;
+                }
+                const startedAtISO = new Date(Number(sessionId || Date.now())).toISOString();
+                const endedAtISO = new Date().toISOString();
+                await recordSessionToLeaderboard(user.id, Number(pnl || 0), startedAtISO, endedAtISO);
+                newSessionId();
+                const { push } = useToast();
+                push({ title: "Session saved", desc: "Leaderboard updated." });
+              } catch (e) {
+                console.error(e);
+                newSessionId();
               }
-              const startedAtISO = new Date(Number(sessionId || Date.now())).toISOString();
-              const endedAtISO = new Date().toISOString();
-              await recordSessionToLeaderboard(user.id, Number(pnl || 0), startedAtISO, endedAtISO);
-              newSessionId();
-              push({ title: "Session saved", desc: "Leaderboard updated." });
-            } catch (e) {
-              console.error(e);
-              newSessionId();
-            }
-          }}
-        >
-          End Session / Start New
-        </Button>
+            }}
+          >
+            End Session / Start New
+          </Button>
 
           {user && (
-
             <Button
-
               variant="outline"
-
               onClick={async () => {
-
                 try {
-
                   await supabase.auth.signOut();
-
+                  const { push } = useToast();
                   push({ title: "Signed out", desc: "See you next session." });
-
                 } catch (e) {
-
                   console.error(e);
-
+                  const { push } = useToast();
                   push({ title: "Sign out failed", desc: "Please try again." });
-
                 }
-
               }}
-
             >
-
               Sign Out
-
             </Button>
-
           )}
-
         </div>
       </div>
 
@@ -441,14 +447,15 @@ function PageInner() {
       <Tabs defaultValue="dashboard">
         <TabsList className="mb-3">
           <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
-          <TabsTrigger value="analyzer">Analyzer</TabsTrigger>
+          {/* Analyzer removed */}
           <TabsTrigger value="analytics">Analytics</TabsTrigger>
-          <TabsTrigger value="risk">Risk &amp; Sizing</TabsTrigger>
+          <TabsTrigger value="risk-deriv">Risk &amp; Sizing (Deriv)</TabsTrigger>
+          <TabsTrigger value="risk-fx">Risk &amp; Sizing (FX)</TabsTrigger>
+          <TabsTrigger value="risk-majors">Risk &amp; Sizing (XAU/NAS/US30/BTC)</TabsTrigger>
           <TabsTrigger value="journal">Trade Journal</TabsTrigger>
           <TabsTrigger value="calendar">Calendar</TabsTrigger>
           <TabsTrigger value="asetups">A-Setups</TabsTrigger>
 
-          {/* External link to dedicated page */}
           <a
             href="/leaderboard"
             className="inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium ring-offset-background transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
@@ -527,6 +534,7 @@ function PageInner() {
                         <Button
                           onClick={() => {
                             setLockOnHit(false);
+                            const { push } = useToast();
                             push({ title: "Override", desc: "Lock disabled for today." });
                           }}
                         >
@@ -582,72 +590,73 @@ function PageInner() {
           </Card>
         </TabsContent>
 
-        {/* ANALYZER */}
-        <TabsContent value="analyzer" className="space-y-4">
-          <div className="grid lg:grid-cols-2 gap-4">
-            <SetupAnalyzer />
-            <MarketAnalyzer riskAmount={riskAmount} />
-          </div>
-        </TabsContent>
-
         {/* ANALYTICS */}
         <TabsContent value="analytics">
           <AnalyticsPanel trades={trades} />
         </TabsContent>
 
-        {/* RISK & SIZING */}
-        <TabsContent value="risk" className="space-y-4">
-          <Card>
-            <CardContent className="p-4 grid md:grid-cols-4 gap-4">
-              <div className="md:col-span-1">
-                <Label>Starting Capital</Label>
-                <Input
-                  type="number"
-                  value={startBalance}
-                  onChange={(e) => setStartBalance(Number(e.target.value) || 0)}
-                  disabled={trades.length > 0}
-                />
-                {trades.length > 0 && (
-                  <div className="text-xs text-slate-500 mt-1">
-                    Locked after first trade.{" "}
-                    <button
-                      className="underline text-rose-600"
-                      onClick={() => {
-                        if (confirm("Reset ALL trades and sessions and unlock starting capital?")) {
-                          localStorage.removeItem("ust-trades");
-                          localStorage.removeItem("ust-session-id");
-                          localStorage.removeItem("ust-session-history");
-                          location.reload();
-                        }
-                      }}
-                    >
-                      Reset equity
-                    </button>
-                  </div>
-                )}
-              </div>
-              <div className="md:col-span-1">
-                <Label>Risk % per Trade</Label>
-                <Input type="number" step="0.1" value={riskPct} onChange={(e) => setRiskPct(Number(e.target.value) || 0)} />
-              </div>
-              <InfoStat label="Current Equity" value={currency(equity)} />
-              <InfoStat label="Risk Amount (auto)" value={currency(riskAmount)} />
-            </CardContent>
-          </Card>
+        {/* RISK & SIZING — DERIV */}
+        <TabsContent value="risk-deriv" className="space-y-4">
+          <CapitalAndRiskCard
+            startBalance={startBalance}
+            setStartBalance={setStartBalance}
+            riskPct={riskPct}
+            setRiskPct={setRiskPct}
+            equity={equity}
+            riskAmount={riskAmount}
+            tradesCount={trades.length}
+          />
 
           <Card>
             <CardContent className="p-4 space-y-3">
-              <h4 className="text-lg font-semibold">Per-Market Lot Size</h4>
-              <p className="text-sm text-slate-600">Enter risk pips for each market. Risk amount uses current equity × risk%.</p>
+              <h4 className="text-lg font-semibold">Per-Market Lot Size (Deriv)</h4>
+              <p className="text-sm text-slate-600">
+                Enter risk pips for each Deriv market. Risk amount uses current equity × risk%.
+              </p>
               <div className="space-y-3">
                 {MARKET_OPTIONS
                   .filter((m) => m !== "Withdrawals")
                   .map((mkt) => (
-                    <MarketSizerRow key={mkt} market={mkt} riskAmount={riskAmount} />
+                    <MarketSizerRowDeriv key={mkt} market={mkt} riskAmount={riskAmount} />
                   ))}
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* RISK & SIZING — FX (5 pairs) */}
+        <TabsContent value="risk-fx" className="space-y-4">
+          <CapitalAndRiskSummary equity={equity} riskAmount={riskAmount} riskPct={riskPct} />
+
+          <RiskSizerUniversalPanel
+            title="FX Pairs (edit symbols if you like)"
+            storagePrefix="ust-fx"
+            rows={[
+              { id: "1", defaultSymbol: "EURUSD", defaultPipValue: 10 },
+              { id: "2", defaultSymbol: "GBPUSD", defaultPipValue: 10 },
+              { id: "3", defaultSymbol: "USDJPY", defaultPipValue: 9.1 }, // ~ $9.1/pip per lot around 110; user can change
+              { id: "4", defaultSymbol: "AUDUSD", defaultPipValue: 10 },
+              { id: "5", defaultSymbol: "USDCAD", defaultPipValue: 10 },
+            ]}
+            riskAmount={riskAmount}
+          />
+        </TabsContent>
+
+        {/* RISK & SIZING — XAU/NAS/US30/BTC */}
+        <TabsContent value="risk-majors" className="space-y-4">
+          <CapitalAndRiskSummary equity={equity} riskAmount={riskAmount} riskPct={riskPct} />
+
+          <RiskSizerUniversalPanel
+            title="XAU / Indices / Crypto"
+            storagePrefix="ust-majors"
+            rows={[
+              { id: "xau", defaultSymbol: "XAUUSD", defaultPipValue: 1 },   // $1 per 0.01 “pip” per lot (commonly)
+              { id: "nas", defaultSymbol: "NAS100", defaultPipValue: 1 },   // placeholder; set your broker spec
+              { id: "us30", defaultSymbol: "US30", defaultPipValue: 1 },    // placeholder
+              { id: "btc", defaultSymbol: "BTCUSD", defaultPipValue: 1 },   // placeholder
+            ]}
+            riskAmount={riskAmount}
+          />
         </TabsContent>
 
         {/* JOURNAL */}
@@ -672,13 +681,12 @@ function PageInner() {
             }}
           />
 
-          {/* Pass startBalance for session % calc */}
           <JournalGrouped trades={trades} onDelete={deleteTrade} sessionId={sessionId} startBalance={startBalance} />
         </TabsContent>
 
         {/* CALENDAR */}
         <TabsContent value="calendar">
-          <OldCalendar trades={trades} startBalance={startBalance} />
+          <OldCalendar trades={trades} />
         </TabsContent>
 
         {/* A-SETUPS */}
@@ -710,6 +718,84 @@ function InfoStat({ label, value }: { label: string; value: string }) {
       <div className="text-xs text-slate-500">{label}</div>
       <div className="text-lg font-semibold">{value}</div>
     </div>
+  );
+}
+
+/* Shared capital/risk header blocks for Risk tabs */
+function CapitalAndRiskCard({
+  startBalance,
+  setStartBalance,
+  riskPct,
+  setRiskPct,
+  equity,
+  riskAmount,
+  tradesCount,
+}: {
+  startBalance: number;
+  setStartBalance: (v: number) => void;
+  riskPct: number;
+  setRiskPct: (v: number) => void;
+  equity: number;
+  riskAmount: number;
+  tradesCount: number;
+}) {
+  return (
+    <Card>
+      <CardContent className="p-4 grid md:grid-cols-4 gap-4">
+        <div className="md:col-span-1">
+          <Label>Starting Capital</Label>
+          <Input
+            type="number"
+            value={startBalance}
+            onChange={(e) => setStartBalance(Number(e.target.value) || 0)}
+            disabled={tradesCount > 0}
+          />
+          {tradesCount > 0 && (
+            <div className="text-xs text-slate-500 mt-1">
+              Locked after first trade.{" "}
+              <button
+                className="underline text-rose-600"
+                onClick={() => {
+                  if (confirm("Reset ALL trades and sessions and unlock starting capital?")) {
+                    localStorage.removeItem("ust-trades");
+                    localStorage.removeItem("ust-session-id");
+                    localStorage.removeItem("ust-session-history");
+                    location.reload();
+                  }
+                }}
+              >
+                Reset equity
+              </button>
+            </div>
+          )}
+        </div>
+        <div className="md:col-span-1">
+          <Label>Risk % per Trade</Label>
+          <Input type="number" step="0.1" value={riskPct} onChange={(e) => setRiskPct(Number(e.target.value) || 0)} />
+        </div>
+        <InfoStat label="Current Equity" value={currency(equity)} />
+        <InfoStat label="Risk Amount (auto)" value={currency(riskAmount)} />
+      </CardContent>
+    </Card>
+  );
+}
+function CapitalAndRiskSummary({
+  equity,
+  riskAmount,
+  riskPct,
+}: {
+  equity: number;
+  riskAmount: number;
+  riskPct: number;
+}) {
+  return (
+    <Card>
+      <CardContent className="p-4 grid md:grid-cols-3 gap-4">
+        <InfoStat label="Current Equity" value={currency(equity)} />
+        <InfoStat label="Risk % per Trade" value={`${fmt(riskPct)}%`} />
+        <InfoStat label="Risk Amount (auto)" value={currency(riskAmount)} />
+      </CardContent>
+    </Card>
   );
 }
 
@@ -777,9 +863,9 @@ function BadgeShowcase({
 }
 
 /* =========================================================================
-   Risk rows
+   Risk rows — Deriv
 ============================================================================ */
-function MarketSizerRow({ market, riskAmount }: { market: MarketName; riskAmount: number }) {
+function MarketSizerRowDeriv({ market, riskAmount }: { market: MarketName; riskAmount: number }) {
   const storageKey = `ust-riskpips-${market}`;
   const [riskPips, setRiskPips] = useState<number>(() => {
     const raw = typeof window !== "undefined" ? localStorage.getItem(storageKey) : null;
@@ -791,7 +877,7 @@ function MarketSizerRow({ market, riskAmount }: { market: MarketName; riskAmount
     }
   }, [storageKey, riskPips]);
 
-  const lot = calcLotSize(riskAmount, market, riskPips);
+  const lot = calcLotSizeDeriv(riskAmount, market, riskPips);
 
   return (
     <div className="grid md:grid-cols-12 gap-3 items-end border rounded-lg p-3 bg-white/60">
@@ -810,6 +896,108 @@ function MarketSizerRow({ market, riskAmount }: { market: MarketName; riskAmount
           <strong>{lot}</strong>
         </div>
         <div className="text-[11px] text-slate-500 mt-1">Risk: {currency(riskAmount)}</div>
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================================
+   Universal Risk Sizer (FX / Majors)
+============================================================================ */
+function RiskSizerUniversalPanel({
+  title,
+  storagePrefix,
+  rows,
+  riskAmount,
+}: {
+  title: string;
+  storagePrefix: string;
+  rows: { id: string; defaultSymbol: string; defaultPipValue?: number }[];
+  riskAmount: number;
+}) {
+  return (
+    <Card>
+      <CardContent className="p-4 space-y-3">
+        <h4 className="text-lg font-semibold">{title}</h4>
+        <p className="text-sm text-slate-600">
+          Lot size = Risk Amount ÷ (Risk Pips × Pip Value per 1 lot). Enter your broker’s pip value per lot.
+        </p>
+        <div className="space-y-3">
+          {rows.map((r) => (
+            <UniversalSizerRow
+              key={r.id}
+              storagePrefix={storagePrefix}
+              rowId={r.id}
+              defaultSymbol={r.defaultSymbol}
+              defaultPipValue={r.defaultPipValue}
+              riskAmount={riskAmount}
+            />
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+function UniversalSizerRow({
+  storagePrefix,
+  rowId,
+  defaultSymbol,
+  defaultPipValue,
+  riskAmount,
+}: {
+  storagePrefix: string;
+  rowId: string;
+  defaultSymbol: string;
+  defaultPipValue?: number;
+  riskAmount: number;
+}) {
+  const symKey = `${storagePrefix}-${rowId}-symbol`;
+  const pipsKey = `${storagePrefix}-${rowId}-riskpips`;
+  const pipValKey = `${storagePrefix}-${rowId}-pipval`;
+
+  const [symbol, setSymbol] = useState<string>(() => {
+    const raw = typeof window !== "undefined" ? localStorage.getItem(symKey) : null;
+    return raw ?? defaultSymbol;
+  });
+  const [riskPips, setRiskPips] = useState<number>(() => {
+    const raw = typeof window !== "undefined" ? localStorage.getItem(pipsKey) : null;
+    return raw ? Number(raw) : 0;
+  });
+  const [pipVal, setPipVal] = useState<number>(() => {
+    const raw = typeof window !== "undefined" ? localStorage.getItem(pipValKey) : null;
+    const def = defaultPipValue ?? 0;
+    return raw ? Number(raw) : def;
+  });
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem(symKey, symbol);
+      localStorage.setItem(pipsKey, String(riskPips || 0));
+      localStorage.setItem(pipValKey, String(pipVal || 0));
+    }
+  }, [symKey, pipsKey, pipValKey, symbol, riskPips, pipVal]);
+
+  const lot = calcLotSizeUniversal(riskAmount, riskPips, pipVal);
+
+  return (
+    <div className="grid md:grid-cols-12 gap-3 items-end border rounded-lg p-3 bg-white/60">
+      <div className="md:col-span-4">
+        <Label>Symbol</Label>
+        <Input value={symbol} onChange={(e) => setSymbol(e.target.value.toUpperCase())} />
+      </div>
+      <div className="md:col-span-3">
+        <Label>Risk Pips</Label>
+        <Input type="number" value={riskPips} onChange={(e) => setRiskPips(Number(e.target.value) || 0)} />
+      </div>
+      <div className="md:col-span-3">
+        <Label>Pip Value / Lot (USD)</Label>
+        <Input type="number" step="0.01" value={pipVal} onChange={(e) => setPipVal(Number(e.target.value) || 0)} />
+      </div>
+      <div className="md:col-span-2">
+        <Label>Lot Size (auto)</Label>
+        <div className="h-10 grid place-items-center rounded-md border bg-white">
+          <strong>{lot}</strong>
+        </div>
       </div>
     </div>
   );
@@ -1107,155 +1295,6 @@ function AnalyticsPanel({ trades }: { trades: TradeRow[] }) {
         </CardContent>
       </Card>
     </div>
-  );
-}
-
-/* =========================================================================
-   Setup Analyzer
-============================================================================ */
-function SetupAnalyzer() {
-  type SetupKind = "Trend Buy" | "Trend Sell" | "Range Buy" | "Range Sell";
-  const [setup, setSetup] = useState<SetupKind>("Trend Buy");
-
-  const [ck, setCk] = useState<Record<string, boolean>>({
-    emaPos: false,
-    sslAligned: false,
-    arrow: false,
-    moneyFlow: false,
-    modAtr: false,
-    ranging: false,
-    sr: false,
-    edge: false,
-  });
-
-  const pass =
-    (setup === "Trend Buy" && ck.emaPos && ck.sslAligned && ck.arrow && ck.moneyFlow && ck.modAtr) ||
-    (setup === "Trend Sell" && ck.emaPos && ck.sslAligned && ck.arrow && ck.moneyFlow && ck.modAtr) ||
-    (setup === "Range Buy" && ck.ranging && ck.sr && ck.edge) ||
-    (setup === "Range Sell" && ck.ranging && ck.sr && ck.edge);
-
-  return (
-    <Card>
-      <CardContent className="p-4 space-y-3">
-        <h4 className="text-lg font-semibold">Setup Analyzer</h4>
-
-        <div className="grid md:grid-cols-3 gap-3">
-          <div>
-            <Label>Setup</Label>
-            <Select value={setup} onValueChange={(v: SetupKind) => setSetup(v)}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Trend Buy">Ultimate Trend Buy A-Setup</SelectItem>
-                <SelectItem value="Trend Sell">Ultimate Trend Sell A-Setup</SelectItem>
-                <SelectItem value="Range Buy">Ultimate Range Buy A-Setup</SelectItem>
-                <SelectItem value="Range Sell">Ultimate Range Sell A-Setup</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="md:col-span-2 rounded-lg border bg-white p-3">
-            {setup.includes("Trend") ? (
-              <div className="grid gap-2">
-                <Chk label={setup === "Trend Buy" ? "Price above EMA 315" : "Price below EMA 315"} k="emaPos" ck={ck} setCk={setCk} />
-                <Chk label={setup === "Trend Buy" ? "SSL above EMA 315" : "SSL below EMA 315"} k="sslAligned" ck={ck} setCk={setCk} />
-                <Chk label={setup === "Trend Buy" ? "Green Buy Arrow" : "Red Sell Arrow"} k="arrow" ck={ck} setCk={setCk} />
-                <Chk label="Money Flow cross near 20/80" k="moneyFlow" ck={ck} setCk={setCk} />
-                <Chk label={setup === "Trend Buy" ? "Close above MOD ATR (Red)" : "Close below MOD ATR (Green)"} k="modAtr" ck={ck} setCk={setCk} />
-              </div>
-            ) : (
-              <div className="grid gap-2">
-                <Chk label={setup === "Range Buy" ? "Market ranging above EMA 315" : "Market ranging below EMA 315"} k="ranging" ck={ck} setCk={setCk} />
-                <Chk label="Support & Resistance in same areas" k="sr" ck={ck} setCk={setCk} />
-                <Chk label={setup === "Range Buy" ? "Buying at bottom of range" : "Selling at top of range"} k="edge" ck={ck} setCk={setCk} />
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className={`rounded-lg p-3 text-sm ${pass ? "bg-emerald-50 border border-emerald-200" : "bg-rose-50 border border-rose-200"}`}>
-          <strong>{pass ? "GO" : "NO-GO"}:</strong>{" "}
-          {pass ? "All key checklist items passed for this setup." : "One or more required checklist items are not met."}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-function Chk({
-  label,
-  k,
-  ck,
-  setCk,
-}: {
-  label: string;
-  k: string;
-  ck: Record<string, boolean>;
-  setCk: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
-}) {
-  return (
-    <label className="flex items-center gap-2 text-sm">
-      <input
-        type="checkbox"
-        className="h-4 w-4"
-        checked={ck[k]}
-        onChange={(e) => setCk((s) => ({ ...s, [k]: e.target.checked }))}
-      />
-      <span>{label}</span>
-    </label>
-  );
-}
-
-/* =========================================================================
-   Market Analyzer
-============================================================================ */
-function MarketAnalyzer({ riskAmount }: { riskAmount: number }) {
-  const [market, setMarket] = useState<MarketName>("Volatility 75 (1s)");
-  const [mode, setMode] = useState<"Trending" | "Ranging">("Trending");
-  const [riskPips, setRiskPips] = useState<number>(0);
-
-  const lot = calcLotSize(riskAmount, market, riskPips);
-  const suggestion = mode === "Trending" ? "Ultimate M1 Trend setup" : "Ultimate M1 Range setup";
-
-  return (
-    <Card>
-      <CardContent className="p-4 space-y-3">
-        <h4 className="text-lg font-semibold">Market Analyzer</h4>
-        <div className="grid md:grid-cols-3 gap-3">
-          <div>
-            <Label>Market</Label>
-            <Select value={market} onValueChange={(v: MarketName) => setMarket(v)}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {MARKET_OPTIONS
-                  .filter((m) => m !== "Withdrawals")
-                  .map((m) => (
-                    <SelectItem key={m} value={m}>{m}</SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label>State</Label>
-            <Select value={mode} onValueChange={(v: "Trending" | "Ranging") => setMode(v)}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Trending">Trending</SelectItem>
-                <SelectItem value="Ranging">Ranging</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label>Risk Pips</Label>
-            <Input type="number" value={riskPips} onChange={(e) => setRiskPips(Number(e.target.value) || 0)} />
-          </div>
-        </div>
-
-        <div className="grid md:grid-cols-3 gap-3">
-          <InfoStat label="Risk Amount (auto)" value={currency(riskAmount)} />
-          <InfoStat label="Lot Size (auto)" value={String(lot)} />
-          <InfoStat label="Suggested Strategy" value={suggestion} />
-        </div>
-      </CardContent>
-    </Card>
   );
 }
 
