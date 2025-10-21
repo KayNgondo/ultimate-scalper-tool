@@ -1,7 +1,8 @@
-/* PageClient.tsx — Ultimate Scalper Tool (3× Risk & Sizing) */
+
+/* PageClient.tsx — Ultimate Scalper Tool (3× Risk & Sizing + Combobox Logger) */
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useContext } from "react";
 import AuthGate from "@/components/AuthGate";
 import { useSupabaseUser } from "@/lib/useSupabaseUser";
 import { supabase } from "@/lib/supabase";
@@ -19,6 +20,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+
+/* New: solid, searchable combobox pieces */
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import {
+  Command,
+  CommandInput,
+  CommandList,
+  CommandEmpty,
+  CommandItem,
+  CommandGroup,
+} from "@/components/ui/command";
+import { ChevronsUpDown, Check } from "lucide-react";
 
 /* ========== recharts ========== */
 import {
@@ -65,7 +78,7 @@ function ToastProvider({ children }: { children: React.ReactNode }) {
   );
 }
 function useToast() {
-  const ctx = React.useContext(ToastContext);
+  const ctx = useContext(ToastContext);
   if (!ctx) throw new Error("useToast must be used within <ToastProvider>");
   return ctx;
 }
@@ -403,7 +416,6 @@ function PageInner() {
             onClick={async () => {
               try {
                 if (!user?.id) {
-                  const { push } = useToast();
                   push({ title: "Please sign in", desc: "You need to sign in to save sessions." });
                   return;
                 }
@@ -411,7 +423,6 @@ function PageInner() {
                 const endedAtISO = new Date().toISOString();
                 await recordSessionToLeaderboard(user.id, Number(pnl || 0), startedAtISO, endedAtISO);
                 newSessionId();
-                const { push } = useToast();
                 push({ title: "Session saved", desc: "Leaderboard updated." });
               } catch (e) {
                 console.error(e);
@@ -428,11 +439,9 @@ function PageInner() {
               onClick={async () => {
                 try {
                   await supabase.auth.signOut();
-                  const { push } = useToast();
                   push({ title: "Signed out", desc: "See you next session." });
                 } catch (e) {
                   console.error(e);
-                  const { push } = useToast();
                   push({ title: "Sign out failed", desc: "Please try again." });
                 }
               }}
@@ -496,7 +505,7 @@ function PageInner() {
                     <Label>Stop trading at -Max Loss</Label>
                     <Select value={String(lockOnHit)} onValueChange={(v: string) => setLockOnHit(v === "true")}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="z-[70] bg-white border shadow-md">
                         <SelectItem value="true">Enabled</SelectItem>
                         <SelectItem value="false">Disabled</SelectItem>
                       </SelectContent>
@@ -534,7 +543,6 @@ function PageInner() {
                         <Button
                           onClick={() => {
                             setLockOnHit(false);
-                            const { push } = useToast();
                             push({ title: "Override", desc: "Lock disabled for today." });
                           }}
                         >
@@ -650,8 +658,8 @@ function PageInner() {
             title="XAU / Indices / Crypto"
             storagePrefix="ust-majors"
             rows={[
-              { id: "xau", defaultSymbol: "XAUUSD", defaultPipValue: 1 },   // $1 per 0.01 “pip” per lot (commonly)
-              { id: "nas", defaultSymbol: "NAS100", defaultPipValue: 1 },   // placeholder; set your broker spec
+              { id: "xau", defaultSymbol: "XAUUSD", defaultPipValue: 1 },   // placeholder; adjust to broker spec
+              { id: "nas", defaultSymbol: "NAS100", defaultPipValue: 1 },   // placeholder
               { id: "us30", defaultSymbol: "US30", defaultPipValue: 1 },    // placeholder
               { id: "btc", defaultSymbol: "BTCUSD", defaultPipValue: 1 },   // placeholder
             ]}
@@ -1004,7 +1012,97 @@ function UniversalSizerRow({
 }
 
 /* =========================================================================
-   Multi Quick Logger
+   Searchable Combobox Market Picker for Journal
+============================================================================ */
+function getCustomSymbolsFromStorage() {
+  if (typeof window === "undefined") return [] as string[];
+  const fxIds = ["1","2","3","4","5"];
+  const majorIds = ["xau","nas","us30","btc"];
+  const grab = (key: string) => {
+    const v = localStorage.getItem(key);
+    return v && v.trim() ? v.trim().toUpperCase() : null;
+  };
+
+  const fx = fxIds
+    .map(id => grab(`ust-fx-${id}-symbol`))
+    .filter(Boolean) as string[];
+  const majors = majorIds
+    .map(id => grab(`ust-majors-${id}-symbol`))
+    .filter(Boolean) as string[];
+
+  // Deriv markets (keep originals for convenience)
+  const deriv = ["Step Index","Volatility 75 (1s)","Volatility 75","Volatility 25 (1s)","Volatility 25","Volatility 10 (1s)"];
+
+  // Dedupe while preserving order
+  const seen = new Set<string>();
+  return [...deriv, ...fx, ...majors].filter(s => (seen.has(s) ? false : (seen.add(s), true)));
+}
+
+function MarketPicker({
+  value,
+  onChange,
+  placeholder = "Select or type a symbol…",
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const options = useMemo(() => getCustomSymbolsFromStorage(), []);
+  const display = value || placeholder;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="w-full justify-between"
+        >
+          <span className={value ? "" : "text-slate-400"}>{display}</span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-[--radix-popover-trigger-width] p-0 z-[80] bg-white border shadow-lg">
+        <Command>
+          <CommandInput placeholder="Search markets or symbols…" />
+          <CommandList>
+            <CommandEmpty>No results.</CommandEmpty>
+
+            <CommandGroup heading="Saved & Deriv">
+              {options.map((opt) => (
+                <CommandItem
+                  key={opt}
+                  value={opt}
+                  onSelect={() => { onChange(opt); setOpen(false); }}
+                >
+                  <Check className={`mr-2 h-4 w-4 ${opt === value ? "opacity-100" : "opacity-0"}`} />
+                  {opt}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+
+            {value && !options.includes(value.toUpperCase()) && (
+              <CommandGroup heading="Typed">
+                <CommandItem
+                  value={value.toUpperCase()}
+                  onSelect={() => { onChange(value.toUpperCase()); setOpen(false); }}
+                >
+                  <Check className="mr-2 h-4 w-4 opacity-100" />
+                  {value.toUpperCase()}
+                </CommandItem>
+              </CommandGroup>
+            )}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/* =========================================================================
+   Multi Quick Logger (updated to use MarketPicker)
 ============================================================================ */
 function MultiQuickLogger({
   initialRows = 3,
@@ -1015,9 +1113,9 @@ function MultiQuickLogger({
   initialRows?: number;
   maxRows?: number;
   locked?: boolean;
-  onLogged: (rows: { market: MarketName; strategy: StrategyName; pnl: number }[]) => void;
+  onLogged: (rows: { market: string; strategy: StrategyName; pnl: number }[]) => void;
 }) {
-  type Pending = { id: string; market: MarketName; strategy: StrategyName; pnl: number };
+  type Pending = { id: string; market: string; strategy: StrategyName; pnl: number };
   const emptyRow = (): Pending => ({
     id: `${Math.random().toString(36).slice(2, 8)}`,
     market: "Volatility 75 (1s)",
@@ -1061,6 +1159,7 @@ function MultiQuickLogger({
           </div>
         </div>
         {locked && <div className="text-xs text-rose-700">Locked due to daily max loss. Adjust on Dashboard.</div>}
+
         <div className="space-y-3">
           {rows.map((r, idx) => (
             <div
@@ -1073,21 +1172,17 @@ function MultiQuickLogger({
 
               <div className="md:col-span-3">
                 <Label>Market</Label>
-                <Select value={r.market} onValueChange={(v: MarketName) => updateRow(r.id, { market: v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {MARKET_OPTIONS.map((m) => (
-                      <SelectItem key={m} value={m}>{m}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <MarketPicker
+                  value={r.market}
+                  onChange={(val) => updateRow(r.id, { market: val })}
+                />
               </div>
 
               <div className="md:col-span-5">
                 <Label>Strategy</Label>
                 <Select value={r.strategy} onValueChange={(v: StrategyName) => updateRow(r.id, { strategy: v })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="z-[70] bg-white border shadow-md">
                     {STRATEGIES.map((s) => (
                       <SelectItem key={s} value={s}>{s}</SelectItem>
                     ))}
