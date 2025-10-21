@@ -52,6 +52,7 @@ import {
 ============================================================================ */
 type ToastItem = { id: string; title: string; desc?: string };
 import React from "react";
+import { useRiskGovernor } from "@/components/Checklist_and_RiskGovernor";
 const ToastContext = React.createContext<{
   push: (t: Omit<ToastItem, "id">) => void;
 } | null>(null);
@@ -266,6 +267,30 @@ function PageInner() {
     [trades]
   );
   const equity = useMemo(() => startBalance + totalPnlAllTime, [startBalance, totalPnlAllTime]);
+
+  // ==== Profit-Only Governor derived helpers ====
+  const sessionLossSoFar = useMemo(() => {
+    return sessionTrades
+      .filter((t) => (t.pnl || 0) < 0)
+      .reduce((a, t) => a + (t.pnl || 0), 0);
+  }, [sessionTrades]);
+
+  const todayLossSoFar = useMemo(() => {
+    const key = ymdLocal(new Date());
+    return trades
+      .filter((t) => t.ts && ymdLocal(new Date(t.ts)) === key && (t.pnl || 0) < 0)
+      .reduce((a, t) => a + (t.pnl || 0), 0);
+  }, [trades]);
+
+  const governor = useRiskGovernor({
+    startBalance,
+    equity,
+    sessionLossSoFar,
+    todayLossSoFar,
+    riskAmountRequested: riskAmount,
+  });
+  const effectiveRisk = governor.effectiveRisk;
+
   const riskAmount = useMemo(() => (equity * riskPct) / 100, [equity, riskPct]);
   const allTimeGrowthPct = startBalance ? ((equity - startBalance) / startBalance) * 100 : 0;
 
@@ -372,7 +397,7 @@ function PageInner() {
 
   /* Trades helpers */
   function addTrade(t: Omit<TradeRow, "id" | "ts">) {
-    if (locked && lockOnHit) return;
+    if ((locked && lockOnHit) || governor.locked) return;
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const row: TradeRow = { id, ts: Date.now(), ...t };
     setTrades([row, ...trades]);
@@ -611,7 +636,7 @@ function PageInner() {
             riskPct={riskPct}
             setRiskPct={setRiskPct}
             equity={equity}
-            riskAmount={riskAmount}
+            riskAmount={effectiveRisk}
             tradesCount={trades.length}
           />
 
@@ -625,7 +650,7 @@ function PageInner() {
                 {MARKET_OPTIONS
                   .filter((m) => m !== "Withdrawals")
                   .map((mkt) => (
-                    <MarketSizerRowDeriv key={mkt} market={mkt} riskAmount={riskAmount} />
+                    <MarketSizerRowDeriv key={mkt} market={mkt} riskAmount={effectiveRisk} />
                   ))}
               </div>
             </CardContent>
@@ -634,7 +659,7 @@ function PageInner() {
 
         {/* RISK & SIZING — FX (5 pairs) */}
         <TabsContent value="risk-fx" className="space-y-4">
-          <CapitalAndRiskSummary equity={equity} riskAmount={riskAmount} riskPct={riskPct} />
+          <CapitalAndRiskSummary equity={equity} riskAmount={effectiveRisk} riskPct={riskPct} />
 
           <RiskSizerUniversalPanel
             title="FX Pairs (edit symbols if you like)"
@@ -646,13 +671,13 @@ function PageInner() {
               { id: "4", defaultSymbol: "AUDUSD", defaultPipValue: 10 },
               { id: "5", defaultSymbol: "USDCAD", defaultPipValue: 10 },
             ]}
-            riskAmount={riskAmount}
+            riskAmount={effectiveRisk}
           />
         </TabsContent>
 
         {/* RISK & SIZING — XAU/NAS/US30/BTC */}
         <TabsContent value="risk-majors" className="space-y-4">
-          <CapitalAndRiskSummary equity={equity} riskAmount={riskAmount} riskPct={riskPct} />
+          <CapitalAndRiskSummary equity={equity} riskAmount={effectiveRisk} riskPct={riskPct} />
 
           <RiskSizerUniversalPanel
             title="XAU / Indices / Crypto"
@@ -663,7 +688,7 @@ function PageInner() {
               { id: "us30", defaultSymbol: "US30", defaultPipValue: 1 },    // placeholder
               { id: "btc", defaultSymbol: "BTCUSD", defaultPipValue: 1 },   // placeholder
             ]}
-            riskAmount={riskAmount}
+            riskAmount={effectiveRisk}
           />
         </TabsContent>
 
@@ -680,7 +705,7 @@ function PageInner() {
           <MultiQuickLogger
             initialRows={3}
             maxRows={4}
-            locked={locked && lockOnHit}
+            locked={(locked && lockOnHit) || governor.locked}
             onLogged={(rows) => {
               if (locked && lockOnHit) return;
               rows.forEach((row) =>
@@ -938,7 +963,7 @@ function RiskSizerUniversalPanel({
               rowId={r.id}
               defaultSymbol={r.defaultSymbol}
               defaultPipValue={r.defaultPipValue}
-              riskAmount={riskAmount}
+              riskAmount={effectiveRisk}
             />
           ))}
         </div>
