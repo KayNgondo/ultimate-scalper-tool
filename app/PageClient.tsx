@@ -379,14 +379,17 @@ const todayLossSoFar = useMemo(() => {
       .filter((t) => t && t.ts && (t.pnl || 0) < 0 && isSameLocalDay(new Date(t.ts), today))
       .reduce((a, t) => a + (t.pnl || 0), 0);
   }, [trades]);
-const governor = useRiskGovernor({
+let governor: any = null;
+try {
+  governor = useRiskGovernor({
     startBalance,
     equity,
     sessionLossSoFar,
     todayLossSoFar,
     riskAmountRequested: riskAmount,
   });
-  const effectiveRisk = governor.effectiveRisk;
+} catch { governor = null; }
+const effectiveRisk = governor?.effectiveRisk ?? riskAmount;
 
   const riskAmount = useMemo(() => (equity * riskPct) / 100, [equity, riskPct]);
   const allTimeGrowthPct = startBalance ? ((equity - startBalance) / startBalance) * 100 : 0;
@@ -494,7 +497,7 @@ const governor = useRiskGovernor({
 
   /* Trades helpers */
   function addTrade(t: Omit<TradeRow, "id" | "ts">) {
-    if ((locked && lockOnHit) || governor.locked) return;
+    if ((locked && lockOnHit) || (governor?.locked ?? false)) return;
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const row: TradeRow = { id, ts: Date.now(), ...t };
     setTrades([row, ...trades]);
@@ -802,7 +805,7 @@ const governor = useRiskGovernor({
           <MultiQuickLogger
             initialRows={3}
             maxRows={4}
-            locked={(locked && lockOnHit) || governor.locked}
+            locked={(locked && lockOnHit) || (governor?.locked ?? false)}
             onLogged={(rows) => {
               if (locked && lockOnHit) return;
               rows.forEach((row) =>
