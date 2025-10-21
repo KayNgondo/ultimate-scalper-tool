@@ -1,5 +1,4 @@
-
-
+'use client';
 // ==== Inline Profit-Only Governor (no external imports) ====
 function readLS<T>(key: string, fallback: T): T {
   if (typeof window === 'undefined') return fallback;
@@ -96,8 +95,6 @@ function useRiskGovernor(input: RiskGovernorInput): RiskGovernorState {
 
 
 /* PageClient.tsx — Ultimate Scalper Tool (3× Risk & Sizing + Combobox Logger) */
-"use client";
-
 import { useEffect, useMemo, useState, useContext } from "react";
 import AuthGate from "@/components/AuthGate";
 import { useSupabaseUser } from "@/lib/useSupabaseUser";
