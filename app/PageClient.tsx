@@ -1016,27 +1016,48 @@ function UniversalSizerRow({
 ============================================================================ */
 function getCustomSymbolsFromStorage() {
   if (typeof window === "undefined") return [] as string[];
-  const fxIds = ["1","2","3","4","5"];
-  const majorIds = ["xau","nas","us30","btc"];
+
+  // fetch symbols from stored risk tabs if available
+  const fxIds = ["1", "2", "3", "4", "5"];
+  const majorIds = ["xau", "nas", "us30", "btc"];
   const grab = (key: string) => {
     const v = localStorage.getItem(key);
     return v && v.trim() ? v.trim().toUpperCase() : null;
   };
 
-  const fx = fxIds
-    .map(id => grab(`ust-fx-${id}-symbol`))
-    .filter(Boolean) as string[];
-  const majors = majorIds
-    .map(id => grab(`ust-majors-${id}-symbol`))
-    .filter(Boolean) as string[];
+  const fx = fxIds.map(id => grab(`ust-fx-${id}-symbol`)).filter(Boolean) as string[];
+  const majors = majorIds.map(id => grab(`ust-majors-${id}-symbol`)).filter(Boolean) as string[];
 
-  // Deriv markets (keep originals for convenience)
-  const deriv = ["Step Index","Volatility 75 (1s)","Volatility 75","Volatility 25 (1s)","Volatility 25","Volatility 10 (1s)"];
+  // Default built-in markets
+  const deriv = [
+    "Step Index",
+    "Volatility 75 (1s)",
+    "Volatility 75",
+    "Volatility 25 (1s)",
+    "Volatility 25",
+    "Volatility 10 (1s)",
+  ];
 
-  // Dedupe while preserving order
+  // Default FX + Major indices if nothing is stored yet
+  const defaults = [
+    "EURUSD",
+    "GBPUSD",
+    "USDJPY",
+    "AUDUSD",
+    "USDCAD",
+    "XAUUSD",
+    "NAS100",
+    "US30",
+    "BTCUSD",
+  ];
+
+  // Combine and dedupe
   const seen = new Set<string>();
-  return [...deriv, ...fx, ...majors].filter(s => (seen.has(s) ? false : (seen.add(s), true)));
+  return [...deriv, ...defaults, ...fx, ...majors].filter(s =>
+    seen.has(s) ? false : (seen.add(s), true)
+  );
 }
+
 
 function MarketPicker({
   value,
