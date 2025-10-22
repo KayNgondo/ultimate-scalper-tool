@@ -1,5 +1,7 @@
-'use client';
+
 /* PageClient.tsx — Ultimate Scalper Tool (3× Risk & Sizing + Combobox Logger) */
+"use client";
+
 import { useEffect, useMemo, useState, useContext } from "react";
 import AuthGate from "@/components/AuthGate";
 import { useSupabaseUser } from "@/lib/useSupabaseUser";
@@ -50,70 +52,6 @@ import {
 ============================================================================ */
 type ToastItem = { id: string; title: string; desc?: string };
 import React from "react";
-
-/* ===== Profit-Only Governor (simple) + Checklist UI (inline) ===== */
-import React, { useMemo, useState, useEffect } from 'react';
-
-function readLS(key, fallback) {
-  if (typeof window === 'undefined') return fallback;
-  try { const raw = window.localStorage.getItem(key); return raw ? JSON.parse(raw) : fallback; } catch { return fallback; }
-}
-function writeLS(key, value) {
-  if (typeof window === 'undefined') return;
-  try { window.localStorage.setItem(key, JSON.stringify(value)); } catch {}
-}
-function useStickyState(key, initial) {
-  const [val, setVal] = useState(() => readLS(key, initial));
-  useEffect(() => { writeLS(key, val); }, [key, val]);
-  return [val, setVal];
-}
-
-function ChecklistPanel(props){
-  const [why, setWhy] = useStickyState('ust-checklist-why',
-    'To gain financial freedom, spend more time with family, travel, and help others.');
-  const [ready, setReady] = useStickyState('ust-checklist-ready',
-    'Yes, fresh as ever after a good rest.');
-  const [target, setTarget] = useStickyState('ust-checklist-target',
-    "Stop for the day if I give back more than 15% of gains.");
-  const [setups, setSetups] = useStickyState('ust-checklist-setups',
-    'Only A+ setups with potential to trend longer.');
-
-  return (
-    <div className="grid grid-cols-12 gap-4">
-      <div className="col-span-12 lg:col-span-6 space-y-4">
-        <div>
-          <div className="text-sm font-medium mb-1">1️⃣ Why I Trade</div>
-          <textarea className="w-full border rounded p-2 h-20" value={why} onChange={(e)=>setWhy(e.target.value)} />
-        </div>
-        <div>
-          <div className="text-sm font-medium mb-1">2️⃣ Am I Self‑Aware and Mentally Ready?</div>
-          <textarea className="w-full border rounded p-2 h-16" value={ready} onChange={(e)=>setReady(e.target.value)} />
-        </div>
-        <div>
-          <div className="text-sm font-medium mb-1">3️⃣ Target for This Session</div>
-          <textarea className="w-full border rounded p-2 h-16" value={target} onChange={(e)=>setTarget(e.target.value)} />
-        </div>
-        <div>
-          <div className="text-sm font-medium mb-1">6️⃣ Setups I’ll Trade</div>
-          <textarea className="w-full border rounded p-2 h-16" value={setups} onChange={(e)=>setSetups(e.target.value)} />
-        </div>
-      </div>
-      <div className="col-span-12 lg:col-span-6 space-y-3">
-        <div className="text-sm">Trigger at +{props.thresholdPct}% of initial capital.</div>
-        <div className="text-sm">Start: ${props.startBalance.toFixed(2)} • Equity: ${props.equity.toFixed(2)} • Profit: ${props.profit.toFixed(2)}</div>
-        {props.profitOnlyActive ? (
-          <div className="text-sm text-emerald-700">Active • Profit‑Only • Risk allowance left: <b>${props.remainingProfit.toFixed(2)}</b></div>
-        ) : (
-          <div className="text-sm text-slate-600">Active • Standard</div>
-        )}
-        <div className="text-xs text-slate-500">
-          Session loss so far: ${Math.abs(props.sessionLossSoFar).toFixed(2)} • Today loss so far: ${Math.abs(props.todayLossSoFar).toFixed(2)}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 const ToastContext = React.createContext<{
   push: (t: Omit<ToastItem, "id">) => void;
 } | null>(null);
@@ -313,6 +251,18 @@ function PageInner() {
   const [riskPct, setRiskPct] = useLocalStorage<number>("ust-risk-pct", 5);
   const [trades, setTrades] = useLocalStorage<TradeRow[]>("ust-trades", []);
   const [sessionId, setSessionId] = useLocalStorage<string | null>("ust-session-id", null);
+  // Checklist-only state (no app-side effects)
+  const [whyTrade, setWhyTrade] = useLocalStorage<string>("ust-checklist-why",
+    "To gain financial freedom, spend more time with family, travel, and help others.");
+  const [mentalReady, setMentalReady] = useLocalStorage<string>("ust-checklist-ready",
+    "Yes, fresh as ever after a good rest.");
+  const [sessionTarget, setSessionTarget] = useLocalStorage<string>("ust-checklist-target",
+    "Stop if I give back 15% of gains today.");
+  const [setupsToday, setSetupsToday] = useLocalStorage<string>("ust-checklist-setups",
+    "Only A+ setups with potential to trend longer.");
+  const [thresholdPct, setThresholdPct] = useLocalStorage<number>("ust-checklist-thresholdPct", 30);
+  const [givebackPct, setGivebackPct] = useLocalStorage<number>("ust-checklist-givebackPct", 50);
+
 
   /* Discipline & Goals */
   const [maxLoss, setMaxLoss] = useLocalStorage<number>("ust-max-loss", 0);
@@ -328,36 +278,6 @@ function PageInner() {
     [trades]
   );
   const equity = useMemo(() => startBalance + totalPnlAllTime, [startBalance, totalPnlAllTime]);
-// ===== Profit-Only Governor (simple) =====
-const profit = Math.max(0, equity - startBalance);
-const thresholdPct = 30;
-const profitOnlyActive = profit >= (thresholdPct/100) * startBalance;
-
-const sessionLossSoFar = useMemo(() => {
-  const list = Array.isArray(sessionTrades) ? sessionTrades : [];
-  return list.filter(t => (t?.pnl ?? 0) < 0).reduce((a,t)=>a + (t?.pnl ?? 0), 0);
-}, [sessionTrades]);
-
-const todayLossSoFar = useMemo(() => {
-  const today = new Date();
-  const sameDay = (a, b) => a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate();
-  const list = Array.isArray(trades) ? trades : [];
-  return list.filter(t => t?.ts && (t?.pnl ?? 0) < 0 && sameDay(new Date(t.ts), today))
-             .reduce((a,t)=>a + (t?.pnl ?? 0), 0);
-}, [trades]);
-
-const remainingProfit = Math.max(0, profit - Math.abs(sessionLossSoFar));
-const effectiveRisk = profitOnlyActive ? Math.min(riskAmount, remainingProfit) : riskAmount;
-
-const maxSessionLoss = profit / 4;
-const maxDailyLoss = 0.5 * profit;
-
-const profitOnlyLocked = profitOnlyActive && (
-  remainingProfit <= 0 ||
-  Math.abs(sessionLossSoFar) >= maxSessionLoss ||
-  Math.abs(todayLossSoFar) >= maxDailyLoss
-);
-
   const riskAmount = useMemo(() => (equity * riskPct) / 100, [equity, riskPct]);
   const allTimeGrowthPct = startBalance ? ((equity - startBalance) / startBalance) * 100 : 0;
 
@@ -464,7 +384,7 @@ const profitOnlyLocked = profitOnlyActive && (
 
   /* Trades helpers */
   function addTrade(t: Omit<TradeRow, "id" | "ts">) {
-    if ((locked && lockOnHit) || profitOnlyLocked) return;
+    if (locked && lockOnHit) return;
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const row: TradeRow = { id, ts: Date.now(), ...t };
     setTrades([row, ...trades]);
@@ -556,6 +476,7 @@ const profitOnlyLocked = profitOnlyActive && (
           <TabsTrigger value="journal">Trade Journal</TabsTrigger>
           <TabsTrigger value="calendar">Calendar</TabsTrigger>
           <TabsTrigger value="asetups">A-Setups</TabsTrigger>
+          <TabsTrigger value="checklist">Checklist</TabsTrigger>
 
           <a
             href="/leaderboard"
@@ -563,28 +484,7 @@ const profitOnlyLocked = profitOnlyActive && (
           >
             Leaderboard
           </a>
-        {/* Trigger in your TabsList */}
-<TabsList>
-  {/* …your existing triggers… */}
-  <TabsTrigger value="checklist">Checklist</TabsTrigger>
-</TabsList>
-
-{/* Content anywhere after your other <TabsContent> blocks */}
-<TabsContent value="checklist">
-  <div className="p-4">
-    <ChecklistPanel
-      startBalance={startBalance}
-      equity={equity}
-      profit={profit}
-      remainingProfit={remainingProfit}
-      sessionLossSoFar={sessionLossSoFar}
-      todayLossSoFar={todayLossSoFar}
-      thresholdPct={thresholdPct}
-      profitOnlyActive={profitOnlyActive}
-    />
-  </div>
-</TabsContent>
-
+        </TabsList>
 
         {/* DASHBOARD */}
         <TabsContent value="dashboard" className="space-y-4">
@@ -724,7 +624,7 @@ const profitOnlyLocked = profitOnlyActive && (
             riskPct={riskPct}
             setRiskPct={setRiskPct}
             equity={equity}
-            riskAmount={effectiveRisk}
+            riskAmount={riskAmount}
             tradesCount={trades.length}
           />
 
@@ -738,7 +638,7 @@ const profitOnlyLocked = profitOnlyActive && (
                 {MARKET_OPTIONS
                   .filter((m) => m !== "Withdrawals")
                   .map((mkt) => (
-                    <MarketSizerRowDeriv key={mkt} market={mkt} riskAmount={effectiveRisk} />
+                    <MarketSizerRowDeriv key={mkt} market={mkt} riskAmount={riskAmount} />
                   ))}
               </div>
             </CardContent>
@@ -747,7 +647,7 @@ const profitOnlyLocked = profitOnlyActive && (
 
         {/* RISK & SIZING — FX (5 pairs) */}
         <TabsContent value="risk-fx" className="space-y-4">
-          <CapitalAndRiskSummary equity={equity} riskAmount={effectiveRisk} riskPct={riskPct} />
+          <CapitalAndRiskSummary equity={equity} riskAmount={riskAmount} riskPct={riskPct} />
 
           <RiskSizerUniversalPanel
             title="FX Pairs (edit symbols if you like)"
@@ -759,13 +659,13 @@ const profitOnlyLocked = profitOnlyActive && (
               { id: "4", defaultSymbol: "AUDUSD", defaultPipValue: 10 },
               { id: "5", defaultSymbol: "USDCAD", defaultPipValue: 10 },
             ]}
-            riskAmount={effectiveRisk}
+            riskAmount={riskAmount}
           />
         </TabsContent>
 
         {/* RISK & SIZING — XAU/NAS/US30/BTC */}
         <TabsContent value="risk-majors" className="space-y-4">
-          <CapitalAndRiskSummary equity={equity} riskAmount={effectiveRisk} riskPct={riskPct} />
+          <CapitalAndRiskSummary equity={equity} riskAmount={riskAmount} riskPct={riskPct} />
 
           <RiskSizerUniversalPanel
             title="XAU / Indices / Crypto"
@@ -776,7 +676,7 @@ const profitOnlyLocked = profitOnlyActive && (
               { id: "us30", defaultSymbol: "US30", defaultPipValue: 1 },    // placeholder
               { id: "btc", defaultSymbol: "BTCUSD", defaultPipValue: 1 },   // placeholder
             ]}
-            riskAmount={effectiveRisk}
+            riskAmount={riskAmount}
           />
         </TabsContent>
 
@@ -793,7 +693,7 @@ const profitOnlyLocked = profitOnlyActive && (
           <MultiQuickLogger
             initialRows={3}
             maxRows={4}
-            locked={(locked && lockOnHit) || profitOnlyLocked}
+            locked={locked && lockOnHit}
             onLogged={(rows) => {
               if (locked && lockOnHit) return;
               rows.forEach((row) =>
@@ -814,6 +714,96 @@ const profitOnlyLocked = profitOnlyActive && (
         <TabsContent value="asetups">
           <ASetupsGallery />
         </TabsContent>
+
+        {/* CHECKLIST — Review & Targets (standalone tab; no guardrails wired) */}
+        <TabsContent value="checklist">
+          <Card>
+            <CardContent className="p-5 space-y-4">
+              <h4 className="text-lg font-semibold">🧭 Checklist — Review & Targets</h4>
+              <p className="text-sm text-slate-600">
+                Use this tab to confirm plan and targets. It does not change risk or lock behavior.
+                Copy the summary and paste to Telegram/Slack if you like.
+              </p>
+
+              <div className="grid lg:grid-cols-2 gap-4">
+                <div className="space-y-3">
+                  <div>
+                    <Label>1️⃣ Why I Trade</Label>
+                    <textarea className="w-full border rounded-md p-2 h-24" value={whyTrade} onChange={(e)=>setWhyTrade(e.target.value)} />
+                  </div>
+                  <div>
+                    <Label>2️⃣ Mental Readiness</Label>
+                    <textarea className="w-full border rounded-md p-2 h-20" value={mentalReady} onChange={(e)=>setMentalReady(e.target.value)} />
+                  </div>
+                  <div>
+                    <Label>3️⃣ Target for the Session</Label>
+                    <textarea className="w-full border rounded-md p-2 h-20" value={sessionTarget} onChange={(e)=>setSessionTarget(e.target.value)} />
+                  </div>
+                  <div>
+                    <Label>6️⃣ Setups I’ll Trade</Label>
+                    <textarea className="w-full border rounded-md p-2 h-20" value={setupsToday} onChange={(e)=>setSetupsToday(e.target.value)} />
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label>Profit‑Only Trigger (info, % of start)</Label>
+                      <Input type="number" value={thresholdPct} onChange={(e)=>setThresholdPct(Number(e.target.value)||0)} />
+                      <div className="text-[11px] text-slate-500 mt-1">Default 30%</div>
+                    </div>
+                    <div>
+                      <Label>Giveback Lock (info, % of profit)</Label>
+                      <Input type="number" value={givebackPct} onChange={(e)=>setGivebackPct(Number(e.target.value)||0)} />
+                      <div className="text-[11px] text-slate-500 mt-1">E.g. 50%</div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-md border p-3 bg-slate-50">
+                    <div className="text-sm font-medium mb-1">Live Snapshot (read‑only)</div>
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
+                      <div className="text-slate-600">Start Capital</div><div className="font-medium">{currency(startBalance)}</div>
+                      <div className="text-slate-600">Equity</div><div className="font-medium">{currency(equity)}</div>
+                      <div className="text-slate-600">Profit</div><div className="font-medium">{currency(Math.max(0, equity - startBalance))}</div>
+                      <div className="text-slate-600">Threshold</div><div className="font-medium">{thresholdPct}% ({currency((thresholdPct/100)*startBalance)})</div>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <Button onClick={()=>{
+                      const txt = [
+                        "🧭 Session Checklist",
+                        `Why: ${whyTrade || "-"}`,
+                        `Ready: ${mentalReady || "-"}`,
+                        `Target: ${sessionTarget || "-"}`,
+                        `Setups: ${setupsToday || "-"}`,
+                        "",
+                        `Start: ${currency(startBalance)} • Equity: ${currency(equity)}`,
+                        `Profit: ${currency(Math.max(0, equity - startBalance))}`,
+                        `Profit‑Only threshold: ${thresholdPct}% (${currency((thresholdPct/100)*startBalance)})`,
+                        givebackPct ? `Giveback lock (info): ${givebackPct}%` : null,
+                        `Time: ${new Date().toLocaleString()}`
+                      ].filter(Boolean).join("\\n");
+                      navigator.clipboard.writeText(txt).then(()=>{
+                        push({ title: "Copied", desc: "Checklist summary copied." });
+                      });
+                    }}>Copy Summary</Button>
+
+                    <Button variant="outline" onClick={()=>{
+                      const id = newSessionId();
+                      push({ title: "Session started", desc: `Session ID: ${id}` });
+                    }}>Start Session</Button>
+                  </div>
+
+                  <div className="text-[11px] text-slate-500">
+                    Note: This tab is informational only and won't change risk or locks elsewhere.
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
       </Tabs>
     </div>
   );
@@ -1051,7 +1041,7 @@ function RiskSizerUniversalPanel({
               rowId={r.id}
               defaultSymbol={r.defaultSymbol}
               defaultPipValue={r.defaultPipValue}
-              riskAmount={effectiveRisk}
+              riskAmount={riskAmount}
             />
           ))}
         </div>
