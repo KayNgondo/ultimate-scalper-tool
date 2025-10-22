@@ -563,7 +563,13 @@ const profitOnlyLocked = profitOnlyActive && (
           >
             Leaderboard
           </a>
-        <TabsTrigger value=\"checklist\">Checklist</TabsTrigger></TabsList>
+        {/* Trigger in your TabsList */}
+<TabsList>
+  {/* …your existing triggers… */}
+  <TabsTrigger value="checklist">Checklist</TabsTrigger>
+</TabsList>
+
+{/* Content anywhere after your other <TabsContent> blocks */}
 <TabsContent value="checklist">
   <div className="p-4">
     <ChecklistPanel
