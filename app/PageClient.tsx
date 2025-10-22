@@ -1,7 +1,5 @@
-
+'use client';
 /* PageClient.tsx — Ultimate Scalper Tool (3× Risk & Sizing + Combobox Logger) */
-"use client";
-
 import { useEffect, useMemo, useState, useContext } from "react";
 import AuthGate from "@/components/AuthGate";
 import { useSupabaseUser } from "@/lib/useSupabaseUser";
@@ -52,6 +50,70 @@ import {
 ============================================================================ */
 type ToastItem = { id: string; title: string; desc?: string };
 import React from "react";
+
+/* ===== Profit-Only Governor (simple) + Checklist UI (inline) ===== */
+import React, { useMemo, useState, useEffect } from 'react';
+
+function readLS(key, fallback) {
+  if (typeof window === 'undefined') return fallback;
+  try { const raw = window.localStorage.getItem(key); return raw ? JSON.parse(raw) : fallback; } catch { return fallback; }
+}
+function writeLS(key, value) {
+  if (typeof window === 'undefined') return;
+  try { window.localStorage.setItem(key, JSON.stringify(value)); } catch {}
+}
+function useStickyState(key, initial) {
+  const [val, setVal] = useState(() => readLS(key, initial));
+  useEffect(() => { writeLS(key, val); }, [key, val]);
+  return [val, setVal];
+}
+
+function ChecklistPanel(props){
+  const [why, setWhy] = useStickyState('ust-checklist-why',
+    'To gain financial freedom, spend more time with family, travel, and help others.');
+  const [ready, setReady] = useStickyState('ust-checklist-ready',
+    'Yes, fresh as ever after a good rest.');
+  const [target, setTarget] = useStickyState('ust-checklist-target',
+    "Stop for the day if I give back more than 15% of gains.");
+  const [setups, setSetups] = useStickyState('ust-checklist-setups',
+    'Only A+ setups with potential to trend longer.');
+
+  return (
+    <div className="grid grid-cols-12 gap-4">
+      <div className="col-span-12 lg:col-span-6 space-y-4">
+        <div>
+          <div className="text-sm font-medium mb-1">1️⃣ Why I Trade</div>
+          <textarea className="w-full border rounded p-2 h-20" value={why} onChange={(e)=>setWhy(e.target.value)} />
+        </div>
+        <div>
+          <div className="text-sm font-medium mb-1">2️⃣ Am I Self‑Aware and Mentally Ready?</div>
+          <textarea className="w-full border rounded p-2 h-16" value={ready} onChange={(e)=>setReady(e.target.value)} />
+        </div>
+        <div>
+          <div className="text-sm font-medium mb-1">3️⃣ Target for This Session</div>
+          <textarea className="w-full border rounded p-2 h-16" value={target} onChange={(e)=>setTarget(e.target.value)} />
+        </div>
+        <div>
+          <div className="text-sm font-medium mb-1">6️⃣ Setups I’ll Trade</div>
+          <textarea className="w-full border rounded p-2 h-16" value={setups} onChange={(e)=>setSetups(e.target.value)} />
+        </div>
+      </div>
+      <div className="col-span-12 lg:col-span-6 space-y-3">
+        <div className="text-sm">Trigger at +{props.thresholdPct}% of initial capital.</div>
+        <div className="text-sm">Start: ${props.startBalance.toFixed(2)} • Equity: ${props.equity.toFixed(2)} • Profit: ${props.profit.toFixed(2)}</div>
+        {props.profitOnlyActive ? (
+          <div className="text-sm text-emerald-700">Active • Profit‑Only • Risk allowance left: <b>${props.remainingProfit.toFixed(2)}</b></div>
+        ) : (
+          <div className="text-sm text-slate-600">Active • Standard</div>
+        )}
+        <div className="text-xs text-slate-500">
+          Session loss so far: ${Math.abs(props.sessionLossSoFar).toFixed(2)} • Today loss so far: ${Math.abs(props.todayLossSoFar).toFixed(2)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const ToastContext = React.createContext<{
   push: (t: Omit<ToastItem, "id">) => void;
 } | null>(null);
@@ -266,6 +328,36 @@ function PageInner() {
     [trades]
   );
   const equity = useMemo(() => startBalance + totalPnlAllTime, [startBalance, totalPnlAllTime]);
+// ===== Profit-Only Governor (simple) =====
+const profit = Math.max(0, equity - startBalance);
+const thresholdPct = 30;
+const profitOnlyActive = profit >= (thresholdPct/100) * startBalance;
+
+const sessionLossSoFar = useMemo(() => {
+  const list = Array.isArray(sessionTrades) ? sessionTrades : [];
+  return list.filter(t => (t?.pnl ?? 0) < 0).reduce((a,t)=>a + (t?.pnl ?? 0), 0);
+}, [sessionTrades]);
+
+const todayLossSoFar = useMemo(() => {
+  const today = new Date();
+  const sameDay = (a, b) => a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate();
+  const list = Array.isArray(trades) ? trades : [];
+  return list.filter(t => t?.ts && (t?.pnl ?? 0) < 0 && sameDay(new Date(t.ts), today))
+             .reduce((a,t)=>a + (t?.pnl ?? 0), 0);
+}, [trades]);
+
+const remainingProfit = Math.max(0, profit - Math.abs(sessionLossSoFar));
+const effectiveRisk = profitOnlyActive ? Math.min(riskAmount, remainingProfit) : riskAmount;
+
+const maxSessionLoss = profit / 4;
+const maxDailyLoss = 0.5 * profit;
+
+const profitOnlyLocked = profitOnlyActive && (
+  remainingProfit <= 0 ||
+  Math.abs(sessionLossSoFar) >= maxSessionLoss ||
+  Math.abs(todayLossSoFar) >= maxDailyLoss
+);
+
   const riskAmount = useMemo(() => (equity * riskPct) / 100, [equity, riskPct]);
   const allTimeGrowthPct = startBalance ? ((equity - startBalance) / startBalance) * 100 : 0;
 
@@ -300,47 +392,6 @@ function PageInner() {
     [trades, todayKey]
   );
 
-// ===== Profit-Only Governor (ultra simple) =====
-// Profit = equity - startBalance (never negative)
-const profit = Math.max(0, equity - startBalance);
-
-// Trigger Profit-Only Mode once profit ≥ 30% of starting capital
-const thresholdPct = 30;
-const profitOnlyActive = profit >= (thresholdPct / 100) * startBalance;
-
-// Session loss so far (sum of negatives in current session)
-const sessionLossSoFar = useMemo(() => {
-  return sessionTrades
-    .filter((t) => (t.pnl || 0) < 0)
-    .reduce((a, t) => a + (t.pnl || 0), 0); // negative or 0
-}, [sessionTrades]);
-
-// Today’s loss so far (sum of negatives today)
-const todayLossSoFar = useMemo(() => {
-  return trades
-    .filter((t) => t.ts && ymdLocal(new Date(t.ts)) === todayKey && (t.pnl || 0) < 0)
-    .reduce((a, t) => a + (t.pnl || 0), 0); // negative or 0
-}, [trades, todayKey]);
-
-// Remaining profit allowance for this session
-const remainingProfit = Math.max(0, profit - Math.abs(sessionLossSoFar));
-
-// Cap per-trade risk by remaining profit when Profit-Only is active
-const effectiveRisk = profitOnlyActive ? Math.min(riskAmount, remainingProfit) : riskAmount;
-
-// Simple auto caps derived from current profit
-const maxSessionLoss = profit / 4;     // default
-const maxDailyLoss   = 0.5 * profit;   // default
-
-// Lock when allowance used up OR caps hit (only in Profit-Only Mode)
-const profitOnlyLocked =
-  profitOnlyActive && (
-    remainingProfit <= 0 ||
-    Math.abs(sessionLossSoFar) >= maxSessionLoss ||
-    Math.abs(todayLossSoFar) >= maxDailyLoss
-  );
-
-  
   // Lock when max-loss hit
   useEffect(() => {
     if (!lockOnHit || maxLoss <= 0) return;
@@ -512,7 +563,22 @@ const profitOnlyLocked =
           >
             Leaderboard
           </a>
-        </TabsList>
+        <TabsTrigger value=\"checklist\">Checklist</TabsTrigger></TabsList>
+<TabsContent value="checklist">
+  <div className="p-4">
+    <ChecklistPanel
+      startBalance={startBalance}
+      equity={equity}
+      profit={profit}
+      remainingProfit={remainingProfit}
+      sessionLossSoFar={sessionLossSoFar}
+      todayLossSoFar={todayLossSoFar}
+      thresholdPct={thresholdPct}
+      profitOnlyActive={profitOnlyActive}
+    />
+  </div>
+</TabsContent>
+
 
         {/* DASHBOARD */}
         <TabsContent value="dashboard" className="space-y-4">
