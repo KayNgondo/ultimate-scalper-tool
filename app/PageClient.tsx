@@ -278,6 +278,39 @@ function PageInner() {
     [trades]
   );
   const equity = useMemo(() => startBalance + totalPnlAllTime, [startBalance, totalPnlAllTime]);
+  /* === Guardrails (derived) === */
+  const realizedProfit = useMemo(() => Math.max(0, equity - startBalance), [equity, startBalance]);
+  const realizedProfitPct = useMemo(
+    () => (startBalance ? (realizedProfit / startBalance) * 100 : 0),
+    [realizedProfit, startBalance]
+  );
+  const profitOnlyMode = useMemo(
+    () => realizedProfitPct >= (thresholdPct || 30),
+    [realizedProfitPct, thresholdPct]
+  );
+  // profit/4 cap as default session loss cap
+  const maxSessionLossGuard = useMemo(() => realizedProfit / 4, [realizedProfit]);
+  // Combine with daily Max Loss setting if any
+  const effectiveLossCap = useMemo(() => {
+    const dailyCap = maxLoss && maxLoss > 0 ? maxLoss : Number.POSITIVE_INFINITY;
+    return Math.min(dailyCap, maxSessionLossGuard);
+  }, [maxLoss, maxSessionLossGuard]);
+
+  function validateRiskGuard(lossAmount: number): { ok: boolean; reason?: string } {
+    const amt = Math.max(0, Number(lossAmount) || 0);
+    if (amt === 0) return { ok: true };
+    if (amt > effectiveLossCap) {
+      return { ok: false, reason: `Requested loss (${amt.toFixed(2)}) exceeds cap (${effectiveLossCap.toFixed(2)}).` };
+    }
+    if (profitOnlyMode && amt > realizedProfit) {
+      return { ok: false, reason: `Profit-Only Mode: you can only risk realized profits (${realizedProfit.toFixed(2)}).` };
+    }
+    if (equity - amt < startBalance) {
+      return { ok: false, reason: `This loss would dip below initial capital (${startBalance.toFixed(2)}).` };
+    }
+    return { ok: true };
+  }
+
   const riskAmount = useMemo(() => (equity * riskPct) / 100, [equity, riskPct]);
   const allTimeGrowthPct = startBalance ? ((equity - startBalance) / startBalance) * 100 : 0;
 
@@ -384,6 +417,16 @@ function PageInner() {
 
   /* Trades helpers */
   function addTrade(t: Omit<TradeRow, "id" | "ts">) {
+    // Guardrails: block unsafe losses
+    const lossAmt = (t && typeof t.pnl === 'number' && t.pnl < 0) ? Math.abs(t.pnl) : 0;
+    if (lossAmt > 0) {
+      const vr = validateRiskGuard(lossAmt);
+      if (!vr.ok) {
+        push({ title: "Trade blocked", desc: vr.reason || "Guardrails violation." });
+        return;
+      }
+    }
+
     if (locked && lockOnHit) return;
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const row: TradeRow = { id, ts: Date.now(), ...t };
@@ -716,93 +759,78 @@ function PageInner() {
         </TabsContent>
 
         {/* CHECKLIST — Review & Targets (standalone tab; no guardrails wired) */}
-        <TabsContent value="checklist">
-          <Card>
-            <CardContent className="p-5 space-y-4">
-              <h4 className="text-lg font-semibold">🧭 Checklist — Review & Targets</h4>
-              <p className="text-sm text-slate-600">
-                Use this tab to confirm plan and targets. It does not change risk or lock behavior.
-                Copy the summary and paste to Telegram/Slack if you like.
-              </p>
+        
+<TabsContent value="checklist">
+  <Card>
+    <CardContent className="p-5 space-y-4">
+      <h4 className="text-lg font-semibold">🧭 Checklist — Review & Guardrails</h4>
+      <p className="text-sm text-slate-600">
+        Complete this checklist to enable session guardrails. Once your equity is up by your threshold,
+        Profit-Only Mode will restrict risk to realized profits. Per-trade losses are also capped to the stricter of your daily Max Loss and profit/4.
+      </p>
 
-              <div className="grid lg:grid-cols-2 gap-4">
-                <div className="space-y-3">
-                  <div>
-                    <Label>1️⃣ Why I Trade</Label>
-                    <textarea className="w-full border rounded-md p-2 h-24" value={whyTrade} onChange={(e)=>setWhyTrade(e.target.value)} />
-                  </div>
-                  <div>
-                    <Label>2️⃣ Mental Readiness</Label>
-                    <textarea className="w-full border rounded-md p-2 h-20" value={mentalReady} onChange={(e)=>setMentalReady(e.target.value)} />
-                  </div>
-                  <div>
-                    <Label>3️⃣ Target for the Session</Label>
-                    <textarea className="w-full border rounded-md p-2 h-20" value={sessionTarget} onChange={(e)=>setSessionTarget(e.target.value)} />
-                  </div>
-                  <div>
-                    <Label>6️⃣ Setups I’ll Trade</Label>
-                    <textarea className="w-full border rounded-md p-2 h-20" value={setupsToday} onChange={(e)=>setSetupsToday(e.target.value)} />
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <Label>Profit‑Only Trigger (info, % of start)</Label>
-                      <Input type="number" value={thresholdPct} onChange={(e)=>setThresholdPct(Number(e.target.value)||0)} />
-                      <div className="text-[11px] text-slate-500 mt-1">Default 30%</div>
-                    </div>
-                    <div>
-                      <Label>Giveback Lock (info, % of profit)</Label>
-                      <Input type="number" value={givebackPct} onChange={(e)=>setGivebackPct(Number(e.target.value)||0)} />
-                      <div className="text-[11px] text-slate-500 mt-1">E.g. 50%</div>
-                    </div>
-                  </div>
-
-                  <div className="rounded-md border p-3 bg-slate-50">
-                    <div className="text-sm font-medium mb-1">Live Snapshot (read‑only)</div>
-                    <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
-                      <div className="text-slate-600">Start Capital</div><div className="font-medium">{currency(startBalance)}</div>
-                      <div className="text-slate-600">Equity</div><div className="font-medium">{currency(equity)}</div>
-                      <div className="text-slate-600">Profit</div><div className="font-medium">{currency(Math.max(0, equity - startBalance))}</div>
-                      <div className="text-slate-600">Threshold</div><div className="font-medium">{thresholdPct}% ({currency((thresholdPct/100)*startBalance)})</div>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    <Button onClick={()=>{
-                      const txt = [
-                        "🧭 Session Checklist",
-                        `Why: ${whyTrade || "-"}`,
-                        `Ready: ${mentalReady || "-"}`,
-                        `Target: ${sessionTarget || "-"}`,
-                        `Setups: ${setupsToday || "-"}`,
-                        "",
-                        `Start: ${currency(startBalance)} • Equity: ${currency(equity)}`,
-                        `Profit: ${currency(Math.max(0, equity - startBalance))}`,
-                        `Profit‑Only threshold: ${thresholdPct}% (${currency((thresholdPct/100)*startBalance)})`,
-                        givebackPct ? `Giveback lock (info): ${givebackPct}%` : null,
-                        `Time: ${new Date().toLocaleString()}`
-                      ].filter(Boolean).join("\\n");
-                      navigator.clipboard.writeText(txt).then(()=>{
-                        push({ title: "Copied", desc: "Checklist summary copied." });
-                      });
-                    }}>Copy Summary</Button>
-
-                    <Button variant="outline" onClick={()=>{
-                      const id = newSessionId();
-                      push({ title: "Session started", desc: `Session ID: ${id}` });
-                    }}>Start Session</Button>
-                  </div>
-
-                  <div className="text-[11px] text-slate-500">
-                    Note: This tab is informational only and won't change risk or locks elsewhere.
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+      <div className="grid lg:grid-cols-2 gap-4">
+        <div className="space-y-3">
+          <div>
+            <Label>1️⃣ Why I Trade</Label>
+            <Input value={whyTrade} onChange={(e) => setWhyTrade(e.target.value)} />
+          </div>
+          <div>
+            <Label>2️⃣ Mental Readiness</Label>
+            <Input value={mentalReady} onChange={(e) => setMentalReady(e.target.value)} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Threshold for Profit-Only Mode (%)</Label>
+              <Input type="number" value={thresholdPct} onChange={(e) => setThresholdPct(Number(e.target.value || 0))} />
+            </div>
+            <div>
+              <Label>Giveback Stop (% of today's gains)</Label>
+              <Input type="number" value={givebackPct} onChange={(e) => setGivebackPct(Number(e.target.value || 0))} />
+            </div>
+          </div>
+          <div>
+            <Label>Setups Focus</Label>
+            <Input value={setupsToday} onChange={(e) => setSetupsToday(e.target.value)} />
+          </div>
+        </div>
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div>
+              <div className="text-slate-500">Initial Capital</div>
+              <div className="font-semibold">{currency(startBalance)}</div>
+            </div>
+            <div>
+              <div className="text-slate-500">Current Equity</div>
+              <div className="font-semibold">{currency(equity)}</div>
+            </div>
+            <div>
+              <div className="text-slate-500">Realized Profit</div>
+              <div className="font-semibold">{currency(realizedProfit)} ({formatPct(realizedProfit, startBalance)})</div>
+            </div>
+            <div>
+              <div className="text-slate-500">Mode</div>
+              <div className="font-semibold">{profitOnlyMode ? "Profit-Only" : "Standard"}</div>
+            </div>
+            <div>
+              <div className="text-slate-500">Max Session Loss (profit/4)</div>
+              <div className="font-semibold">{currency(maxSessionLossGuard)}</div>
+            </div>
+            <div>
+              <div className="text-slate-500">Effective Loss Cap</div>
+              <div className="font-semibold">{Number.isFinite(effectiveLossCap) ? currency(effectiveLossCap) : "—"}</div>
+            </div>
+          </div>
+          <div className="text-xs text-amber-700">
+            Note: A requested loss that exceeds the Effective Loss Cap, would dip below your initial capital,
+            or—when in Profit-Only Mode—exceeds realized profits, will be blocked.
+          </div>
+        </div>
+      </div>
+    </CardContent>
+  </Card>
+</TabsContent>
+</TabsContent>
 
       </Tabs>
     </div>
