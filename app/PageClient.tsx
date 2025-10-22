@@ -288,9 +288,7 @@ function PageInner() {
     () => realizedProfitPct >= (thresholdPct || 30),
     [realizedProfitPct, thresholdPct]
   );
-  // profit/4 cap as default session loss cap
   const maxSessionLossGuard = useMemo(() => realizedProfit / 4, [realizedProfit]);
-  // Combine with daily Max Loss setting if any
   const effectiveLossCap = useMemo(() => {
     const dailyCap = maxLoss && maxLoss > 0 ? maxLoss : Number.POSITIVE_INFINITY;
     return Math.min(dailyCap, maxSessionLossGuard);
@@ -300,13 +298,13 @@ function PageInner() {
     const amt = Math.max(0, Number(lossAmount) || 0);
     if (amt === 0) return { ok: true };
     if (amt > effectiveLossCap) {
-      return { ok: false, reason: `Requested loss (${amt.toFixed(2)}) exceeds cap (${effectiveLossCap.toFixed(2)}).` };
+      return { ok: false, reason: \`Requested loss (\${amt.toFixed(2)}) exceeds cap (\${effectiveLossCap.toFixed(2)}).\` };
     }
     if (profitOnlyMode && amt > realizedProfit) {
-      return { ok: false, reason: `Profit-Only Mode: you can only risk realized profits (${realizedProfit.toFixed(2)}).` };
+      return { ok: false, reason: \`Profit-Only Mode: you can only risk realized profits (\${realizedProfit.toFixed(2)}).\` };
     }
     if (equity - amt < startBalance) {
-      return { ok: false, reason: `This loss would dip below initial capital (${startBalance.toFixed(2)}).` };
+      return { ok: false, reason: \`This loss would dip below initial capital (\${startBalance.toFixed(2)}).\` };
     }
     return { ok: true };
   }
@@ -830,7 +828,7 @@ function PageInner() {
     </CardContent>
   </Card>
 </TabsContent>
-</TabsContent>
+
 
       </Tabs>
     </div>
