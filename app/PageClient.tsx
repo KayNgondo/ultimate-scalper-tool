@@ -295,19 +295,39 @@ function PageInner() {
   }, [maxLoss, maxSessionLossGuard]);
 
   function validateRiskGuard(lossAmount: number): { ok: boolean; reason?: string } {
-    const amt = Math.max(0, Number(lossAmount) || 0);
-    if (amt === 0) return { ok: true };
-    if (amt > effectiveLossCap) {
-      return { ok: false, reason: \`Requested loss (\${amt.toFixed(2)}) exceeds cap (\${effectiveLossCap.toFixed(2)}).\` };
-    }
-    if (profitOnlyMode && amt > realizedProfit) {
-      return { ok: false, reason: \`Profit-Only Mode: you can only risk realized profits (\${realizedProfit.toFixed(2)}).\` };
-    }
-    if (equity - amt < startBalance) {
-      return { ok: false, reason: \`This loss would dip below initial capital (\${startBalance.toFixed(2)}).\` };
-    }
-    return { ok: true };
+  const amt = Math.max(0, Number(lossAmount) || 0);
+  if (amt === 0) return { ok: true };
+
+  // 1) Above effective cap? (min of daily max loss and profit/4)
+  if (Number.isFinite(effectiveLossCap) && amt > effectiveLossCap) {
+    return {
+      ok: false,
+      reason:
+        "Requested loss ($" + amt.toFixed(2) + ") exceeds cap ($" + effectiveLossCap.toFixed(2) + ").",
+    };
   }
+
+  // 2) Profit-Only mode: cannot risk more than realized profit
+  if (profitOnlyMode && amt > realizedProfit) {
+    return {
+      ok: false,
+      reason:
+        "Profit-Only Mode: you can only risk realized profits ($" + realizedProfit.toFixed(2) + ").",
+    };
+  }
+
+  // 3) Don’t dip below start capital
+  if (equity - amt < startBalance) {
+    return {
+      ok: false,
+      reason:
+        "This loss would dip below initial capital ($" + startBalance.toFixed(2) + ").",
+    };
+  }
+
+  return { ok: true };
+}
+
 
   const riskAmount = useMemo(() => (equity * riskPct) / 100, [equity, riskPct]);
   const allTimeGrowthPct = startBalance ? ((equity - startBalance) / startBalance) * 100 : 0;
