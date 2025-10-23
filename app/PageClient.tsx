@@ -294,25 +294,17 @@ function PageInner() {
     return Math.min(dailyCap, maxSessionLossGuard);
   }, [maxLoss, maxSessionLossGuard]);
 
-  /* === Guardrail recommendations (read-only; checklist tab only) === */
-  const maxGiveback = useMemo(() => realizedProfit / 2, [realizedProfit]); // half of current profit
-  const sixLossBudget = useMemo(() => maxGiveback / 6, [maxGiveback]);      // allow 6 losses to reach max giveback
-  const recommendedRiskPct = useMemo(
-    () => (equity > 0 ? (sixLossBudget / equity) * 100 : 0),
-    [sixLossBudget, equity]
-  );
-
   function validateRiskGuard(lossAmount: number): { ok: boolean; reason?: string } {
     const amt = Math.max(0, Number(lossAmount) || 0);
     if (amt === 0) return { ok: true };
     if (amt > effectiveLossCap) {
-      return { ok: false, reason: \`Requested loss (\${amt.toFixed(2)}) exceeds cap (\${effectiveLossCap.toFixed(2)}).\` };
+      return { ok: false, reason: `Requested loss (${amt.toFixed(2)}) exceeds cap (${effectiveLossCap.toFixed(2)}).` };
     }
     if (profitOnlyMode && amt > realizedProfit) {
-      return { ok: false, reason: \`Profit-Only Mode: you can only risk realized profits (\${realizedProfit.toFixed(2)}).\` };
+      return { ok: false, reason: `Profit-Only Mode: you can only risk realized profits (${realizedProfit.toFixed(2)}).` };
     }
     if (equity - amt < startBalance) {
-      return { ok: false, reason: \`This loss would dip below initial capital (\${startBalance.toFixed(2)}).\` };
+      return { ok: false, reason: `This loss would dip below initial capital (${startBalance.toFixed(2)}).` };
     }
     return { ok: true };
   }
@@ -831,25 +823,6 @@ function PageInner() {
             Note: A requested loss that exceeds the Effective Loss Cap, would dip below your initial capital,
             or—when in Profit-Only Mode—exceeds realized profits, will be blocked.
           </div>
-
-          {/* NEW: Giveback Plan — Recommendations */}
-          <div className="mt-4 rounded-md border p-3 bg-slate-50">
-            <h5 className="text-sm font-semibold mb-2">🎯 Giveback Plan — Recommendations</h5>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-              <div className="text-slate-600">Max Giveback (½ of profit)</div>
-              <div className="font-medium">{currency(maxGiveback)}</div>
-
-              <div className="text-slate-600">Budget per Loss (6 losses to reach max)</div>
-              <div className="font-medium">{currency(sixLossBudget)}</div>
-
-              <div className="text-slate-600">Recommended Risk % per Trade</div>
-              <div className="font-medium">{recommendedRiskPct.toFixed(2)}%</div>
-            </div>
-            <div className="text-[11px] text-slate-500 mt-2">
-              These are guidance values only for reflection and decision-making.
-              They do <strong>not</strong> change any live risk settings or affect other tabs.
-            </div>
-          </div>
         </div>
       </div>
     </CardContent>
@@ -1017,7 +990,7 @@ function BadgeShowcase({
                 </div>
               </>
             ) : (
-              <div className="text-sm text-emerald-600 mt-3">You’ve reached the top tier. 🏆</div>
+              <div className="text-sm text-emerald-600 mt-3">You've reached the top tier. 🏆</div>
             )}
           </div>
         </div>
@@ -1084,7 +1057,7 @@ function RiskSizerUniversalPanel({
       <CardContent className="p-4 space-y-3">
         <h4 className="text-lg font-semibold">{title}</h4>
         <p className="text-sm text-slate-600">
-          Lot size = Risk Amount ÷ (Risk Pips × Pip Value per 1 lot). Enter your broker’s pip value per lot.
+          Lot size = Risk Amount ÷ (Risk Pips × Pip Value per 1 lot). Enter your broker's pip value per lot.
         </p>
         <div className="space-y-3">
           {rows.map((r) => (
