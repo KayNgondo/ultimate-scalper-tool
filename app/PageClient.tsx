@@ -288,8 +288,20 @@ function PageInner() {
     () => realizedProfitPct >= (thresholdPct || 30),
     [realizedProfitPct, thresholdPct]
   );
-  const maxSessionLossGuard = useMemo(() => realizedProfit / 4, [realizedProfit]);
-  const effectiveLossCap = useMemo(() => {
+  // Amount of profit you're willing to give back, driven by Giveback Stop (% of today's gains)
+const givebackLockAmt = useMemo(
+  () => (realizedProfit > 0 ? (givebackPct / 100) * realizedProfit : 0),
+  [givebackPct, realizedProfit]
+);
+
+// Session loss guard = stricter of profit/4 and giveback lock.
+// If givebackPct is 0, we don't constrain by giveback (Infinity).
+const maxSessionLossGuard = useMemo(() => {
+  const profitQuarter = realizedProfit / 4;
+  const givebackGuard = givebackPct > 0 ? givebackLockAmt : Number.POSITIVE_INFINITY;
+  return Math.min(profitQuarter, givebackGuard);
+}, [realizedProfit, givebackPct, givebackLockAmt]);
+const effectiveLossCap = useMemo(() => {
     const dailyCap = maxLoss && maxLoss > 0 ? maxLoss : Number.POSITIVE_INFINITY;
     return Math.min(dailyCap, maxSessionLossGuard);
   }, [maxLoss, maxSessionLossGuard]);
@@ -811,7 +823,7 @@ function PageInner() {
               <div className="font-semibold">{profitOnlyMode ? "Profit-Only" : "Standard"}</div>
             </div>
             <div>
-              <div className="text-slate-500">Max Session Loss (profit/4)</div>
+              <div className="text-slate-500">Max Session Loss (min of profit/4 & giveback)</div>
               <div className="font-semibold">{currency(maxSessionLossGuard)}</div>
             </div>
             <div>
