@@ -294,6 +294,14 @@ function PageInner() {
     return Math.min(dailyCap, maxSessionLossGuard);
   }, [maxLoss, maxSessionLossGuard]);
 
+      /* === Guardrail recommendations (read-only; checklist tab only) === */
+  const maxGiveback = useMemo(() => realizedProfit / 2, [realizedProfit]);          // e.g. 201.74 / 2 = 100.87
+  const sixLossBudget = useMemo(() => maxGiveback / 6, [maxGiveback]);              // e.g. 100.87 / 6
+  const recommendedRiskPct = useMemo(
+    () => (equity > 0 ? (sixLossBudget / equity) * 100 : 0),
+    [sixLossBudget, equity]
+  );
+  
   function validateRiskGuard(lossAmount: number): { ok: boolean; reason?: string } {
     const amt = Math.max(0, Number(lossAmount) || 0);
     if (amt === 0) return { ok: true };
@@ -823,6 +831,26 @@ function PageInner() {
             Note: A requested loss that exceeds the Effective Loss Cap, would dip below your initial capital,
             or—when in Profit-Only Mode—exceeds realized profits, will be blocked.
           </div>
+          {/* === NEW SECTION: Giveback Plan Recommendations === */}
+<div className="mt-4 rounded-md border p-3 bg-slate-50">
+  <h5 className="text-sm font-semibold mb-2">🎯 Giveback Plan — Recommendations</h5>
+  <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+    <div className="text-slate-600">Max Giveback (½ of profit)</div>
+    <div className="font-medium">{currency(maxGiveback)}</div>
+
+    <div className="text-slate-600">Budget per Loss (6 losses to reach max)</div>
+    <div className="font-medium">{currency(sixLossBudget)}</div>
+
+    <div className="text-slate-600">Recommended Risk % per Trade</div>
+    <div className="font-medium">{fmt(recommendedRiskPct)}%</div>
+  </div>
+
+  <div className="text-[11px] text-slate-500 mt-2">
+    These are guidance values only for reflection and decision-making.
+    They do <strong>not</strong> change any live risk settings or affect other tabs.
+  </div>
+</div>
+
         </div>
       </div>
     </CardContent>
