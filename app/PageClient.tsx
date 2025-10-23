@@ -288,20 +288,8 @@ function PageInner() {
     () => realizedProfitPct >= (thresholdPct || 30),
     [realizedProfitPct, thresholdPct]
   );
-  // Amount of profit you're willing to give back, driven by Giveback Stop (% of today's gains)
-const givebackLockAmt = useMemo(
-  () => (realizedProfit > 0 ? (givebackPct / 100) * realizedProfit : 0),
-  [givebackPct, realizedProfit]
-);
-
-// Session loss guard = stricter of profit/4 and giveback lock.
-// If givebackPct is 0, we don't constrain by giveback (Infinity).
-const maxSessionLossGuard = useMemo(() => {
-  const profitQuarter = realizedProfit / 4;
-  const givebackGuard = givebackPct > 0 ? givebackLockAmt : Number.POSITIVE_INFINITY;
-  return Math.min(profitQuarter, givebackGuard);
-}, [realizedProfit, givebackPct, givebackLockAmt]);
-const effectiveLossCap = useMemo(() => {
+  const maxSessionLossGuard = useMemo(() => realizedProfit / 4, [realizedProfit]);
+  const effectiveLossCap = useMemo(() => {
     const dailyCap = maxLoss && maxLoss > 0 ? maxLoss : Number.POSITIVE_INFINITY;
     return Math.min(dailyCap, maxSessionLossGuard);
   }, [maxLoss, maxSessionLossGuard]);
@@ -310,13 +298,13 @@ const effectiveLossCap = useMemo(() => {
     const amt = Math.max(0, Number(lossAmount) || 0);
     if (amt === 0) return { ok: true };
     if (amt > effectiveLossCap) {
-      return { ok: false, reason: `Requested loss (${amt.toFixed(2)}) exceeds cap (${effectiveLossCap.toFixed(2)}).` };
+      return { ok: false, reason: \`Requested loss (\${amt.toFixed(2)}) exceeds cap (\${effectiveLossCap.toFixed(2)}).\` };
     }
     if (profitOnlyMode && amt > realizedProfit) {
-      return { ok: false, reason: `Profit-Only Mode: you can only risk realized profits (${realizedProfit.toFixed(2)}).` };
+      return { ok: false, reason: \`Profit-Only Mode: you can only risk realized profits (\${realizedProfit.toFixed(2)}).\` };
     }
     if (equity - amt < startBalance) {
-      return { ok: false, reason: `This loss would dip below initial capital (${startBalance.toFixed(2)}).` };
+      return { ok: false, reason: \`This loss would dip below initial capital (\${startBalance.toFixed(2)}).\` };
     }
     return { ok: true };
   }
@@ -823,7 +811,7 @@ const effectiveLossCap = useMemo(() => {
               <div className="font-semibold">{profitOnlyMode ? "Profit-Only" : "Standard"}</div>
             </div>
             <div>
-              <div className="text-slate-500">Max Session Loss (min of profit/4 & giveback)</div>
+              <div className="text-slate-500">Max Session Loss (profit/4)</div>
               <div className="font-semibold">{currency(maxSessionLossGuard)}</div>
             </div>
             <div>
@@ -835,6 +823,35 @@ const effectiveLossCap = useMemo(() => {
             Note: A requested loss that exceeds the Effective Loss Cap, would dip below your initial capital,
             or—when in Profit-Only Mode—exceeds realized profits, will be blocked.
           </div>
+                  {/* Recommended per-trade risk (informational only) */}
+                  <div className="mt-4 rounded-md border p-3 bg-slate-50">
+                    <h5 className="text-sm font-semibold mb-2">🎯 Recommended Risk % per Trade</h5>
+
+                    <div className="flex items-center gap-4">
+                      <div>
+                        <div className="text-slate-600 text-xs">Per-Trade Budget (×6 losses)</div>
+                        <div className="font-medium">{currency(sixLossBudget)}</div>
+                      </div>
+
+                      <div>
+                        <div className="text-slate-600 text-xs">Recommended % of Equity</div>
+                        <div className="text-lg font-bold">{recommendedRiskPct.toFixed(2)}%</div>
+                      </div>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => navigator.clipboard.writeText(recommendedRiskPct.toFixed(2))}
+                      >
+                        Copy %
+                      </Button>
+                    </div>
+
+                    <div className="text-[11px] text-slate-500 mt-2">
+                      Calc: (Giveback Lock ÷ 6) ÷ Equity. Suggestions only — does not auto-update live risk.
+                    </div>
+                  </div>
+
         </div>
       </div>
     </CardContent>
@@ -1002,7 +1019,7 @@ function BadgeShowcase({
                 </div>
               </>
             ) : (
-              <div className="text-sm text-emerald-600 mt-3">You've reached the top tier. 🏆</div>
+              <div className="text-sm text-emerald-600 mt-3">You’ve reached the top tier. 🏆</div>
             )}
           </div>
         </div>
@@ -1069,7 +1086,7 @@ function RiskSizerUniversalPanel({
       <CardContent className="p-4 space-y-3">
         <h4 className="text-lg font-semibold">{title}</h4>
         <p className="text-sm text-slate-600">
-          Lot size = Risk Amount ÷ (Risk Pips × Pip Value per 1 lot). Enter your broker's pip value per lot.
+          Lot size = Risk Amount ÷ (Risk Pips × Pip Value per 1 lot). Enter your broker’s pip value per lot.
         </p>
         <div className="space-y-3">
           {rows.map((r) => (
