@@ -776,92 +776,112 @@ function PageInner() {
       </p>
 
       <div className="grid lg:grid-cols-2 gap-4">
+        {/* LEFT: Inputs */}
         <div className="space-y-3">
           <div>
             <Label>1️⃣ Why I Trade</Label>
             <Input value={whyTrade} onChange={(e) => setWhyTrade(e.target.value)} />
           </div>
+
           <div>
             <Label>2️⃣ Mental Readiness</Label>
             <Input value={mentalReady} onChange={(e) => setMentalReady(e.target.value)} />
           </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label>Threshold for Profit-Only Mode (%)</Label>
-              <Input type="number" value={thresholdPct} onChange={(e) => setThresholdPct(Number(e.target.value || 0))} />
+              <Input
+                type="number"
+                value={thresholdPct}
+                onChange={(e) => setThresholdPct(Number(e.target.value || 0))}
+              />
             </div>
             <div>
               <Label>Giveback Stop (% of today's gains)</Label>
-              <Input type="number" value={givebackPct} onChange={(e) => setGivebackPct(Number(e.target.value || 0))} />
+              <Input
+                type="number"
+                value={givebackPct}
+                onChange={(e) => setGivebackPct(Number(e.target.value || 0))}
+              />
             </div>
           </div>
+
           <div>
             <Label>Setups Focus</Label>
             <Input value={setupsToday} onChange={(e) => setSetupsToday(e.target.value)} />
           </div>
         </div>
+
+        {/* RIGHT: Metrics */}
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3 text-sm">
             <div>
               <div className="text-slate-500">Initial Capital</div>
               <div className="font-semibold">{currency(startBalance)}</div>
             </div>
+
             <div>
               <div className="text-slate-500">Current Equity</div>
               <div className="font-semibold">{currency(equity)}</div>
             </div>
+
             <div>
               <div className="text-slate-500">Realized Profit</div>
-              <div className="font-semibold">{currency(realizedProfit)} ({formatPct(realizedProfit, startBalance)})</div>
+              <div className="font-semibold">
+                {currency(realizedProfit)} ({formatPct(realizedProfit, startBalance)})
+              </div>
             </div>
+
             <div>
               <div className="text-slate-500">Mode</div>
               <div className="font-semibold">{profitOnlyMode ? "Profit-Only" : "Standard"}</div>
             </div>
+
             <div>
               <div className="text-slate-500">Max Session Loss (profit/4)</div>
               <div className="font-semibold">{currency(maxSessionLossGuard)}</div>
             </div>
+
             <div>
               <div className="text-slate-500">Effective Loss Cap</div>
-              <div className="font-semibold">{Number.isFinite(effectiveLossCap) ? currency(effectiveLossCap) : "—"}</div>
+              <div className="font-semibold">
+                {Number.isFinite(effectiveLossCap) ? currency(effectiveLossCap) : "—"}
+              </div>
             </div>
           </div>
+
           <div className="text-xs text-amber-700">
             Note: A requested loss that exceeds the Effective Loss Cap, would dip below your initial capital,
             or—when in Profit-Only Mode—exceeds realized profits, will be blocked.
           </div>
-          {/* === NEW SECTION: Giveback Plan Recommendations === */}
-<div className="mt-4 rounded-md border p-3 bg-slate-50">
-  <h5 className="text-sm font-semibold mb-2">🎯 Giveback Plan — Recommendations</h5>
-  <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-    <div className="text-slate-600">Max Giveback (½ of profit)</div>
-    <div className="font-medium">{currency(maxGiveback)}</div>
 
-    <div className="text-slate-600">Budget per Loss (6 losses to reach max)</div>
-    <div className="font-medium">{currency(sixLossBudget)}</div>
+          {/* === NEW SECTION: Giveback Plan — Recommendations (informational only) === */}
+          <div className="mt-4 rounded-md border p-3 bg-slate-50">
+            <h5 className="text-sm font-semibold mb-2">🎯 Giveback Plan — Recommendations</h5>
 
-    <div className="text-slate-600">Recommended Risk % per Trade</div>
-    <div className="font-medium">{fmt(recommendedRiskPct)}%</div>
-  </div>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+              <div className="text-slate-600">Max Giveback (½ of profit)</div>
+              <div className="font-medium">{currency(maxGiveback)}</div>
 
-  <div className="text-[11px] text-slate-500 mt-2">
-    These are guidance values only for reflection and decision-making.
-    They do <strong>not</strong> change any live risk settings or affect other tabs.
-  </div>
-</div>
+              <div className="text-slate-600">Budget per Loss (6 losses to reach max)</div>
+              <div className="font-medium">{currency(sixLossBudget)}</div>
 
+              <div className="text-slate-600">Recommended Risk % per Trade</div>
+              <div className="font-medium">{fmt(recommendedRiskPct)}%</div>
+            </div>
+
+            <div className="text-[11px] text-slate-500 mt-2">
+              These are guidance values only for reflection and decision-making.
+              They do <strong>not</strong> change any live risk settings or affect other tabs.
+            </div>
+          </div>
         </div>
       </div>
     </CardContent>
   </Card>
 </TabsContent>
 
-
-      </Tabs>
-    </div>
-  );
-}
 
 /* =========================================================================
    Reusable UI blocks
