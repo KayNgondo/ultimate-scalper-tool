@@ -773,58 +773,26 @@ function PageInner() {
   <CardContent className="p-5">
     <h4 className="text-lg font-semibold mb-2">Equity Curve (All Time)</h4>
     <div className="h-72">
-      {equitySeriesTS.length === 0 ? (
-        <div className="flex h-full items-center justify-center text-slate-500">
-          No equity points yet.
-        </div>
-      ) : (
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={equitySeriesTS} margin={{ top: 8, right: 12, bottom: 24, left: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" />
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={equitySeries} margin={{ top: 8, right: 12, bottom: 20, left: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" />
 
-            <XAxis
-              dataKey="ts"
-              type="number"
-              scale="time"
-              domain={["dataMin", "dataMax"]}
-              tickFormatter={(v) =>
-                new Date(v).toLocaleString(undefined, {
-                  month: "short",
-                  day: "numeric",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })
-              }
-              interval="preserveStartEnd"
-              minTickGap={24}
-              tickLine={false}
-              axisLine={{ stroke: "#9aa7bd33" }}
-            />
+          <XAxis />
 
-            <YAxis
-              tickLine={false}
-              axisLine={{ stroke: "#9aa7bd33" }}
-              tick={{ fontSize: 12, fill: "currentColor" }}
-            />
-
-            <RTooltip
-              labelFormatter={(v) =>
-                new Date(v).toLocaleString(undefined, {
-                  weekday: "short",
-                  month: "short",
-                  day: "numeric",
-                  year: "numeric",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                  second: "2-digit",
-                })
-              }
-            />
-
-            <Line type="monotone" dataKey="equity" stroke="#2563eb" strokeWidth={2} dot={false} />
-          </LineChart>
-        </ResponsiveContainer>
-      )}
+          <YAxis />
+          <RTooltip
+            labelFormatter={(v) =>
+              new Date(v).toLocaleDateString(undefined, {
+                weekday: "short",
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+              })
+            }
+          />
+          <Line type="monotone" dataKey="equity" stroke="#2563eb" dot={false} />
+        </LineChart>
+      </ResponsiveContainer>
     </div>
   </CardContent>
 </Card>
