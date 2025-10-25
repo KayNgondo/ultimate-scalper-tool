@@ -28,3 +28,54 @@ html.dark .shadow          { box-shadow: 0 1px 2px rgba(0,0,0,.4) !important; }
 
 /* Charts tick/legend text stays readable */
 .recharts-default-tooltip { color: #0b1020; } /* tooltip itself is light */
+
+/* ===== UST Dark Mode – readability fixes ===== */
+
+/* Inputs / selects / textareas */
+html.dark input,
+html.dark select,
+html.dark textarea {
+  background-color: #0f172a !important;  /* --ust-card */
+  color: #e5e7eb !important;             /* --ust-fg   */
+  border-color: #22314a !important;      /* --ust-border */
+}
+
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: #9aa7bd !important;             /* --ust-muted */
+}
+
+/* Disabled inputs / read-only cards */
+html.dark input:disabled,
+html.dark select:disabled,
+html.dark textarea:disabled {
+  background-color: #121a2e !important;
+  color: #9aa7bd !important;
+  border-color: #22314a !important;
+  opacity: 1 !important;                 /* keep readable */
+  -webkit-text-fill-color: #9aa7bd;      /* safari */
+}
+
+/* Common light greys used in blocks (e.g., “Lot Size (auto)” areas) */
+html.dark .bg-slate-100 { background-color: #121a2e !important; }
+html.dark .bg-slate-200 { background-color: #1b2540 !important; }
+html.dark .bg-slate-300 { background-color: #233052 !important; }
+html.dark .text-slate-700,
+html.dark .text-slate-800,
+html.dark .text-slate-900 { color: #e5e7eb !important; }
+
+/* Muted helper text */
+html.dark .text-slate-600 { color: #9aa7bd !important; }
+
+/* Cards / borders (if any missed) */
+html.dark .card,
+html.dark .bg-white { background-color: #0f172a !important; }
+html.dark .border { border-color: #22314a !important; }
+
+/* Recharts axis labels / legend */
+html.dark .recharts-cartesian-axis-tick-value,
+html.dark .recharts-legend-item-text,
+html.dark .recharts-text { fill: #e5e7eb !important; }
+
+/* Tooltips remain readable on dark background */
+html.dark .recharts-default-tooltip { color: #0b1020; background: #f8fafc; }
