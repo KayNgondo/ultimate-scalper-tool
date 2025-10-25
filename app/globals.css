@@ -56,13 +56,14 @@ html.dark textarea:disabled {
   -webkit-text-fill-color: #9aa7bd;      /* safari */
 }
 
-/* Common light greys used in blocks (e.g., “Lot Size (auto)” areas) */
-html.dark .bg-slate-100 { background-color: #121a2e !important; }
-html.dark .bg-slate-200 { background-color: #1b2540 !important; }
-html.dark .bg-slate-300 { background-color: #233052 !important; }
+/* ==== refine calculator panels for Dark Mode ==== */
+html.dark .bg-slate-100 { background-color: #111827 !important; }  /* near bg-slate-900 */
+html.dark .bg-slate-200 { background-color: #1e293b !important; }  /* slate-800 */
+html.dark .bg-slate-300 { background-color: #334155 !important; }  /* slate-700 */
 html.dark .text-slate-700,
 html.dark .text-slate-800,
-html.dark .text-slate-900 { color: #e5e7eb !important; }
+html.dark .text-slate-900 { color: #f3f4f6 !important; }            /* near text-slate-100 */
+
 
 /* Muted helper text */
 html.dark .text-slate-600 { color: #9aa7bd !important; }
