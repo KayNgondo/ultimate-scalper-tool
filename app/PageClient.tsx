@@ -332,26 +332,6 @@ function PageInner() {
   const losses = sessionTrades.filter((t) => (t.pnl || 0) < 0).length;
   const bes = sessionTrades.filter((t) => (t.pnl || 0) === 0).length;
   const winRate = closed ? (wins / closed) * 100 : 0;
-
-// Build Equity Curve dataset (numeric timestamps)
-const equitySeriesTS = useMemo(() => {
-  const src = (equitySeries ?? rawEquityPoints ?? []) as any[];
-  return src
-    .map((d) => {
-      const t =
-        typeof d.timestamp === "number"
-          ? d.timestamp
-          : Date.parse(d.timestamp ?? d.created_at ?? d.time ?? d.date ?? d.x);
-
-      return {
-        ts: Number.isFinite(t) ? t : NaN, // ms since epoch
-        equity: Number(d.equity),
-      };
-    })
-    .filter((d) => Number.isFinite(d.ts) && Number.isFinite(d.equity))
-    .sort((a, b) => a.ts - b.ts);
-}, [equitySeries]); // ← if your source variable is named differently, update deps
-
   
   // session % base = startBalance + pnl from trades BEFORE sessionId
   const priorPnl = useMemo(() => {
