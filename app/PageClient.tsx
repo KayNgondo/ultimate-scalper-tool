@@ -524,10 +524,22 @@ function PageInner() {
 
     {/* Tabs */}
 <Tabs defaultValue="dashboard" className="w-full">
-  <TabsList className="flex flex-wrap gap-2 bg-transparent p-0 mb-3">
+  <TabsList
+    className="mb-3 flex gap-1 bg-transparent p-0 overflow-x-auto whitespace-nowrap no-scrollbar"
+  >
+    {/* helper class for all triggers */}
+    {/*
+      👉 Copy this class string to every <TabsTrigger>
+      - smaller font & padding so they fit in one line
+      - inactive: readable (not faint)
+      - active: gold pill
+    */}
     <TabsTrigger
       value="dashboard"
-      className="rounded-full px-3 py-1 text-sm border border-slate-500/40 text-slate-300 hover:bg-slate-800/70
+      className="rounded-full px-3 py-1 text-[13px] font-medium
+                 border border-slate-500/30
+                 text-slate-600 hover:text-slate-800 hover:bg-slate-100
+                 dark:text-slate-300 dark:hover:bg-slate-800/70
                  data-[state=active]:bg-amber-400 data-[state=active]:text-black data-[state=active]:border-amber-400
                  dark:data-[state=active]:bg-amber-400 dark:data-[state=active]:text-black"
     >
@@ -536,84 +548,57 @@ function PageInner() {
 
     <TabsTrigger
       value="analytics"
-      className="rounded-full px-3 py-1 text-sm border border-slate-500/40 text-slate-300 hover:bg-slate-800/70
+      className="rounded-full px-3 py-1 text-[13px] font-medium
+                 border border-slate-500/30
+                 text-slate-600 hover:text-slate-800 hover:bg-slate-100
+                 dark:text-slate-300 dark:hover:bg-slate-800/70
                  data-[state=active]:bg-amber-400 data-[state=active]:text-black data-[state=active]:border-amber-400
                  dark:data-[state=active]:bg-amber-400 dark:data-[state=active]:text-black"
     >
       Analytics
     </TabsTrigger>
 
-    <TabsTrigger
-      value="risk-deriv"
-      className="rounded-full px-3 py-1 text-sm border border-slate-500/40 text-slate-300 hover:bg-slate-800/70
-                 data-[state=active]:bg-amber-400 data-[state=active]:text-black data-[state=active]:border-amber-400
-                 dark:data-[state=active]:bg-amber-400 dark:data-[state=active]:text-black"
-    >
+    <TabsTrigger value="risk-deriv" className="rounded-full px-3 py-1 text-[13px] font-medium border border-slate-500/30 text-slate-600 hover:text-slate-800 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800/70 data-[state=active]:bg-amber-400 data-[state=active]:text-black data-[state=active]:border-amber-400 dark:data-[state=active]:bg-amber-400 dark:data-[state=active]:text-black">
       Risk &amp; Sizing (Deriv)
     </TabsTrigger>
 
-    <TabsTrigger
-      value="risk-fx"
-      className="rounded-full px-3 py-1 text-sm border border-slate-500/40 text-slate-300 hover:bg-slate-800/70
-                 data-[state=active]:bg-amber-400 data-[state=active]:text-black data-[state=active]:border-amber-400
-                 dark:data-[state=active]:bg-amber-400 dark:data-[state=active]:text-black"
-    >
+    <TabsTrigger value="risk-fx" className="rounded-full px-3 py-1 text-[13px] font-medium border border-slate-500/30 text-slate-600 hover:text-slate-800 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800/70 data-[state=active]:bg-amber-400 data-[state=active]:text-black data-[state=active]:border-amber-400 dark:data-[state=active]:bg-amber-400 dark:data-[state=active]:text-black">
       Risk &amp; Sizing (FX)
     </TabsTrigger>
 
-    <TabsTrigger
-      value="risk-majors"
-      className="rounded-full px-3 py-1 text-sm border border-slate-500/40 text-slate-300 hover:bg-slate-800/70
-                 data-[state=active]:bg-amber-400 data-[state=active]:text-black data-[state=active]:border-amber-400
-                 dark:data-[state=active]:bg-amber-400 dark:data-[state=active]:text-black"
-    >
+    <TabsTrigger value="risk-majors" className="rounded-full px-3 py-1 text-[13px] font-medium border border-slate-500/30 text-slate-600 hover:text-slate-800 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800/70 data-[state=active]:bg-amber-400 data-[state=active]:text-black data-[state=active]:border-amber-400 dark:data-[state=active]:bg-amber-400 dark:data-[state=active]:text-black">
       Risk &amp; Sizing (XAU/NAS/US30/BTC)
     </TabsTrigger>
 
-    <TabsTrigger
-      value="journal"
-      className="rounded-full px-3 py-1 text-sm border border-slate-500/40 text-slate-300 hover:bg-slate-800/70
-                 data-[state=active]:bg-amber-400 data-[state=active]:text-black data-[state=active]:border-amber-400
-                 dark:data-[state=active]:bg-amber-400 dark:data-[state=active]:text-black"
-    >
+    <TabsTrigger value="journal" className="rounded-full px-3 py-1 text-[13px] font-medium border border-slate-500/30 text-slate-600 hover:text-slate-800 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800/70 data-[state=active]:bg-amber-400 data-[state=active]:text-black data-[state=active]:border-amber-400 dark:data-[state=active]:bg-amber-400 dark:data-[state=active]:text-black">
       Trade Journal
     </TabsTrigger>
 
-    <TabsTrigger
-      value="calendar"
-      className="rounded-full px-3 py-1 text-sm border border-slate-500/40 text-slate-300 hover:bg-slate-800/70
-                 data-[state=active]:bg-amber-400 data-[state=active]:text-black data-[state=active]:border-amber-400
-                 dark:data-[state=active]:bg-amber-400 dark:data-[state=active]:text-black"
-    >
+    <TabsTrigger value="calendar" className="rounded-full px-3 py-1 text-[13px] font-medium border border-slate-500/30 text-slate-600 hover:text-slate-800 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800/70 data-[state=active]:bg-amber-400 data-[state=active]:text-black data-[state=active]:border-amber-400 dark:data-[state=active]:bg-amber-400 dark:data-[state=active]:text-black">
       Calendar
     </TabsTrigger>
 
-    <TabsTrigger
-      value="asetups"
-      className="rounded-full px-3 py-1 text-sm border border-slate-500/40 text-slate-300 hover:bg-slate-800/70
-                 data-[state=active]:bg-amber-400 data-[state=active]:text-black data-[state=active]:border-amber-400
-                 dark:data-[state=active]:bg-amber-400 dark:data-[state=active]:text-black"
-    >
+    <TabsTrigger value="asetups" className="rounded-full px-3 py-1 text-[13px] font-medium border border-slate-500/30 text-slate-600 hover:text-slate-800 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800/70 data-[state=active]:bg-amber-400 data-[state=active]:text-black data-[state=active]:border-amber-400 dark:data-[state=active]:bg-amber-400 dark:data-[state=active]:text-black">
       A-Setups
     </TabsTrigger>
 
-    <TabsTrigger
-      value="checklist"
-      className="rounded-full px-3 py-1 text-sm border border-slate-500/40 text-slate-300 hover:bg-slate-800/70
-                 data-[state=active]:bg-amber-400 data-[state=active]:text-black data-[state=active]:border-amber-400
-                 dark:data-[state=active]:bg-amber-400 dark:data-[state=active]:text-black"
-    >
+    <TabsTrigger value="checklist" className="rounded-full px-3 py-1 text-[13px] font-medium border border-slate-500/30 text-slate-600 hover:text-slate-800 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800/70 data-[state=active]:bg-amber-400 data-[state=active]:text-black data-[state=active]:border-amber-400 dark:data-[state=active]:bg-amber-400 dark:data-[state=active]:text-black">
       Checklist
     </TabsTrigger>
 
+    {/* Keep Leaderboard styled like a pill too */}
     <a
       href="/leaderboard"
-      className="inline-flex items-center justify-center whitespace-nowrap rounded-full px-3 py-1 text-sm font-medium border border-slate-500/40 text-slate-300 hover:bg-slate-800/70
-                 hover:text-white transition-colors data-[state=active]:bg-amber-400 data-[state=active]:text-black"
+      className="inline-flex items-center justify-center whitespace-nowrap
+                 rounded-full px-3 py-1 text-[13px] font-medium
+                 border border-slate-500/30 text-slate-600 hover:text-slate-800 hover:bg-slate-100
+                 dark:text-slate-300 dark:hover:bg-slate-800/70"
     >
       Leaderboard
     </a>
   </TabsList>
+</Tabs>
+
 
         {/* DASHBOARD */}
         <TabsContent value="dashboard" className="space-y-4">
