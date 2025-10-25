@@ -105,3 +105,8 @@ html.dark [class*="bg-gray-100"] {
 html.dark .text-slate-900,
 html.dark .text-slate-800 { color: #f3f4f6 !important; }
 html.dark .text-slate-600 { color: #cbd5e1 !important; }
+
+/* hide scrollbar for the tab row but keep horizontal scroll */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
