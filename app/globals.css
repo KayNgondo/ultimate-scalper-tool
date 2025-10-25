@@ -91,3 +91,17 @@ html.dark .recharts-text { fill: #e5e7eb !important; }
 
 /* Tooltips remain readable on dark background */
 html.dark .recharts-default-tooltip { color: #0b1020; background: #f8fafc; }
+
+/* Calculator panels – force dark background */
+html.dark [class*="bg-slate-200"],
+html.dark [class*="bg-gray-200"] {
+  background-color: #1e293b !important; /* slate-800 */
+}
+html.dark [class*="bg-slate-100"],
+html.dark [class*="bg-gray-100"] {
+  background-color: #0f172a !important; /* card background */
+}
+/* Better text contrast inside those blocks */
+html.dark .text-slate-900,
+html.dark .text-slate-800 { color: #f3f4f6 !important; }
+html.dark .text-slate-600 { color: #cbd5e1 !important; }
