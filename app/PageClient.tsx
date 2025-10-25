@@ -240,6 +240,27 @@ export default function Page() {
   );
 }
 
+// ==========================
+// Build Equity Curve dataset
+// ==========================
+const equitySeriesTS = (rawEquityPoints ?? equitySeries ?? [])
+  .map((d: any) => {
+    // Try common field names; change if your timestamp field is different
+    const t =
+      typeof d.timestamp === "number"
+        ? d.timestamp
+        : Date.parse(
+            d.timestamp ?? d.created_at ?? d.time ?? d.date ?? d.x
+          );
+
+    return {
+      ts: Number.isFinite(t) ? t : NaN, // numeric milliseconds
+      equity: Number(d.equity), // y value
+    };
+  })
+  .filter((d) => Number.isFinite(d.ts) && Number.isFinite(d.equity))
+  .sort((a, b) => a.ts - b.ts);
+
 /* =========================================================================
    Main page content
 ============================================================================ */
@@ -769,55 +790,65 @@ function PageInner() {
 
           <BadgeShowcase badge={badge} sessionsCount={sessionsCount} />
 
-          <Card>
+         <Card>
   <CardContent className="p-5">
     <h4 className="text-lg font-semibold mb-2">Equity Curve (All Time)</h4>
     <div className="h-72">
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={equitySeries}>
-          <CartesianGrid strokeDasharray="3 3" />
+      {equitySeriesTS.length === 0 ? (
+        <div className="flex h-full items-center justify-center text-slate-500">
+          No equity points yet.
+        </div>
+      ) : (
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={equitySeriesTS} margin={{ top: 8, right: 12, bottom: 24, left: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" />
 
-          {/* X axis: show date + time (requires numeric ms timestamps in equitySeries.timestamp) */}
-          <XAxis
-            dataKey="timestamp"
-            type="number"
-            scale="time"
-            domain={["dataMin", "dataMax"]}
-            tickFormatter={(v) =>
-              new Date(v).toLocaleString(undefined, {
-                month: "short",
-                day: "numeric",
-                hour: "2-digit",
-                minute: "2-digit",
-              })
-            }
-            interval="preserveStartEnd"
-            minTickGap={24}
-            tickLine={false}
-            axisLine={{ stroke: "#9aa7bd33" }}
-          />
+            <XAxis
+              dataKey="ts"
+              type="number"
+              scale="time"
+              domain={["dataMin", "dataMax"]}
+              tickFormatter={(v) =>
+                new Date(v).toLocaleString(undefined, {
+                  month: "short",
+                  day: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })
+              }
+              interval="preserveStartEnd"
+              minTickGap={24}
+              tickLine={false}
+              axisLine={{ stroke: "#9aa7bd33" }}
+            />
 
-          <YAxis />
-          <RTooltip
-            labelFormatter={(v) =>
-              new Date(v).toLocaleString(undefined, {
-                weekday: "short",
-                month: "short",
-                day: "numeric",
-                year: "numeric",
-                hour: "2-digit",
-                minute: "2-digit",
-                second: "2-digit",
-              })
-            }
-          />
-          <Line type="monotone" dataKey="equity" stroke="#2563eb" dot={false} />
-        </LineChart>
-      </ResponsiveContainer>
+            <YAxis
+              tickLine={false}
+              axisLine={{ stroke: "#9aa7bd33" }}
+              tick={{ fontSize: 12, fill: "currentColor" }}
+            />
+
+            <RTooltip
+              labelFormatter={(v) =>
+                new Date(v).toLocaleString(undefined, {
+                  weekday: "short",
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  second: "2-digit",
+                })
+              }
+            />
+
+            <Line type="monotone" dataKey="equity" stroke="#2563eb" strokeWidth={2} dot={false} />
+          </LineChart>
+        </ResponsiveContainer>
+      )}
     </div>
   </CardContent>
 </Card>
-
 
         </TabsContent>
 
