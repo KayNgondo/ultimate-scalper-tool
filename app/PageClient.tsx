@@ -773,85 +773,47 @@ function PageInner() {
   <CardContent className="p-5">
     <h4 className="text-lg font-semibold mb-2">Equity Curve (All Time)</h4>
     <div className="h-72">
-      {/*
-        Build numeric timestamps for proper date scaling
-        Replace "created_at" or "time" below with your actual field if different
-      */}
-      {(() => {
-        const equitySeries = (rawEquityPoints ?? [])
-          .map((d) => {
-            const t =
-              typeof d.timestamp === "number"
-                ? d.timestamp
-                : Date.parse(d.created_at ?? d.time ?? d.date ?? d.x);
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={equitySeries}>
+          <CartesianGrid strokeDasharray="3 3" />
 
-            return {
-              timestamp: Number.isFinite(t) ? t : NaN,
-              equity: Number(d.equity),
-            };
-          })
-          .filter(
-            (d) => Number.isFinite(d.timestamp) && Number.isFinite(d.equity)
-          )
-          .sort((a, b) => a.timestamp - b.timestamp);
+          {/* X axis: show date + time (requires numeric ms timestamps in equitySeries.timestamp) */}
+          <XAxis
+            dataKey="timestamp"
+            type="number"
+            scale="time"
+            domain={["dataMin", "dataMax"]}
+            tickFormatter={(v) =>
+              new Date(v).toLocaleString(undefined, {
+                month: "short",
+                day: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+              })
+            }
+            interval="preserveStartEnd"
+            minTickGap={24}
+            tickLine={false}
+            axisLine={{ stroke: "#9aa7bd33" }}
+          />
 
-        // Return chart JSX here
-        return (
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart
-              data={equitySeries}
-              margin={{ top: 8, right: 12, bottom: 20, left: 0 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" />
-
-              {/* 🗓️ X Axis — formatted as dates */}
-              <XAxis
-                dataKey="timestamp"
-                type="number"
-                scale="time"
-                domain={["dataMin", "dataMax"]}
-                tickFormatter={(v) =>
-                  new Date(v).toLocaleDateString(undefined, {
-                    month: "short",
-                    day: "numeric",
-                  })
-                }
-                interval="preserveStartEnd"
-                minTickGap={24}
-                tickLine={false}
-                axisLine={{ stroke: "#9aa7bd33" }}
-              />
-
-              <YAxis
-                tickLine={false}
-                axisLine={{ stroke: "#9aa7bd33" }}
-                tick={{ fontSize: 12, fill: "currentColor" }}
-              />
-
-              {/* 🧭 Tooltip shows readable date */}
-              <RTooltip
-                labelFormatter={(v) =>
-                  new Date(v).toLocaleDateString(undefined, {
-                    weekday: "short",
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                  })
-                }
-                formatter={(value: number) => [`$${value.toFixed(2)}`, "Equity"]}
-              />
-
-              <Line
-                type="monotone"
-                dataKey="equity"
-                stroke="#2563eb"
-                strokeWidth={2}
-                dot={false}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        );
-      })()}
+          <YAxis />
+          <RTooltip
+            labelFormatter={(v) =>
+              new Date(v).toLocaleString(undefined, {
+                weekday: "short",
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+              })
+            }
+          />
+          <Line type="monotone" dataKey="equity" stroke="#2563eb" dot={false} />
+        </LineChart>
+      </ResponsiveContainer>
     </div>
   </CardContent>
 </Card>
