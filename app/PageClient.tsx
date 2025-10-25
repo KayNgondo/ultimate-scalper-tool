@@ -71,7 +71,7 @@ function ToastProvider({ children }: { children: React.ReactNode }) {
         {items.map((t) => (
           <div key={t.id} className="rounded-lg border bg-white shadow px-3 py-2 w-72">
             <div className="text-sm font-medium">{t.title}</div>
-            {t.desc && <div className="text-xs text-slate-600 mt-0.5">{t.desc}</div>}
+            {t.desc && <div className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">{t.desc}</div>}
           </div>
         ))}
       </div>
@@ -689,7 +689,7 @@ function PageInner() {
           <Card>
             <CardContent className="p-4 space-y-3">
               <h4 className="text-lg font-semibold">Per-Market Lot Size (Deriv)</h4>
-              <p className="text-sm text-slate-600">
+              <p className="text-sm text-slate-600 dark:text-slate-300">
                 Enter risk pips for each Deriv market. Risk amount uses current equity × risk%.
               </p>
               <div className="space-y-3">
@@ -778,7 +778,7 @@ function PageInner() {
           <Card>
             <CardContent className="p-5 space-y-4">
               <h4 className="text-lg font-semibold">🧭 Checklist — Review & Targets</h4>
-              <p className="text-sm text-slate-600">
+              <p className="text-sm text-slate-600 dark:text-slate-300">
                 Use this tab to confirm plan and targets. It does not change risk or lock behavior.
                 Copy the summary and paste to Telegram/Slack if you like.
               </p>
@@ -820,10 +820,10 @@ function PageInner() {
                   <div className="rounded-md border p-3 bg-slate-50">
                     <div className="text-sm font-medium mb-1">Live Snapshot (read‑only)</div>
                     <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
-                      <div className="text-slate-600">Start Capital</div><div className="font-medium">{currency(startBalance)}</div>
-                      <div className="text-slate-600">Equity</div><div className="font-medium">{currency(equity)}</div>
-                      <div className="text-slate-600">Profit</div><div className="font-medium">{currency(Math.max(0, equity - startBalance))}</div>
-                      <div className="text-slate-600">Threshold</div><div className="font-medium">{thresholdPct}% ({currency((thresholdPct/100)*startBalance)})</div>
+                      <div className="text-slate-600 dark:text-slate-300">Start Capital</div><div className="font-medium">{currency(startBalance)}</div>
+                      <div className="text-slate-600 dark:text-slate-300">Equity</div><div className="font-medium">{currency(equity)}</div>
+                      <div className="text-slate-600 dark:text-slate-300">Profit</div><div className="font-medium">{currency(Math.max(0, equity - startBalance))}</div>
+                      <div className="text-slate-600 dark:text-slate-300">Threshold</div><div className="font-medium">{thresholdPct}% ({currency((thresholdPct/100)*startBalance)})</div>
                     </div>
                   </div>
 
@@ -856,24 +856,24 @@ function PageInner() {
                   <div className="rounded-md border p-3 bg-slate-50">
                     <div className="text-sm font-medium mb-1">Live Snapshot (read-only)</div>
                     <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
-                      <div className="text-slate-600">Start Capital</div>
+                      <div className="text-slate-600 dark:text-slate-300">Start Capital</div>
                       <div className="font-medium">{currency(startBalance)}</div>
 
-                      <div className="text-slate-600">Equity</div>
+                      <div className="text-slate-600 dark:text-slate-300">Equity</div>
                       <div className="font-medium">{currency(equity)}</div>
 
-                      <div className="text-slate-600">Profit</div>
+                      <div className="text-slate-600 dark:text-slate-300">Profit</div>
                       <div className="font-medium">
                         {currency(realizedProfit)} ({formatPct(realizedProfit, startBalance)})
                       </div>
 
-                      <div className="text-slate-600">Mode</div>
+                      <div className="text-slate-600 dark:text-slate-300">Mode</div>
                       <div className="font-medium">{profitOnlyMode ? "Profit-Only" : "Standard"}</div>
 
-                      <div className="text-slate-600">Max Session Loss (min of profit/4 & giveback)</div>
+                      <div className="text-slate-600 dark:text-slate-300">Max Session Loss (min of profit/4 & giveback)</div>
                       <div className="font-medium">{currency(maxSessionLossGuard)}</div>
 
-                      <div className="text-slate-600">Effective Loss Cap</div>
+                      <div className="text-slate-600 dark:text-slate-300">Effective Loss Cap</div>
                       <div className="font-medium">
                         {Number.isFinite(effectiveLossCap) ? currency(effectiveLossCap) : "—"}
                       </div>
@@ -883,13 +883,13 @@ function PageInner() {
                     <div className="mt-3 rounded-md border bg-white p-3">
                       <div className="text-sm font-semibold mb-2">🎯 Giveback Plan — Recommendations</div>
                       <div className="grid md:grid-cols-2 gap-x-6 gap-y-2 text-sm">
-                        <div className="text-slate-600">Giveback Lock Amount</div>
+                        <div className="text-slate-600 dark:text-slate-300">Giveback Lock Amount</div>
                         <div className="font-medium">{currency(givebackLockAmt)}</div>
 
-                        <div className="text-slate-600">Per-Trade Budget (×6 losses)</div>
+                        <div className="text-slate-600 dark:text-slate-300">Per-Trade Budget (×6 losses)</div>
                         <div className="font-medium">{currency(sixLossBudget)}</div>
 
-                        <div className="text-slate-600">Recommended Risk % per Trade</div>
+                        <div className="text-slate-600 dark:text-slate-300">Recommended Risk % per Trade</div>
                         <div className="font-medium">{recommendedRiskPct.toFixed(2)}%</div>
                       </div>
                       <div className="text-[11px] text-slate-500 mt-2">
@@ -920,7 +920,7 @@ function DashCard({ title, value, hint }: { title: string; value: string; hint?:
   return (
     <Card>
       <CardContent className="p-4">
-        <div className="text-sm text-slate-600">{title}</div>
+        <div className="text-sm text-slate-600 dark:text-slate-300">{title}</div>
         <div className="text-2xl font-semibold">{value}</div>
         {hint && <div className="text-xs text-slate-500">{hint}</div>}
       </CardContent>
@@ -1052,15 +1052,15 @@ function BadgeShowcase({
           </div>
           <div className="md:col-span-2">
             <div className="text-xl font-semibold">{current?.name || "Starter • Keep building sessions"}</div>
-            <div className="text-sm text-slate-600 mt-1">
+            <div className="text-sm text-slate-600 dark:text-slate-300 mt-1">
               Sessions completed: <strong>{sessionsCount}</strong>
             </div>
             {nextTier ? (
               <>
-                <div className="text-sm text-slate-600 mt-2">
+                <div className="text-sm text-slate-600 dark:text-slate-300 mt-2">
                   Next badge: <strong>{nextTier.key}</strong> at {nextTier.at} sessions.
                 </div>
-                <div className="w-full h-2 rounded-full bg-slate-200 mt-2 overflow-hidden">
+                <div className="w-full h-2 rounded-full bg-slate-50 dark:bg-slate-800 mt-2 overflow-hidden">
                   <div className="h-2 bg-indigo-500 transition-all" style={{ width: `${pct}%` }} />
                 </div>
                 <div className="text-xs text-slate-500 mt-1">
@@ -1134,7 +1134,7 @@ function RiskSizerUniversalPanel({
     <Card>
       <CardContent className="p-4 space-y-3">
         <h4 className="text-lg font-semibold">{title}</h4>
-        <p className="text-sm text-slate-600">
+        <p className="text-sm text-slate-600 dark:text-slate-300">
           Lot size = Risk Amount ÷ (Risk Pips × Pip Value per 1 lot). Enter your broker's pip value per lot.
         </p>
         <div className="space-y-3">
@@ -1551,7 +1551,7 @@ function JournalGrouped({
               );
             })
         ) : (
-          <div className="p-4 text-sm text-slate-600">No trades yet. Use Quick Logger above.</div>
+          <div className="p-4 text-sm text-slate-600 dark:text-slate-300">No trades yet. Use Quick Logger above.</div>
         )}
       </CardContent>
     </Card>
@@ -1664,7 +1664,7 @@ function ASetupsGallery() {
 
       {!items.length && (
         <Card>
-          <CardContent className="p-6 text-sm text-slate-600">
+          <CardContent className="p-6 text-sm text-slate-600 dark:text-slate-300">
             Upload screenshots for your A-Setups once. Review them at the start of every session.
           </CardContent>
         </Card>
@@ -1676,7 +1676,7 @@ function ASetupsGallery() {
             <CardContent className="p-3 space-y-2">
               <div className="font-semibold">{it.title}</div>
               <img src={it.dataUrl} alt={it.title} className="w-full rounded-md border object-contain" />
-              {it.notes && <div className="text-xs text-slate-600">{it.notes}</div>}
+              {it.notes && <div className="text-xs text-slate-600 dark:text-slate-300">{it.notes}</div>}
               <div className="flex justify-end">
                 <Button variant="destructive" onClick={() => setItems(items.filter((x) => x.id !== it.id))}>
                   Remove
@@ -1751,14 +1751,14 @@ function GoalProgress({
     <div className="rounded-lg border bg-white p-3">
       <div className="flex items-end justify-between">
         <div className="text-sm font-medium">{label}</div>
-        <div className="text-xs text-slate-600">{target ? `${pct.toFixed(0)}%` : "—"}</div>
+        <div className="text-xs text-slate-600 dark:text-slate-300">{target ? `${pct.toFixed(0)}%` : "—"}</div>
       </div>
 
-      <div className="w-full h-2 rounded-full bg-slate-200 mt-2 overflow-hidden">
+      <div className="w-full h-2 rounded-full bg-slate-50 dark:bg-slate-800 mt-2 overflow-hidden">
         <div className={`h-2 transition-all ${reached ? "bg-emerald-600" : "bg-indigo-500"}`} style={{ width: `${pct}%` }} />
       </div>
 
-      <div className="mt-2 text-xs text-slate-600 flex items-center justify-between">
+      <div className="mt-2 text-xs text-slate-600 dark:text-slate-300 flex items-center justify-between">
         <span>Progress: <strong>{currency(Number(progress.toFixed(2)))}</strong></span>
         <span>Target: <strong>{currency(Number((target || 0).toFixed(2)))}</strong></span>
       </div>
@@ -1856,7 +1856,7 @@ function OldCalendar({ trades }: { trades: { ts?: number; pnl?: number }[] }) {
           </Button>
         </div>
 
-        <div className="grid grid-cols-7 text-xs font-medium text-slate-600 mb-1">
+        <div className="grid grid-cols-7 text-xs font-medium text-slate-600 dark:text-slate-300 mb-1">
           <div className="p-2 text-center">Mon</div>
           <div className="p-2 text-center">Tue</div>
           <div className="p-2 text-center">Wed</div>
