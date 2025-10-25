@@ -770,21 +770,45 @@ function PageInner() {
           <BadgeShowcase badge={badge} sessionsCount={sessionsCount} />
 
           <Card>
-            <CardContent className="p-5">
-              <h4 className="text-lg font-semibold mb-2">Equity Curve (All Time)</h4>
-              <div className="h-72">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={equitySeries}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="t" />
-                    <YAxis />
-                    <RTooltip />
-                    <Line type="monotone" dataKey="equity" stroke="#2563eb" dot={false} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
+  <CardContent className="p-5">
+    <h4 className="text-lg font-semibold mb-2">Equity Curve (All Time)</h4>
+    <div className="h-72">
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={equitySeries} margin={{ top: 8, right: 12, bottom: 20, left: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" />
+
+          <XAxis
+            dataKey="timestamp"
+            type="number"
+            scale="time"
+            domain={["dataMin", "dataMax"]}
+            tickFormatter={(v) =>
+              new Date(v).toLocaleDateString(undefined, { month: "short", day: "numeric" })
+            }
+            interval="preserveStartEnd"
+            minTickGap={24}
+            tickLine={false}
+            axisLine={{ stroke: "#9aa7bd33" }}
+          />
+
+          <YAxis />
+          <RTooltip
+            labelFormatter={(v) =>
+              new Date(v).toLocaleDateString(undefined, {
+                weekday: "short",
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+              })
+            }
+          />
+          <Line type="monotone" dataKey="equity" stroke="#2563eb" dot={false} />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  </CardContent>
+</Card>
+
         </TabsContent>
 
         {/* ANALYTICS */}
@@ -1719,22 +1743,54 @@ function AnalyticsPanel({ trades }: { trades: TradeRow[] }) {
       </Card>
 
       <Card>
-        <CardContent className="p-5">
-          <h4 className="text-lg font-semibold mb-2">PnL by Market (All Time)</h4>
-          <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={byMarket}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis />
-                <RTooltip />
-                <Legend />
-                <Bar dataKey="pnl" fill="#2563eb" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </CardContent>
-      </Card>
+  <CardContent className="p-5">
+    <h4 className="text-lg font-semibold mb-2">PnL by Market (All Time)</h4>
+    <div className="h-72">
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart
+          data={byMarket}
+          margin={{ top: 8, right: 12, bottom: 32, left: 0 }}
+          barCategoryGap={20}   // spacing between categories
+          barGap={2}
+        >
+          <CartesianGrid strokeDasharray="3 3" />
+
+          {/* Show ALL market names; angle a bit so they fit */}
+          <XAxis
+            dataKey="name"
+            interval={0}                // ← never skip labels
+            height={56}                 // room for angled text
+            angle={-15}
+            textAnchor="end"
+            tickLine={false}
+            axisLine={{ stroke: "#9aa7bd33" }}
+            tick={{ fontSize: 12, fill: "currentColor" }}
+          />
+
+          <YAxis
+            tickLine={false}
+            axisLine={{ stroke: "#9aa7bd33" }}
+            tick={{ fontSize: 12, fill: "currentColor" }}
+          />
+
+          <RTooltip
+            formatter={(value: number) => [value, "pnl"]}
+            labelFormatter={(label: string) => `Market: ${label}`}
+          />
+          <Legend />
+
+          <Bar
+            dataKey="pnl"
+            fill="#2563eb"
+            radius={[4, 4, 0, 0]}
+            maxBarSize={48}             // caps column width on wide screens
+          />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  </CardContent>
+</Card>
+
     </div>
   );
 }
