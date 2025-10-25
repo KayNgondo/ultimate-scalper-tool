@@ -1931,19 +1931,23 @@ function GoalProgress({
 }
 
 /* =========================================================================
-   Old Calendar (with daily PnL chips)
+   Old Calendar (with daily PnL chips + % growth)
 ============================================================================ */
-function OldCalendar({ trades }: { trades: { ts?: number; pnl?: number }[] }) {
+function OldCalendar({
+  trades,
+}: {
+  trades: { ts?: number; pnl?: number }[];
+}) {
   const { tradeDays, dailyTotals } = useMemo(() => {
     const set = new Set<string>();
     const totals = new Map<string, number>();
     trades.forEach((t) => {
       if (!t.ts) return;
       const d = new Date(t.ts);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
         2,
         "0"
-      )}`;
+      )}-${String(d.getDate()).padStart(2, "0")}`;
       set.add(key);
       totals.set(key, (totals.get(key) || 0) + (t.pnl ?? 0));
     });
@@ -1956,6 +1960,12 @@ function OldCalendar({ trades }: { trades: { ts?: number; pnl?: number }[] }) {
     d.setHours(0, 0, 0, 0);
     return d;
   });
+
+  const startBalanceRaw =
+    typeof window !== "undefined"
+      ? Number(localStorage.getItem("ust-start-balance") || 0)
+      : 0;
+  const startBalance = startBalanceRaw > 0 ? startBalanceRaw : 1000;
 
   function startOfMonth(d: Date) {
     const x = new Date(d);
@@ -1981,9 +1991,16 @@ function OldCalendar({ trades }: { trades: { ts?: number; pnl?: number }[] }) {
     return arr;
   }, [viewDate]);
 
-  const monthLabel = viewDate.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  const monthLabel = viewDate.toLocaleDateString(undefined, {
+    month: "long",
+    year: "numeric",
+  });
+
   function keyOf(d: Date) {
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
+      2,
+      "0"
+    )}-${String(d.getDate()).padStart(2, "0")}`;
   }
 
   const todayKey = keyOf(new Date());
@@ -2035,23 +2052,27 @@ function OldCalendar({ trades }: { trades: { ts?: number; pnl?: number }[] }) {
             const isToday = k === todayKey;
             const hasTrades = tradeDays.has(k);
             const dayPnl = dailyTotals.get(k) ?? 0;
+            const pct =
+              startBalance > 0
+                ? ((dayPnl / startBalance) * 100).toFixed(2)
+                : "0.00";
 
             return (
               <div
                 key={i}
                 className={[
-                  "h-20 rounded-md border p-2 flex flex-col justify-between bg-white",
+                  "h-24 rounded-md border p-2 flex flex-col justify-between bg-white",
                   inMonth ? "" : "opacity-40",
                   isToday ? "border-indigo-500 ring-2 ring-indigo-200" : "",
                 ].join(" ")}
-                title={hasTrades ? `${dayPnl >= 0 ? "+" : ""}${currency(Number(dayPnl.toFixed(2)))}` : undefined}
               >
                 <div className="text-xs">{d.getDate()}</div>
+
                 {hasTrades && (
-                  <div className="flex justify-end">
+                  <div className="flex flex-col items-end space-y-[2px]">
                     <span
                       className={[
-                        "inline-flex items-center gap-1 rounded-full border px-2 py-[2px] text-[10px]",
+                        "inline-flex items-center justify-center rounded-full border px-2 py-[3px] text-[13px] font-semibold",
                         dayPnl > 0
                           ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                           : dayPnl < 0
@@ -2061,6 +2082,10 @@ function OldCalendar({ trades }: { trades: { ts?: number; pnl?: number }[] }) {
                     >
                       {dayPnl >= 0 ? "+" : ""}
                       {currency(Number(dayPnl.toFixed(2)))}
+                    </span>
+                    <span className="text-[11px] text-slate-500">
+                      {dayPnl >= 0 ? "+" : ""}
+                      {pct}%
                     </span>
                   </div>
                 )}
@@ -2072,3 +2097,4 @@ function OldCalendar({ trades }: { trades: { ts?: number; pnl?: number }[] }) {
     </Card>
   );
 }
+
