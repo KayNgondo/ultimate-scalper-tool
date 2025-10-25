@@ -6,3 +6,25 @@
 html, body {
   @apply min-h-screen bg-white text-slate-900;
 }
+
+/* ==== UST quick dark theme overrides ==== */
+:root {
+  --ust-bg: #0b1020;
+  --ust-fg: #e5e7eb;
+  --ust-card: #0f172a;
+  --ust-border: #22314a;
+  --ust-muted: #9aa7bd;
+}
+
+html.dark body { background: var(--ust-bg); color: var(--ust-fg); }
+
+/* Nudge common light styles into dark */
+html.dark .bg-white        { background-color: var(--ust-card) !important; }
+html.dark .bg-slate-50     { background-color: #0e1528 !important; }
+html.dark .border          { border-color: var(--ust-border) !important; }
+html.dark .text-slate-600  { color: var(--ust-muted) !important; }
+html.dark .text-slate-500  { color: var(--ust-muted) !important; }
+html.dark .shadow          { box-shadow: 0 1px 2px rgba(0,0,0,.4) !important; }
+
+/* Charts tick/legend text stays readable */
+.recharts-default-tooltip { color: #0b1020; } /* tooltip itself is light */
