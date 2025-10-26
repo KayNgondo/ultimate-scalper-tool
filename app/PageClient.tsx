@@ -327,6 +327,10 @@ function PageInner() {
     [trades, sessionId]
   );
   const pnl = useMemo(() => sessionTrades.reduce((a, t) => a + (t.pnl || 0), 0), [sessionTrades]);
+  // === Session activity guard: require at least one trade OR equity change (pnl != 0) before ending a session ===
+  const hasSessionActivity = useMemo(() => {
+    return (sessionTrades.length > 0) || (Math.abs(pnl) > 0.0000001);
+  }, [sessionTrades, pnl]);
   const closed = sessionTrades.length;
   const wins = sessionTrades.filter((t) => (t.pnl || 0) > 0).length;
   const losses = sessionTrades.filter((t) => (t.pnl || 0) < 0).length;
@@ -481,8 +485,12 @@ function PageInner() {
   <div className="flex items-center gap-2">
     <ThemeToggle />
 
-    <Button
+    <Button disabled={!hasSessionActivity}
       onClick={async () => {
+          if (!hasSessionActivity) {
+            push({ title: "No trades logged", desc: "You can’t end the session without at least one trade or equity change." });
+            return;
+          }
         try {
           if (!user?.id) {
             push({ title: "Please sign in", desc: "You need to sign in to save sessions." });
@@ -2098,3 +2106,31 @@ function OldCalendar({
   );
 }
 
+/* ============================================================================
+   Supabase SQL — Prevent Empty Sessions Server-Side (copy into SQL editor)
+   ----------------------------------------------------------------------------
+   This trigger blocks inserts/updates to `sessions` unless there is at least
+   one trade or an equity change (pnl != 0). Adjust column names if needed.
+============================================================================ */
+-- Function
+-- create or replace function prevent_empty_sessions()
+-- returns trigger
+-- language plpgsql
+-- as $$
+-- declare
+--   _trade_count int := coalesce(new.trade_count, 0);
+--   _pnl numeric := coalesce(new.pnl, 0);
+-- begin
+--   if (_trade_count = 0) and (coalesce(new.end_equity, new.start_equity) = new.start_equity) and (coalesce(_pnl,0) = 0) then
+--     raise exception 'Cannot end session without trades or equity change.';
+--   end if;
+--   return new;
+-- end;
+-- $$;
+--
+-- drop trigger if exists trg_prevent_empty_sessions on sessions;
+-- create trigger trg_prevent_empty_sessions
+-- before insert or update on sessions
+-- for each row
+-- execute function prevent_empty_sessions();
+/* ========================================================================== */
