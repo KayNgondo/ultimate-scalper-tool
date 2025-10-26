@@ -955,13 +955,7 @@ function PageInner() {
                     </div>
                   </div>
 
-                  <div className="rounded-md border p-3 bg-slate-50">
-                    <div className="text-sm font-medium mb-1">Live Snapshot (read‑only)</div>
-                    <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
-                      <div className="text-slate-600 dark:text-slate-300">Start Capital</div><div className="font-medium">{currency(startBalance)}</div>
-                      <div className="text-slate-600 dark:text-slate-300">Equity</div><div className="font-medium">{currency(equity)}</div>
-                      <div className="text-slate-600 dark:text-slate-300">Profit</div><div className="font-medium">{currency(Math.max(0, equity - startBalance))}</div>
-                      <div className="text-slate-600 dark:text-slate-300">Threshold</div><div className="font-medium">{thresholdPct}% ({currency((thresholdPct/100)*startBalance)})</div>
+                  <div className="font-medium">{thresholdPct}% ({currency((thresholdPct/100)*startBalance)})</div>
                     </div>
                   </div>
 
@@ -1035,7 +1029,6 @@ function PageInner() {
                       </div>
                     </div>
                   </div>
-
 
                   <div className="text-[11px] text-slate-500">
                     Note: This tab is informational only and won't change risk or locks elsewhere.
