@@ -2105,32 +2105,3 @@ function OldCalendar({
     </Card>
   );
 }
-
-/* ============================================================================
-   Supabase SQL — Prevent Empty Sessions Server-Side (copy into SQL editor)
-   ----------------------------------------------------------------------------
-   This trigger blocks inserts/updates to `sessions` unless there is at least
-   one trade or an equity change (pnl != 0). Adjust column names if needed.
-============================================================================ */
--- Function
--- create or replace function prevent_empty_sessions()
--- returns trigger
--- language plpgsql
--- as $$
--- declare
---   _trade_count int := coalesce(new.trade_count, 0);
---   _pnl numeric := coalesce(new.pnl, 0);
--- begin
---   if (_trade_count = 0) and (coalesce(new.end_equity, new.start_equity) = new.start_equity) and (coalesce(_pnl,0) = 0) then
---     raise exception 'Cannot end session without trades or equity change.';
---   end if;
---   return new;
--- end;
--- $$;
---
--- drop trigger if exists trg_prevent_empty_sessions on sessions;
--- create trigger trg_prevent_empty_sessions
--- before insert or update on sessions
--- for each row
--- execute function prevent_empty_sessions();
-/* ========================================================================== */
