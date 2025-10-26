@@ -913,131 +913,168 @@ function PageInner() {
 
         {/* CHECKLIST — Review & Targets (standalone tab; no guardrails wired) */}
         <TabsContent value="checklist">
-          <Card>
-            <CardContent className="p-5 space-y-4">
-              <h4 className="text-lg font-semibold">🧭 Checklist — Review & Targets</h4>
-              <p className="text-sm text-slate-600 dark:text-slate-300">
-                Use this tab to confirm plan and targets. It does not change risk or lock behavior.
-                Copy the summary and paste to Telegram/Slack if you like.
-              </p>
+  <Card>
+    <CardContent className="p-5 space-y-4">
+      <h4 className="text-lg font-semibold">🧭 Checklist — Review &amp; Targets</h4>
+      <p className="text-sm text-slate-600 dark:text-slate-300">
+        Use this tab to confirm plan and targets. It does not change risk or lock behavior.
+        Copy the summary and paste to Telegram/Slack if you like.
+      </p>
 
-              <div className="grid lg:grid-cols-2 gap-4">
-                <div className="space-y-3">
-                  <div>
-                    <Label>1️⃣ Why I Trade</Label>
-                    <textarea className="w-full border rounded-md p-2 h-24" value={whyTrade} onChange={(e)=>setWhyTrade(e.target.value)} />
-                  </div>
-                  <div>
-                    <Label>2️⃣ Mental Readiness</Label>
-                    <textarea className="w-full border rounded-md p-2 h-20" value={mentalReady} onChange={(e)=>setMentalReady(e.target.value)} />
-                  </div>
-                  <div>
-                    <Label>3️⃣ Target for the Session</Label>
-                    <textarea className="w-full border rounded-md p-2 h-20" value={sessionTarget} onChange={(e)=>setSessionTarget(e.target.value)} />
-                  </div>
-                  <div>
-                    <Label>6️⃣ Setups I'll Trade</Label>
-                    <textarea className="w-full border rounded-md p-2 h-20" value={setupsToday} onChange={(e)=>setSetupsToday(e.target.value)} />
-                  </div>
-                </div>
+      <div className="grid lg:grid-cols-2 gap-4">
+        {/* Left column */}
+        <div className="space-y-3">
+          <div>
+            <Label>1️⃣ Why I Trade</Label>
+            <textarea
+              className="w-full border rounded-md p-2 h-24"
+              value={whyTrade}
+              onChange={(e) => setWhyTrade(e.target.value)}
+            />
+          </div>
+          <div>
+            <Label>2️⃣ Mental Readiness</Label>
+            <textarea
+              className="w-full border rounded-md p-2 h-20"
+              value={mentalReady}
+              onChange={(e) => setMentalReady(e.target.value)}
+            />
+          </div>
+          <div>
+            <Label>3️⃣ Target for the Session</Label>
+            <textarea
+              className="w-full border rounded-md p-2 h-20"
+              value={sessionTarget}
+              onChange={(e) => setSessionTarget(e.target.value)}
+            />
+          </div>
+          <div>
+            <Label>6️⃣ Setups I'll Trade</Label>
+            <textarea
+              className="w-full border rounded-md p-2 h-20"
+              value={setupsToday}
+              onChange={(e) => setSetupsToday(e.target.value)}
+            />
+          </div>
+        </div>
 
-                <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <Label>Profit‑Only Trigger (info, % of start)</Label>
-                      <Input type="number" value={thresholdPct} onChange={(e)=>setThresholdPct(Number(e.target.value)||0)} />
-                      <div className="text-[11px] text-slate-500 mt-1">Default 30%</div>
-                    </div>
-                    <div>
-                      <Label>Giveback Lock (info, % of profit)</Label>
-                      <Input type="number" value={givebackPct} onChange={(e)=>setGivebackPct(Number(e.target.value)||0)} />
-                      <div className="text-[11px] text-slate-500 mt-1">E.g. 50%</div>
-                    </div>
-                  </div>
+        {/* Right column */}
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Profit-Only Trigger (info, % of start)</Label>
+              <Input
+                type="number"
+                value={thresholdPct}
+                onChange={(e) => setThresholdPct(Number(e.target.value) || 0)}
+              />
+              <div className="text-[11px] text-slate-500 mt-1">Default 30%</div>
+            </div>
+            <div>
+              <Label>Giveback Lock (info, % of profit)</Label>
+              <Input
+                type="number"
+                value={givebackPct}
+                onChange={(e) => setGivebackPct(Number(e.target.value) || 0)}
+              />
+              <div className="text-[11px] text-slate-500 mt-1">E.g. 50%</div>
+            </div>
+          </div>
 
-                  <div className="font-medium">{thresholdPct}% ({currency((thresholdPct/100)*startBalance)})</div>
-                    </div>
-                  </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              onClick={() => {
+                const txt = [
+                  "🧭 Session Checklist",
+                  `Why: ${whyTrade || "-"}`,
+                  `Ready: ${mentalReady || "-"}`,
+                  `Target: ${sessionTarget || "-"}`,
+                  `Setups: ${setupsToday || "-"}`,
+                  "",
+                  `Start: ${currency(startBalance)} • Equity: ${currency(equity)}`,
+                  `Profit: ${currency(Math.max(0, equity - startBalance))}`,
+                  `Profit-Only threshold: ${thresholdPct}% (${currency((thresholdPct / 100) * startBalance)})`,
+                  givebackPct ? `Giveback lock (info): ${givebackPct}%` : null,
+                  `Time: ${new Date().toLocaleString()}`
+                ]
+                  .filter(Boolean)
+                  .join("
+");
 
-                  <div className="flex flex-wrap gap-2">
-                    <Button onClick={()=>{
-                      const txt = [
-                        "🧭 Session Checklist",
-                        `Why: ${whyTrade || "-"}`,
-                        `Ready: ${mentalReady || "-"}`,
-                        `Target: ${sessionTarget || "-"}`,
-                        `Setups: ${setupsToday || "-"}`,
-                        "",
-                        `Start: ${currency(startBalance)} • Equity: ${currency(equity)}`,
-                        `Profit: ${currency(Math.max(0, equity - startBalance))}`,
-                        `Profit‑Only threshold: ${thresholdPct}% (${currency((thresholdPct/100)*startBalance)})`,
-                        givebackPct ? `Giveback lock (info): ${givebackPct}%` : null,
-                        `Time: ${new Date().toLocaleString()}`
-                      ].filter(Boolean).join("\\n");
-                      navigator.clipboard.writeText(txt).then(()=>{
-                        push({ title: "Copied", desc: "Checklist summary copied." });
-                      });
-                    }}>Copy Summary</Button>
+                navigator.clipboard.writeText(txt).then(() => {
+                  push({ title: "Copied", desc: "Checklist summary copied." });
+                });
+              }}
+            >
+              Copy Summary
+            </Button>
 
-                    <Button variant="outline" onClick={()=>{
-                      const id = newSessionId();
-                      push({ title: "Session started", desc: `Session ID: ${id}` });
-                    }}>Start Session</Button>
-                  </div>
-                  {/* === Live Snapshot (read-only) === */}
-                  <div className="rounded-md border p-3 bg-slate-50">
-                    <div className="text-sm font-medium mb-1">Live Snapshot (read-only)</div>
-                    <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
-                      <div className="text-slate-600 dark:text-slate-300">Start Capital</div>
-                      <div className="font-medium">{currency(startBalance)}</div>
+            <Button
+              variant="outline"
+              onClick={() => {
+                const id = newSessionId();
+                push({ title: "Session started", desc: `Session ID: ${id}` });
+              }}
+            >
+              Start Session
+            </Button>
+          </div>
 
-                      <div className="text-slate-600 dark:text-slate-300">Equity</div>
-                      <div className="font-medium">{currency(equity)}</div>
+          {/* Single consolidated snapshot */}
+          <div className="rounded-md border p-3 bg-slate-50">
+            <div className="text-sm font-medium mb-1">Live Snapshot (read-only)</div>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
+              <div className="text-slate-600 dark:text-slate-300">Start Capital</div>
+              <div className="font-medium">{currency(startBalance)}</div>
 
-                      <div className="text-slate-600 dark:text-slate-300">Profit</div>
-                      <div className="font-medium">
-                        {currency(realizedProfit)} ({formatPct(realizedProfit, startBalance)})
-                      </div>
+              <div className="text-slate-600 dark:text-slate-300">Equity</div>
+              <div className="font-medium">{currency(equity)}</div>
 
-                      <div className="text-slate-600 dark:text-slate-300">Mode</div>
-                      <div className="font-medium">{profitOnlyMode ? "Profit-Only" : "Standard"}</div>
-
-                      <div className="text-slate-600 dark:text-slate-300">Max Session Loss (min of profit/4 & giveback)</div>
-                      <div className="font-medium">{currency(maxSessionLossGuard)}</div>
-
-                      <div className="text-slate-600 dark:text-slate-300">Effective Loss Cap</div>
-                      <div className="font-medium">
-                        {Number.isFinite(effectiveLossCap) ? currency(effectiveLossCap) : "—"}
-                      </div>
-                    </div>
-
-                    {/* Giveback Plan — Recommendations */}
-                    <div className="mt-3 rounded-md border bg-white p-3">
-                      <div className="text-sm font-semibold mb-2">🎯 Giveback Plan — Recommendations</div>
-                      <div className="grid md:grid-cols-2 gap-x-6 gap-y-2 text-sm">
-                        <div className="text-slate-600 dark:text-slate-300">Giveback Lock Amount</div>
-                        <div className="font-medium">{currency(givebackLockAmt)}</div>
-
-                        <div className="text-slate-600 dark:text-slate-300">Per-Trade Budget (×6 losses)</div>
-                        <div className="font-medium">{currency(sixLossBudget)}</div>
-
-                        <div className="text-slate-600 dark:text-slate-300">Recommended Risk % per Trade</div>
-                        <div className="font-medium">{recommendedRiskPct.toFixed(2)}%</div>
-                      </div>
-                      <div className="text-[11px] text-slate-500 mt-2">
-                        These are guidance values only for decision-making. This tab does not change risk elsewhere.
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="text-[11px] text-slate-500">
-                    Note: This tab is informational only and won't change risk or locks elsewhere.
-                  </div>
-                </div>
+              <div className="text-slate-600 dark:text-slate-300">Profit</div>
+              <div className="font-medium">
+                {currency(realizedProfit)} ({formatPct(realizedProfit, startBalance)})
               </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+
+              <div className="text-slate-600 dark:text-slate-300">Mode</div>
+              <div className="font-medium">{profitOnlyMode ? "Profit-Only" : "Standard"}</div>
+
+              <div className="text-slate-600 dark:text-slate-300">
+                Max Session Loss (min of profit/4 &amp; giveback)
+              </div>
+              <div className="font-medium">{currency(maxSessionLossGuard)}</div>
+
+              <div className="text-slate-600 dark:text-slate-300">Effective Loss Cap</div>
+              <div className="font-medium">
+                {Number.isFinite(effectiveLossCap) ? currency(effectiveLossCap) : "—"}
+              </div>
+            </div>
+
+            <div className="mt-3 rounded-md border bg-white p-3">
+              <div className="text-sm font-semibold mb-2">🎯 Giveback Plan — Recommendations</div>
+              <div className="grid md:grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                <div className="text-slate-600 dark:text-slate-300">Giveback Lock Amount</div>
+                <div className="font-medium">{currency(givebackLockAmt)}</div>
+
+                <div className="text-slate-600 dark:text-slate-300">Per-Trade Budget (×6 losses)</div>
+                <div className="font-medium">{currency(sixLossBudget)}</div>
+
+                <div className="text-slate-600 dark:text-slate-300">Recommended Risk % per Trade</div>
+                <div className="font-medium">{recommendedRiskPct.toFixed(2)}%</div>
+              </div>
+              <div className="text-[11px] text-slate-500 mt-2">
+                These are guidance values only for decision-making. This tab does not change risk elsewhere.
+              </div>
+            </div>
+          </div>
+
+          <div className="text-[11px] text-slate-500">
+            Note: This tab is informational only and won&apos;t change risk or locks elsewhere.
+          </div>
+        </div>
+      </div>
+    </CardContent>
+  </Card>
+</TabsContent>
 
       </Tabs>
     </div>
