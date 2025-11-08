@@ -2262,7 +2262,7 @@ function AutoImportPanel({ addTradesBulkFn }: { addTradesBulkFn: (rows: TradeRow
         <input
           value={account}
           onChange={(e) => setAccount(e.target.value)}
-          placeholder="140055310"
+          placeholder="12345789"
           className="w-full border rounded px-2 py-1"
         />
       </div>
