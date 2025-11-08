@@ -1,4 +1,3 @@
-
 /* PageClient.tsx — Ultimate Scalper Tool (3× Risk & Sizing + Combobox Logger) */
 "use client";
 
@@ -554,28 +553,28 @@ function PageInner() {
   }, [trades, startBalance]);
 
   /* Trades helpers */
-function addTrade(
-  t: Omit<TradeRow, "id" | "ts"> & Partial<Pick<TradeRow, "source">>
-) {
-  if (locked && lockOnHit) return;
+  function addTrade(
+    t: Omit<TradeRow, "id" | "ts"> & Partial<Pick<TradeRow, "source">>
+  ) {
+    if (locked && lockOnHit) return;
 
-  const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-  const row: TradeRow = {
-    id,
-    ts: Date.now(),
-    // default to manual if not provided
-    source: t.source ?? "manual",
-    ...t,
-  };
+    const row: TradeRow = {
+      id,
+      ts: Date.now(),
+      // default to manual if not provided
+      source: t.source ?? "manual",
+      ...t,
+    };
 
-  setTrades(prev => [row, ...prev]);
-}
+    setTrades(prev => [row, ...prev]);
+  }
 
   function addTradesBulk(rows: TradeRow[]) {
-  if (!rows.length) return;
-  setTrades(prev => [...rows.map(r => ({ ...r, source: r.source ?? "auto" })), ...prev]);
-}
+    if (!rows.length) return;
+    setTrades(prev => [...rows.map(r => ({ ...r, source: r.source ?? "auto" })), ...prev]);
+  }
 
   function deleteTrade(id: string) {
     setTrades(trades.filter((t) => t.id !== id));
@@ -595,223 +594,218 @@ function addTrade(
   return (
     <div className="max-w-7xl mx-auto px-4 py-6 space-y-4">
       {/* Header */}
-<div className="flex items-center justify-between gap-3">
-  {/* LEFT: logo + title + status */}
-  <div className="flex items-center gap-3">
-    <img
-      src="/ust-logo.png"
-      alt="Ultimate Scalper Tool"
-      className="h-9 w-auto select-none"
-    />
-    <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
-      Ultimate Scalper Tool – Strategy Console
-    </h1>
+      <div className="flex items-center justify-between gap-3">
+        {/* LEFT: logo + title + status */}
+        <div className="flex items-center gap-3">
+          <img
+            src="/ust-logo.png"
+            alt="Ultimate Scalper Tool"
+            className="h-9 w-auto select-none"
+          />
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
+            Ultimate Scalper Tool – Strategy Console
+          </h1>
 
-    <span
-      className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full border ${
-        locked && lockOnHit
-          ? "bg-rose-50 text-rose-700 border-rose-200"
-          : "bg-emerald-50 text-emerald-700 border-emerald-200"
-      }`}
-      title={locked && lockOnHit ? "Trading locked for today (max loss hit)" : "Active"}
-    >
-      <span
-        className={`h-2 w-2 rounded-full ${
-          locked && lockOnHit ? "bg-rose-500" : "bg-emerald-500"
-        }`}
-      />
-      {locked && lockOnHit ? "Locked" : "Active"}
-    </span>
-  </div>
+          <span
+            className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full border ${
+              locked && lockOnHit
+                ? "bg-rose-50 text-rose-700 border-rose-200"
+                : "bg-emerald-50 text-emerald-700 border-emerald-200"
+            }`}
+            title={locked && lockOnHit ? "Trading locked for today (max loss hit)" : "Active"}
+          >
+            <span
+              className={`h-2 w-2 rounded-full ${
+                locked && lockOnHit ? "bg-rose-500" : "bg-emerald-500"
+              }`}
+            />
+            {locked && lockOnHit ? "Locked" : "Active"}
+          </span>
+        </div>
 
-  {/* RIGHT: theme toggle + actions */}
-  <div className="flex items-center gap-2">
-    <ThemeToggle />
+        {/* RIGHT: theme toggle + actions */}
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
 
-    <Button disabled={!hasSessionActivity}
-      onClick={async () => {
-          if (!hasSessionActivity) {
-            push({ title: "No trades logged", desc: "You can’t end the session without at least one trade or equity change." });
-            return;
-          }
-        try {
-          if (!user?.id) {
-            push({ title: "Please sign in", desc: "You need to sign in to save sessions." });
-            return;
-          }
-          const startedAtISO = new Date(Number(sessionId || Date.now())).toISOString();
-          const endedAtISO = new Date().toISOString();
-          await recordSessionToLeaderboard(user.id, Number(pnl || 0), startedAtISO, endedAtISO);
-          newSessionId();
-          push({ title: "Session saved", desc: "Leaderboard updated." });
-        } catch (e) {
-          console.error(e);
-          newSessionId();
-        }
-      }}
-    >
-      End Session / Start New
-    </Button>
+          <Button disabled={!hasSessionActivity}
+            onClick={async () => {
+              if (!hasSessionActivity) {
+                push({ title: "No trades logged", desc: "You can’t end the session without at least one trade or equity change." });
+                return;
+              }
+              try {
+                if (!user?.id) {
+                  push({ title: "Please sign in", desc: "You need to sign in to save sessions." });
+                  return;
+                }
+                const startedAtISO = new Date(Number(sessionId || Date.now())).toISOString();
+                const endedAtISO = new Date().toISOString();
+                await recordSessionToLeaderboard(user.id, Number(pnl || 0), startedAtISO, endedAtISO);
+                newSessionId();
+                push({ title: "Session saved", desc: "Leaderboard updated." });
+              } catch (e) {
+                console.error(e);
+                newSessionId();
+              }
+            }}
+          >
+            End Session / Start New
+          </Button>
 
-    {user && (
-      <Button
-        variant="outline"
-        onClick={async () => {
-          try {
-            await supabase.auth.signOut();
-            push({ title: "Signed out", desc: "See you next session." });
-          } catch (e) {
-            console.error(e);
-            push({ title: "Sign out failed", desc: "Please try again." });
-          }
-        }}
-      >
-        Sign Out
-      </Button>
-    )}
-  </div>
-</div>
+          {user && (
+            <Button
+              variant="outline"
+              onClick={async () => {
+                try {
+                  await supabase.auth.signOut();
+                  push({ title: "Signed out", desc: "See you next session." });
+                } catch (e) {
+                  console.error(e);
+                  push({ title: "Sign out failed", desc: "Please try again." });
+                }
+              }}
+            >
+              Sign Out
+            </Button>
+          )}
+        </div>
+      </div>
 
-
-    {/* Tabs */}
-<Tabs defaultValue="dashboard" className="w-full">
-  <TabsList
-    className="mb-3 flex gap-1 bg-transparent p-0 overflow-x-auto whitespace-nowrap no-scrollbar"
-  >
-    {/* Dashboard */}
-    <TabsTrigger
-      value="dashboard"
-      className="rounded-full px-3 py-1 text-[13px] font-medium
+      {/* Tabs */}
+      <Tabs defaultValue="dashboard" className="w-full">
+        <TabsList
+          className="mb-3 flex gap-1 bg-transparent p-0 overflow-x-auto whitespace-nowrap no-scrollbar"
+        >
+          {/* Dashboard */}
+          <TabsTrigger
+            value="dashboard"
+            className="rounded-full px-3 py-1 text-[13px] font-medium
                  border border-slate-500/30
                  text-slate-700 hover:text-slate-900 hover:bg-slate-100
                  dark:text-slate-300 dark:hover:bg-slate-800/70
                  data-[state=active]:bg-amber-400 data-[state=active]:text-black data-[state=active]:border-amber-400
                  dark:data-[state=active]:bg-amber-400 dark:data-[state=active]:text-black"
-    >
-      Dashboard
-    </TabsTrigger>
+          >
+            Dashboard
+          </TabsTrigger>
 
-    {/* Analytics */}
-    <TabsTrigger
-      value="analytics"
-      className="rounded-full px-3 py-1 text-[13px] font-medium
+          {/* Analytics */}
+          <TabsTrigger
+            value="analytics"
+            className="rounded-full px-3 py-1 text-[13px] font-medium
                  border border-slate-500/30
                  text-slate-700 hover:text-slate-900 hover:bg-slate-100
                  dark:text-slate-300 dark:hover:bg-slate-800/70
                  data-[state=active]:bg-amber-400 data-[state=active]:text-black data-[state=active]:border-amber-400
                  dark:data-[state=active]:bg-amber-400 dark:data-[state=active]:text-black"
-    >
-      Analytics
-    </TabsTrigger>
+          >
+            Analytics
+          </TabsTrigger>
 
-    {/* Risk & Sizing (Deriv) */}
-    <TabsTrigger
-      value="risk-deriv"
-      className="rounded-full px-3 py-1 text-[13px] font-medium
+          {/* Risk & Sizing (Deriv) */}
+          <TabsTrigger
+            value="risk-deriv"
+            className="rounded-full px-3 py-1 text-[13px] font-medium
                  border border-slate-500/30
                  text-slate-700 hover:text-slate-900 hover:bg-slate-100
                  dark:text-slate-300 dark:hover:bg-slate-800/70
                  data-[state=active]:bg-amber-400 data-[state=active]:text-black data-[state=active]:border-amber-400
                  dark:data-[state=active]:bg-amber-400 dark:data-[state=active]:text-black"
-    >
-      Risk &amp; Sizing (Deriv)
-    </TabsTrigger>
+          >
+            Risk &amp; Sizing (Deriv)
+          </TabsTrigger>
 
-    {/* Risk & Sizing (FX) */}
-    <TabsTrigger
-      value="risk-fx"
-      className="rounded-full px-3 py-1 text-[13px] font-medium
+          {/* Risk & Sizing (FX) */}
+          <TabsTrigger
+            value="risk-fx"
+            className="rounded-full px-3 py-1 text-[13px] font-medium
                  border border-slate-500/30
                  text-slate-700 hover:text-slate-900 hover:bg-slate-100
                  dark:text-slate-300 dark:hover:bg-slate-800/70
                  data-[state=active]:bg-amber-400 data-[state=active]:text-black data-[state=active]:border-amber-400
                  dark:data-[state=active]:bg-amber-400 dark:data-[state=active]:text-black"
-    >
-      Risk &amp; Sizing (FX)
-    </TabsTrigger>
+          >
+            Risk &amp; Sizing (FX)
+          </TabsTrigger>
 
-    {/* Risk & Sizing (XAU/NAS/US30/BTC) */}
-    <TabsTrigger
-      value="risk-majors"
-      className="rounded-full px-3 py-1 text-[13px] font-medium
+          {/* Risk & Sizing (XAU/NAS/US30/BTC) */}
+          <TabsTrigger
+            value="risk-majors"
+            className="rounded-full px-3 py-1 text-[13px] font-medium
                  border border-slate-500/30
                  text-slate-700 hover:text-slate-900 hover:bg-slate-100
                  dark:text-slate-300 dark:hover:bg-slate-800/70
                  data-[state=active]:bg-amber-400 data-[state=active]:text-black data-[state=active]:border-amber-400
                  dark:data-[state=active]:bg-amber-400 dark:data-[state=active]:text-black"
-    >
-      Risk &amp; Sizing (XAU/NAS/US30/BTC)
-    </TabsTrigger>
+          >
+            Risk &amp; Sizing (XAU/NAS/US30/BTC)
+          </TabsTrigger>
 
-    {/* Trade Journal */}
-    <TabsTrigger
-      value="journal"
-      className="rounded-full px-3 py-1 text-[13px] font-medium
+          {/* Trade Journal */}
+          <TabsTrigger
+            value="journal"
+            className="rounded-full px-3 py-1 text-[13px] font-medium
                  border border-slate-500/30
                  text-slate-700 hover:text-slate-900 hover:bg-slate-100
                  dark:text-slate-300 dark:hover:bg-slate-800/70
                  data-[state=active]:bg-amber-400 data-[state=active]:text-black data-[state=active]:border-amber-400
                  dark:data-[state=active]:bg-amber-400 dark:data-[state=active]:text-black"
-    >
-      Trade Journal
-    </TabsTrigger>
+          >
+            Trade Journal
+          </TabsTrigger>
 
-    {/* Calendar */}
-    <TabsTrigger
-      value="calendar"
-      className="rounded-full px-3 py-1 text-[13px] font-medium
+          {/* Calendar */}
+          <TabsTrigger
+            value="calendar"
+            className="rounded-full px-3 py-1 text-[13px] font-medium
                  border border-slate-500/30
                  text-slate-700 hover:text-slate-900 hover:bg-slate-100
                  dark:text-slate-300 dark:hover:bg-slate-800/70
                  data-[state=active]:bg-amber-400 data-[state=active]:text-black data-[state=active]:border-amber-400
                  dark:data-[state=active]:bg-amber-400 dark:data-[state=active]:text-black"
-    >
-      Calendar
-    </TabsTrigger>
+          >
+            Calendar
+          </TabsTrigger>
 
-    {/* A-Setups */}
-    <TabsTrigger
-      value="asetups"
-      className="rounded-full px-3 py-1 text-[13px] font-medium
+          {/* A-Setups */}
+          <TabsTrigger
+            value="asetups"
+            className="rounded-full px-3 py-1 text-[13px] font-medium
                  border border-slate-500/30
                  text-slate-700 hover:text-slate-900 hover:bg-slate-100
                  dark:text-slate-300 dark:hover:bg-slate-800/70
                  data-[state=active]:bg-amber-400 data-[state=active]:text-black data-[state=active]:border-amber-400
                  dark:data-[state=active]:bg-amber-400 dark:data-[state=active]:text-black"
-    >
-      A-Setups
-    </TabsTrigger>
+          >
+            A-Setups
+          </TabsTrigger>
 
-    {/* Checklist */}
-    <TabsTrigger
-      value="checklist"
-      className="rounded-full px-3 py-1 text-[13px] font-medium
+          {/* Checklist */}
+          <TabsTrigger
+            value="checklist"
+            className="rounded-full px-3 py-1 text-[13px] font-medium
                  border border-slate-500/30
                  text-slate-700 hover:text-slate-900 hover:bg-slate-100
                  dark:text-slate-300 dark:hover:bg-slate-800/70
                  data-[state=active]:bg-amber-400 data-[state=active]:text-black data-[state=active]:border-amber-400
                  dark:data-[state=active]:bg-amber-400 dark:data-[state=active]:text-black"
-    >
-      Checklist
-    </TabsTrigger>
+          >
+            Checklist
+          </TabsTrigger>
 
-    {/* Leaderboard */}
-    <a
-      href="/leaderboard"
-      className="inline-flex items-center justify-center whitespace-nowrap
+          {/* Leaderboard */}
+          <a
+            href="/leaderboard"
+            className="inline-flex items-center justify-center whitespace-nowrap
                  rounded-full px-3 py-1 text-[13px] font-medium
                  border border-slate-500/30
                  text-slate-700 hover:text-slate-900 hover:bg-slate-100
                  dark:text-slate-300 dark:hover:bg-slate-800/70
                  transition-colors"
-    >
-      Leaderboard
-    </a>
-  </TabsList>
-
-  {/* Your existing <TabsContent> blocks go below */}
-
-
+          >
+            Leaderboard
+          </a>
+        </TabsList>
 
         {/* DASHBOARD */}
         <TabsContent value="dashboard" className="space-y-4">
@@ -920,34 +914,31 @@ function addTrade(
 
           <BadgeShowcase badge={badge} sessionsCount={sessionsCount} />
 
-         <Card>
-  <CardContent className="p-5">
-    <h4 className="text-lg font-semibold mb-2">Equity Curve (All Time)</h4>
-    <div className="h-72">
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={equitySeries} margin={{ top: 8, right: 12, bottom: 20, left: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" />
-
-          <XAxis />
-
-          <YAxis />
-          <RTooltip
-            labelFormatter={(v) =>
-              new Date(v).toLocaleDateString(undefined, {
-                weekday: "short",
-                month: "short",
-                day: "numeric",
-                year: "numeric",
-              })
-            }
-          />
-          <Line type="monotone" dataKey="equity" stroke="#2563eb" dot={false} />
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
-  </CardContent>
-</Card>
-
+          <Card>
+            <CardContent className="p-5">
+              <h4 className="text-lg font-semibold mb-2">Equity Curve (All Time)</h4>
+              <div className="h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={equitySeries} margin={{ top: 8, right: 12, bottom: 20, left: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis />
+                    <YAxis />
+                    <RTooltip
+                      labelFormatter={(v) =>
+                        new Date(v).toLocaleDateString(undefined, {
+                          weekday: "short",
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        })
+                      }
+                    />
+                    <Line type="monotone" dataKey="equity" stroke="#2563eb" dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* ANALYTICS */}
@@ -1029,13 +1020,13 @@ function addTrade(
             </Card>
           )}
 
-{/* Auto-Import from Google Sheets */}
-<div className="border rounded-xl p-4 mb-4">
-  <h3 className="font-semibold mb-2">Auto-Import Closed Trades (Google Sheets)</h3>
-  <AutoImportPanel />
-</div>
+          {/* Auto-Import from Google Sheets */}
+          <div className="border rounded-xl p-4 mb-4">
+            <h3 className="font-semibold mb-2">Auto-Import Closed Trades (Google Sheets)</h3>
+            {/* FIX: pass addTradesBulk as a prop so it's in scope */}
+            <AutoImportPanel addTradesBulkFn={addTradesBulk} />
+          </div>
 
-          
           <MultiQuickLogger
             initialRows={3}
             maxRows={4}
@@ -1094,7 +1085,7 @@ function addTrade(
                 <div className="space-y-3">
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <Label>Profit‑Only Trigger (info, % of start)</Label>
+                      <Label>Profit-Only Trigger (info, % of start)</Label>
                       <Input type="number" value={thresholdPct} onChange={(e)=>setThresholdPct(Number(e.target.value)||0)} />
                       <div className="text-[11px] text-slate-500 mt-1">Default 30%</div>
                     </div>
@@ -1106,7 +1097,7 @@ function addTrade(
                   </div>
 
                   <div className="rounded-md border p-3 bg-slate-50">
-                    <div className="text-sm font-medium mb-1">Live Snapshot (read‑only)</div>
+                    <div className="text-sm font-medium mb-1">Live Snapshot (read-only)</div>
                     <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
                       <div className="text-slate-600 dark:text-slate-300">Start Capital</div><div className="font-medium">{currency(startBalance)}</div>
                       <div className="text-slate-600 dark:text-slate-300">Equity</div><div className="font-medium">{currency(equity)}</div>
@@ -1126,10 +1117,10 @@ function addTrade(
                         "",
                         `Start: ${currency(startBalance)} • Equity: ${currency(equity)}`,
                         `Profit: ${currency(Math.max(0, equity - startBalance))}`,
-                        `Profit‑Only threshold: ${thresholdPct}% (${currency((thresholdPct/100)*startBalance)})`,
+                        `Profit-Only threshold: ${thresholdPct}% (${currency((thresholdPct/100)*startBalance)})`,
                         givebackPct ? `Giveback lock (info): ${givebackPct}%` : null,
                         `Time: ${new Date().toLocaleString()}`
-                      ].filter(Boolean).join("\\n");
+                      ].filter(Boolean).join("\n");
                       navigator.clipboard.writeText(txt).then(()=>{
                         push({ title: "Copied", desc: "Checklist summary copied." });
                       });
@@ -1140,7 +1131,7 @@ function addTrade(
                       push({ title: "Session started", desc: `Session ID: ${id}` });
                     }}>Start Session</Button>
                   </div>
-                  {/* === Live Snapshot (read-only) === */}
+
                   <div className="rounded-md border p-3 bg-slate-50">
                     <div className="text-sm font-medium mb-1">Live Snapshot (read-only)</div>
                     <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
@@ -1185,7 +1176,6 @@ function addTrade(
                       </div>
                     </div>
                   </div>
-
 
                   <div className="text-[11px] text-slate-500">
                     Note: This tab is informational only and won't change risk or locks elsewhere.
@@ -1253,24 +1243,24 @@ function CapitalAndRiskCard({
             onChange={(e) => setStartBalance(Number(e.target.value) || 0)}
             disabled={tradesCount > 0}
           />
-          {tradesCount > 0 && (
-            <div className="text-xs text-slate-500 mt-1">
-              Locked after first trade.{" "}
-              <button
-                className="underline text-rose-600"
-                onClick={() => {
-                  if (confirm("Reset ALL trades and sessions and unlock starting capital?")) {
-                    localStorage.removeItem("ust-trades");
-                    localStorage.removeItem("ust-session-id");
-                    localStorage.removeItem("ust-session-history");
-                    location.reload();
-                  }
-                }}
-              >
-                Reset equity
-              </button>
-            </div>
-          )}
+            {tradesCount > 0 && (
+              <div className="text-xs text-slate-500 mt-1">
+                Locked after first trade.{" "}
+                <button
+                  className="underline text-rose-600"
+                  onClick={() => {
+                    if (confirm("Reset ALL trades and sessions and unlock starting capital?")) {
+                      localStorage.removeItem("ust-trades");
+                      localStorage.removeItem("ust-session-id");
+                      localStorage.removeItem("ust-session-history");
+                      location.reload();
+                    }
+                  }}
+                >
+                  Reset equity
+                </button>
+              </div>
+            )}
         </div>
         <div className="md:col-span-1">
           <Label>Risk % per Trade</Label>
@@ -1889,54 +1879,44 @@ function AnalyticsPanel({ trades }: { trades: TradeRow[] }) {
       </Card>
 
       <Card>
-  <CardContent className="p-5">
-    <h4 className="text-lg font-semibold mb-2">PnL by Market (All Time)</h4>
-    <div className="h-72">
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart
-          data={byMarket}
-          margin={{ top: 8, right: 12, bottom: 32, left: 0 }}
-          barCategoryGap={20}   // spacing between categories
-          barGap={2}
-        >
-          <CartesianGrid strokeDasharray="3 3" />
-
-          {/* Show ALL market names; angle a bit so they fit */}
-          <XAxis
-            dataKey="name"
-            interval={0}                // ← never skip labels
-            height={56}                 // room for angled text
-            angle={-15}
-            textAnchor="end"
-            tickLine={false}
-            axisLine={{ stroke: "#9aa7bd33" }}
-            tick={{ fontSize: 12, fill: "currentColor" }}
-          />
-
-          <YAxis
-            tickLine={false}
-            axisLine={{ stroke: "#9aa7bd33" }}
-            tick={{ fontSize: 12, fill: "currentColor" }}
-          />
-
-          <RTooltip
-            formatter={(value: number) => [value, "pnl"]}
-            labelFormatter={(label: string) => `Market: ${label}`}
-          />
-          <Legend />
-
-          <Bar
-            dataKey="pnl"
-            fill="#2563eb"
-            radius={[4, 4, 0, 0]}
-            maxBarSize={48}             // caps column width on wide screens
-          />
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
-  </CardContent>
-</Card>
-
+        <CardContent className="p-5">
+          <h4 className="text-lg font-semibold mb-2">PnL by Market (All Time)</h4>
+          <div className="h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={byMarket}
+                margin={{ top: 8, right: 12, bottom: 32, left: 0 }}
+                barCategoryGap={20}
+                barGap={2}
+              >
+                <CartesianGrid strokeDasharray="3 3" />
+                {/* Show ALL market names; angle a bit so they fit */}
+                <XAxis
+                  dataKey="name"
+                  interval={0}
+                  height={56}
+                  angle={-15}
+                  textAnchor="end"
+                  tickLine={false}
+                  axisLine={{ stroke: "#9aa7bd33" }}
+                  tick={{ fontSize: 12, fill: "currentColor" }}
+                />
+                <YAxis
+                  tickLine={false}
+                  axisLine={{ stroke: "#9aa7bd33" }}
+                  tick={{ fontSize: 12, fill: "currentColor" }}
+                />
+                <RTooltip
+                  formatter={(value: number) => [value, "pnl"]}
+                  labelFormatter={(label: string) => `Market: ${label}`}
+                />
+                <Legend />
+                <Bar dataKey="pnl" fill="#2563eb" radius={[4, 4, 0, 0]} maxBarSize={48} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -2256,9 +2236,12 @@ function OldCalendar({
   );
 }
 
-function AutoImportPanel() {
+/* =========================================================================
+   Auto-Import panel (FIXED to receive the bulk adder via props)
+============================================================================ */
+function AutoImportPanel({ addTradesBulkFn }: { addTradesBulkFn: (rows: TradeRow[]) => void }) {
   const { enabled, setEnabled, account, setAccount, since, setSince, lastSync, runImport } =
-    useSheetsImporter(addTradesBulk);
+    useSheetsImporter(addTradesBulkFn);
 
   return (
     <div className="grid md:grid-cols-12 gap-3 items-end">
