@@ -358,14 +358,14 @@ async function recordSessionToLeaderboard(
   }
 }
 
-/* =========================================================================
+/* =============================================================
    Page wrapper
-============================================================================ */
-export default function Page() {
+============================================================= */
+export default function PageClientWrapper() {
   return (
     <ToastProvider>
       <AuthGate>
-        <PageInner />
+        <PageClient />
       </AuthGate>
     </ToastProvider>
   );
