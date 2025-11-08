@@ -48,6 +48,140 @@ import {
   Legend,
 } from "recharts";
 
+// ====== AUTO IMPORT HELPERS (UST ⇄ Google Sheets) ======
+import React from "react";
+
+type TradeRow = {
+  id: string;
+  symbol: string;
+  pnl: number;
+  notes?: string;
+  ts?: number;
+  // NEW:
+  source?: "manual" | "auto";
+  extId?: string; // deal_ticket or order_ticket for dedupe
+};
+
+// tiny localStorage hook (unique key names to avoid collision)
+function useLS<T>(key: string, initial: T) {
+  const [v, setV] = React.useState<T>(() => {
+    try {
+      const raw = localStorage.getItem(key);
+      return raw ? (JSON.parse(raw) as T) : initial;
+    } catch {
+      return initial;
+    }
+  });
+  React.useEffect(() => {
+    try { localStorage.setItem(key, JSON.stringify(v)); } catch {}
+  }, [key, v]);
+  return [v, setV] as const;
+}
+
+type SheetItem = {
+  timestamp?: string;
+  account?: string;
+  symbol?: string;
+  action?: string; // ORDER_OPEN / ORDER_CLOSE
+  side?: string;
+  deal_ticket?: string | number;
+  order_ticket?: string | number;
+  volume?: number | string;
+  price?: number | string;
+  sl?: number | string;
+  tp?: number | string;
+  profit?: number | string;
+  commission?: number | string;
+  swap?: number | string;
+  comment?: string;
+};
+
+const SHEETS_URL =
+  process.env.NEXT_PUBLIC_SHEETS_WEBAPP_URL || "";
+const SHEETS_TOKEN =
+  process.env.NEXT_PUBLIC_SHEETS_READ_TOKEN || "";
+const DEFAULT_ACCOUNT =
+  process.env.NEXT_PUBLIC_UST_ACCOUNT || "";
+
+function buildSheetsUrl(account: string, since?: string) {
+  const u = new URL(SHEETS_URL);
+  u.searchParams.set("readToken", SHEETS_TOKEN);
+  u.searchParams.set("account", account);
+  if (since) u.searchParams.set("since", since);
+  return u.toString();
+}
+
+function normalizeToTradeRows(items: SheetItem[]): TradeRow[] {
+  const rows: TradeRow[] = [];
+  for (const it of items) {
+    // import only closed trades into Journal
+    if ((it.action || "").toUpperCase() !== "ORDER_CLOSE") continue;
+
+    const ts = it.timestamp ? new Date(it.timestamp).getTime() : Date.now();
+    const profit = Number(it.profit || 0);
+    const commission = Number(it.commission || 0);
+    const swap = Number(it.swap || 0);
+    const pnl = Number((profit - commission - swap).toFixed(2));
+    const extId = String(it.deal_ticket || it.order_ticket || "");
+
+    rows.push({
+      id: `${ts}-${extId || Math.random().toString(36).slice(2,6)}`,
+      ts,
+      symbol: it.symbol || "Unknown",
+      pnl,
+      notes: `AUTO • ${it.side || ""} • vol ${it.volume ?? ""} @ ${it.price ?? ""}`,
+      source: "auto",
+      extId,
+    });
+  }
+  // newest first
+  rows.sort((a, b) => (b.ts ?? 0) - (a.ts ?? 0));
+  return rows;
+}
+
+function useSheetsImporter(addTradesBulk: (rows: TradeRow[]) => void) {
+  const [enabled, setEnabled] = useLS<boolean>("ust:autoEnabled", true);
+  const [account, setAccount] = useLS<string>("ust:autoAccount", DEFAULT_ACCOUNT || "");
+  const [since, setSince] = useLS<string>("ust:autoSince", "");
+  const [lastSync, setLastSync] = useLS<number>("ust:lastSync", 0);
+  const [seen, setSeen] = useLS<string[]>("ust:seenExtIds", []);
+
+  const runImport = React.useCallback(async () => {
+    if (!enabled || !SHEETS_URL || !SHEETS_TOKEN || !account) return;
+    try {
+      const url = buildSheetsUrl(account, since);
+      const r = await fetch(url, { cache: "no-store" });
+      const data = await r.json();
+      if (!data?.ok) return;
+      const items: SheetItem[] = data.items || [];
+      const rows = normalizeToTradeRows(items)
+        .filter(r => !r.extId || !seen.includes(r.extId));
+      if (rows.length) {
+        addTradesBulk(rows);
+        const nextSeen = [
+          ...seen,
+          ...rows.filter(r => !!r.extId).map(r => r.extId as string),
+        ];
+        // keep memory bounded
+        setSeen(Array.from(new Set(nextSeen)).slice(-6000));
+      }
+      setLastSync(Date.now());
+    } catch (e) {
+      // swallow; we don’t want to interrupt the app
+      console.warn("Auto-import failed:", e);
+    }
+  }, [enabled, account, since, seen, addTradesBulk, setSeen, setLastSync]);
+
+  // poll every 20s
+  React.useEffect(() => {
+    runImport(); // first tick
+    const t = setInterval(runImport, 20000);
+    return () => clearInterval(t);
+  }, [runImport]);
+
+  return { enabled, setEnabled, account, setAccount, since, setSince, lastSync, runImport };
+}
+
 /* =========================================================================
    Tiny Toasts (local, no external deps)
 ============================================================================ */
@@ -428,12 +562,29 @@ function PageInner() {
   }, [trades, startBalance]);
 
   /* Trades helpers */
-  function addTrade(t: Omit<TradeRow, "id" | "ts">) {
-    if (locked && lockOnHit) return;
-    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const row: TradeRow = { id, ts: Date.now(), ...t };
-    setTrades([row, ...trades]);
-  }
+function addTrade(
+  t: Omit<TradeRow, "id" | "ts"> & Partial<Pick<TradeRow, "source">>
+) {
+  if (locked && lockOnHit) return;
+
+  const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+  const row: TradeRow = {
+    id,
+    ts: Date.now(),
+    // default to manual if not provided
+    source: t.source ?? "manual",
+    ...t,
+  };
+
+  setTrades(prev => [row, ...prev]);
+}
+
+  function addTradesBulk(rows: TradeRow[]) {
+  if (!rows.length) return;
+  setTrades(prev => [...rows.map(r => ({ ...r, source: r.source ?? "auto" })), ...prev]);
+}
+
   function deleteTrade(id: string) {
     setTrades(trades.filter((t) => t.id !== id));
   }
@@ -886,6 +1037,13 @@ function PageInner() {
             </Card>
           )}
 
+{/* Auto-Import from Google Sheets */}
+<div className="border rounded-xl p-4 mb-4">
+  <h3 className="font-semibold mb-2">Auto-Import Closed Trades (Google Sheets)</h3>
+  <AutoImportPanel />
+</div>
+
+          
           <MultiQuickLogger
             initialRows={3}
             maxRows={4}
@@ -1672,7 +1830,17 @@ function JournalGrouped({
                     .map((t) => (
                       <div key={t.id} className="grid grid-cols-12 px-3 py-2 border-t text-sm">
                         <div className="col-span-3">{t.ts ? new Date(t.ts).toLocaleString() : "—"}</div>
-                        <div className="col-span-3">{t.symbol}</div>
+                        <div className="col-span-3 flex items-center gap-2">
+  <span>{t.symbol}</span>
+
+  {t.source && (
+    <span className="ml-2 text-[10px] px-1.5 py-[1px] rounded-full border align-middle
+      bg-emerald-50 text-emerald-700 border-emerald-200">
+      {t.source === "auto" ? "AUTO" : "MANUAL"}
+    </span>
+  )}
+</div>
+
                         <div className="col-span-4">{t.notes || "—"}</div>
                         <div className={`col-span-1 text-right ${t.pnl >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
                           {t.pnl >= 0 ? "+" : ""}
@@ -2103,5 +2271,56 @@ function OldCalendar({
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function AutoImportPanel() {
+  const { enabled, setEnabled, account, setAccount, since, setSince, lastSync, runImport } =
+    useSheetsImporter(addTradesBulk);
+
+  return (
+    <div className="grid md:grid-cols-12 gap-3 items-end">
+      <div className="md:col-span-2">
+        <label className="block text-xs mb-1">Enabled</label>
+        <select
+          value={String(enabled)}
+          onChange={(e) => setEnabled(e.target.value === "true")}
+          className="w-full border rounded px-2 py-1"
+        >
+          <option value="true">Yes</option>
+          <option value="false">No</option>
+        </select>
+      </div>
+
+      <div className="md:col-span-3">
+        <label className="block text-xs mb-1">Account #</label>
+        <input
+          value={account}
+          onChange={(e) => setAccount(e.target.value)}
+          placeholder="140055310"
+          className="w-full border rounded px-2 py-1"
+        />
+      </div>
+
+      <div className="md:col-span-3">
+        <label className="block text-xs mb-1">Since (YYYY-MM-DD, optional)</label>
+        <input
+          value={since}
+          onChange={(e) => setSince(e.target.value)}
+          placeholder="2025-11-01"
+          className="w-full border rounded px-2 py-1"
+        />
+      </div>
+
+      <div className="md:col-span-2">
+        <button onClick={runImport} className="w-full border rounded px-3 py-1">
+          Import Now
+        </button>
+      </div>
+
+      <div className="md:col-span-2 text-xs text-slate-500">
+        Last sync: {lastSync ? new Date(lastSync).toLocaleTimeString() : "—"}
+      </div>
+    </div>
   );
 }
