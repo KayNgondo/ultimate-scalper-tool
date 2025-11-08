@@ -365,12 +365,11 @@ export default function PageClientWrapper() {
   return (
     <ToastProvider>
       <AuthGate>
-        <PageClient />
+        <PageInner />
       </AuthGate>
     </ToastProvider>
   );
 }
-
 /* =========================================================================
    Main page content
 ============================================================================ */
