@@ -186,7 +186,6 @@ function useSheetsImporter(addTradesBulk: (rows: TradeRow[]) => void) {
    Tiny Toasts (local, no external deps)
 ============================================================================ */
 type ToastItem = { id: string; title: string; desc?: string };
-import React from "react";
 const ToastContext = React.createContext<{
   push: (t: Omit<ToastItem, "id">) => void;
 } | null>(null);
@@ -221,13 +220,7 @@ function useToast() {
 /* =========================================================================
    Utils / State
 ============================================================================ */
-type TradeRow = {
-  id: string;
-  symbol: string;
-  pnl: number;
-  notes?: string;
-  ts?: number;
-};
+
 
 const MARKET_OPTIONS = [
   "Step Index",
