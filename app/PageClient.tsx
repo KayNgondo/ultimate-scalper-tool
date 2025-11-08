@@ -3,6 +3,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useContext } from "react";
+import * as React from "react";
 import AuthGate from "@/components/AuthGate";
 import { useSupabaseUser } from "@/lib/useSupabaseUser";
 import { supabase } from "@/lib/supabase";
@@ -49,7 +50,6 @@ import {
 } from "recharts";
 
 // ====== AUTO IMPORT HELPERS (UST ⇄ Google Sheets) ======
-import React from "react";
 
 type TradeRow = {
   id: string;
@@ -104,19 +104,12 @@ const DEFAULT_ACCOUNT =
   process.env.NEXT_PUBLIC_UST_ACCOUNT || "";
 
 function buildSheetsUrl(account: string, since?: string) {
-  // If env vars are missing, do NOT build a URL (prevents crash)
-  if (!SHEETS_URL || !SHEETS_TOKEN) return null;
-  try {
-    const u = new URL(SHEETS_URL);
-    u.searchParams.set("readToken", SHEETS_TOKEN);
-    u.searchParams.set("account", account);
-    if (since) u.searchParams.set("since", since);
-    return u.toString();
-  } catch {
-    return null;
-  }
+  const u = new URL(SHEETS_URL);
+  u.searchParams.set("readToken", SHEETS_TOKEN);
+  u.searchParams.set("account", account);
+  if (since) u.searchParams.set("since", since);
+  return u.toString();
 }
-
 
 function normalizeToTradeRows(items: SheetItem[]): TradeRow[] {
   const rows: TradeRow[] = [];
@@ -154,37 +147,40 @@ function useSheetsImporter(addTradesBulk: (rows: TradeRow[]) => void) {
   const [seen, setSeen] = useLS<string[]>("ust:seenExtIds", []);
 
   const runImport = React.useCallback(async () => {
-  if (!enabled) return;
-
-  // must have account and env vars
-  if (!account || !SHEETS_URL || !SHEETS_TOKEN) return;
-
-  const url = buildSheetsUrl(account, since);
-  if (!url) return; // defensive: skip if URL can't be built
-
-  try {
-    const r = await fetch(url, { cache: "no-store" });
-    const data = await r.json().catch(() => ({}));
-    if (!data?.ok) return;
-
-    const items: SheetItem[] = data.items || [];
-    const rows = normalizeToTradeRows(items)
-      .filter(r => !r.extId || !seen.includes(r.extId));
-
-    if (rows.length) {
-      addTradesBulk(rows);
-      const nextSeen = [
-        ...seen,
-        ...rows.filter(r => !!r.extId).map(r => r.extId as string),
-      ];
-      setSeen(Array.from(new Set(nextSeen)).slice(-6000));
+    if (!enabled || !SHEETS_URL || !SHEETS_TOKEN || !account) return;
+    try {
+      const url = buildSheetsUrl(account, since);
+      const r = await fetch(url, { cache: "no-store" });
+      const data = await r.json();
+      if (!data?.ok) return;
+      const items: SheetItem[] = data.items || [];
+      const rows = normalizeToTradeRows(items)
+        .filter(r => !r.extId || !seen.includes(r.extId));
+      if (rows.length) {
+        addTradesBulk(rows);
+        const nextSeen = [
+          ...seen,
+          ...rows.filter(r => !!r.extId).map(r => r.extId as string),
+        ];
+        // keep memory bounded
+        setSeen(Array.from(new Set(nextSeen)).slice(-6000));
+      }
+      setLastSync(Date.now());
+    } catch (e) {
+      // swallow; we don’t want to interrupt the app
+      console.warn("Auto-import failed:", e);
     }
+  }, [enabled, account, since, seen, addTradesBulk, setSeen, setLastSync]);
 
-    setLastSync(Date.now());
-  } catch (e) {
-    console.warn("Auto-import failed:", e);
-  }
-}, [enabled, account, since, seen, addTradesBulk, setSeen, setLastSync]);
+  // poll every 20s
+  React.useEffect(() => {
+    runImport(); // first tick
+    const t = setInterval(runImport, 20000);
+    return () => clearInterval(t);
+  }, [runImport]);
+
+  return { enabled, setEnabled, account, setAccount, since, setSince, lastSync, runImport };
+}
 
 /* =========================================================================
    Tiny Toasts (local, no external deps)
@@ -224,7 +220,6 @@ function useToast() {
 /* =========================================================================
    Utils / State
 ============================================================================ */
-
 
 const MARKET_OPTIONS = [
   "Step Index",
@@ -358,10 +353,10 @@ async function recordSessionToLeaderboard(
   }
 }
 
-/* =============================================================
+/* =========================================================================
    Page wrapper
-============================================================= */
-export default function PageClientWrapper() {
+============================================================================ */
+function PageClientWrapper() {
   return (
     <ToastProvider>
       <AuthGate>
@@ -370,6 +365,7 @@ export default function PageClientWrapper() {
     </ToastProvider>
   );
 }
+
 /* =========================================================================
    Main page content
 ============================================================================ */
@@ -1826,17 +1822,7 @@ function JournalGrouped({
                     .map((t) => (
                       <div key={t.id} className="grid grid-cols-12 px-3 py-2 border-t text-sm">
                         <div className="col-span-3">{t.ts ? new Date(t.ts).toLocaleString() : "—"}</div>
-                        <div className="col-span-3 flex items-center gap-2">
-  <span>{t.symbol}</span>
-
-  {t.source && (
-    <span className="ml-2 text-[10px] px-1.5 py-[1px] rounded-full border align-middle
-      bg-emerald-50 text-emerald-700 border-emerald-200">
-      {t.source === "auto" ? "AUTO" : "MANUAL"}
-    </span>
-  )}
-</div>
-
+                        <div className="col-span-3">{t.symbol}</div>
                         <div className="col-span-4">{t.notes || "—"}</div>
                         <div className={`col-span-1 text-right ${t.pnl >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
                           {t.pnl >= 0 ? "+" : ""}
@@ -2320,3 +2306,5 @@ function AutoImportPanel() {
     </div>
   );
 }
+
+export default PageClientWrapper;
