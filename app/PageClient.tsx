@@ -369,8 +369,8 @@ function PageInner() {
   const { push } = useToast();
 
   /* Core state */
-  const [startBalance, setStartBalance] = useLocalStorage<number>("ust-start-balance", 1000);
-  const [riskPct, setRiskPct] = useLocalStorage<number>("ust-risk-pct", 5);
+  const [startBalance, setStartBalance] = useLocalStorage<number>("ust-start-balance", 0);
+  const [riskPct, setRiskPct] = useLocalStorage<number>("ust-risk-pct", 2.5);
   const [trades, setTrades] = useLocalStorage<TradeRow[]>("ust-trades", []);
   const [sessionId, setSessionId] = useLocalStorage<string | null>("ust-session-id", null);
   // Checklist-only state (no app-side effects)
