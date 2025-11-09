@@ -7,6 +7,8 @@ import AuthGate from "@/components/AuthGate";
 import { useSupabaseUser } from "@/lib/useSupabaseUser";
 import { supabase } from "@/lib/supabase";
 import ThemeToggle from "@/components/ThemeToggle";
+import { SHEETS_WEBAPP_URL as SHEETS_URL, READ_TOKEN as SHEETS_TOKEN, DEFAULT_UST_ACCOUNT as DEFAULT_ACCOUNT } from "@/lib/env";
+
 
 /* ========== shadcn/ui ========== */
 import { Button } from "@/components/ui/button";
@@ -95,12 +97,6 @@ type SheetItem = {
   comment?: string;
 };
 
-const SHEETS_URL =
-  process.env.NEXT_PUBLIC_SHEETS_WEBAPP_URL || "";
-const SHEETS_TOKEN =
-  process.env.NEXT_PUBLIC_SHEETS_READ_TOKEN || "";
-const DEFAULT_ACCOUNT =
-  process.env.NEXT_PUBLIC_UST_ACCOUNT || "";
 
 function buildSheetsUrl(account: string, since?: string) {
   const u = new URL(SHEETS_URL);
