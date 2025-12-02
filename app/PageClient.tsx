@@ -673,132 +673,83 @@ function PageInner() {
           className="mb-3 flex gap-1 bg-transparent p-0 overflow-x-auto whitespace-nowrap no-scrollbar"
         >
           {/* Dashboard */}
-          <TabsTrigger
-            value="dashboard"
-            className="rounded-full px-3 py-1 text-[13px] font-medium
-                 border border-slate-500/30
-                 text-slate-700 hover:text-slate-900 hover:bg-slate-100
-                 dark:text-slate-300 dark:hover:bg-slate-800/70
-                 data-[state=active]:bg-amber-400 data-[state=active]:text-black data-[state=active]:border-amber-400
-                 dark:data-[state=active]:bg-amber-400 dark:data-[state=active]:text-black"
-          >
-            Dashboard
-          </TabsTrigger>
+         <TabsTrigger
+  value="dashboard"
+  className="data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black transition-colors"
+>
+  Dashboard
+</TabsTrigger>
+
 
           {/* Analytics */}
           <TabsTrigger
             value="analytics"
-            className="rounded-full px-3 py-1 text-[13px] font-medium
-                 border border-slate-500/30
-                 text-slate-700 hover:text-slate-900 hover:bg-slate-100
-                 dark:text-slate-300 dark:hover:bg-slate-800/70
-                 data-[state=active]:bg-amber-400 data-[state=active]:text-black data-[state=active]:border-amber-400
-                 dark:data-[state=active]:bg-amber-400 dark:data-[state=active]:text-black"
-          >
+            className="data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black transition-colors"
+>
             Analytics
           </TabsTrigger>
 
           {/* Risk & Sizing (Deriv) */}
           <TabsTrigger
             value="risk-deriv"
-            className="rounded-full px-3 py-1 text-[13px] font-medium
-                 border border-slate-500/30
-                 text-slate-700 hover:text-slate-900 hover:bg-slate-100
-                 dark:text-slate-300 dark:hover:bg-slate-800/70
-                 data-[state=active]:bg-amber-400 data-[state=active]:text-black data-[state=active]:border-amber-400
-                 dark:data-[state=active]:bg-amber-400 dark:data-[state=active]:text-black"
-          >
+            className="data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black transition-colors"
+>
             Risk &amp; Sizing (Deriv)
           </TabsTrigger>
 
           {/* Risk & Sizing (FX) */}
           <TabsTrigger
             value="risk-fx"
-            className="rounded-full px-3 py-1 text-[13px] font-medium
-                 border border-slate-500/30
-                 text-slate-700 hover:text-slate-900 hover:bg-slate-100
-                 dark:text-slate-300 dark:hover:bg-slate-800/70
-                 data-[state=active]:bg-amber-400 data-[state=active]:text-black data-[state=active]:border-amber-400
-                 dark:data-[state=active]:bg-amber-400 dark:data-[state=active]:text-black"
-          >
+            className="data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black transition-colors"
+>
             Risk &amp; Sizing (FX)
           </TabsTrigger>
 
           {/* Risk & Sizing (XAU/NAS/US30/BTC) */}
           <TabsTrigger
             value="risk-majors"
-            className="rounded-full px-3 py-1 text-[13px] font-medium
-                 border border-slate-500/30
-                 text-slate-700 hover:text-slate-900 hover:bg-slate-100
-                 dark:text-slate-300 dark:hover:bg-slate-800/70
-                 data-[state=active]:bg-amber-400 data-[state=active]:text-black data-[state=active]:border-amber-400
-                 dark:data-[state=active]:bg-amber-400 dark:data-[state=active]:text-black"
-          >
+            className="data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black transition-colors"
+>
             Risk &amp; Sizing (XAU/NAS/US30/BTC)
           </TabsTrigger>
 
           {/* Trade Journal */}
           <TabsTrigger
             value="journal"
-            className="rounded-full px-3 py-1 text-[13px] font-medium
-                 border border-slate-500/30
-                 text-slate-700 hover:text-slate-900 hover:bg-slate-100
-                 dark:text-slate-300 dark:hover:bg-slate-800/70
-                 data-[state=active]:bg-amber-400 data-[state=active]:text-black data-[state=active]:border-amber-400
-                 dark:data-[state=active]:bg-amber-400 dark:data-[state=active]:text-black"
-          >
+            className="data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black transition-colors"
+>
             Trade Journal
           </TabsTrigger>
 
           {/* Calendar */}
           <TabsTrigger
             value="calendar"
-            className="rounded-full px-3 py-1 text-[13px] font-medium
-                 border border-slate-500/30
-                 text-slate-700 hover:text-slate-900 hover:bg-slate-100
-                 dark:text-slate-300 dark:hover:bg-slate-800/70
-                 data-[state=active]:bg-amber-400 data-[state=active]:text-black data-[state=active]:border-amber-400
-                 dark:data-[state=active]:bg-amber-400 dark:data-[state=active]:text-black"
-          >
+            className="data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black transition-colors"
+>
             Calendar
           </TabsTrigger>
 
           {/* A-Setups */}
           <TabsTrigger
             value="asetups"
-            className="rounded-full px-3 py-1 text-[13px] font-medium
-                 border border-slate-500/30
-                 text-slate-700 hover:text-slate-900 hover:bg-slate-100
-                 dark:text-slate-300 dark:hover:bg-slate-800/70
-                 data-[state=active]:bg-amber-400 data-[state=active]:text-black data-[state=active]:border-amber-400
-                 dark:data-[state=active]:bg-amber-400 dark:data-[state=active]:text-black"
-          >
+            className="data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black transition-colors"
+>
             A-Setups
           </TabsTrigger>
 
           {/* Checklist */}
           <TabsTrigger
             value="checklist"
-            className="rounded-full px-3 py-1 text-[13px] font-medium
-                 border border-slate-500/30
-                 text-slate-700 hover:text-slate-900 hover:bg-slate-100
-                 dark:text-slate-300 dark:hover:bg-slate-800/70
-                 data-[state=active]:bg-amber-400 data-[state=active]:text-black data-[state=active]:border-amber-400
-                 dark:data-[state=active]:bg-amber-400 dark:data-[state=active]:text-black"
-          >
+            className="data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black transition-colors"
+>
             Checklist
           </TabsTrigger>
 
           {/* Leaderboard */}
           <a
             href="/leaderboard"
-            className="inline-flex items-center justify-center whitespace-nowrap
-                 rounded-full px-3 py-1 text-[13px] font-medium
-                 border border-slate-500/30
-                 text-slate-700 hover:text-slate-900 hover:bg-slate-100
-                 dark:text-slate-300 dark:hover:bg-slate-800/70
-                 transition-colors"
-          >
+            className="data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black transition-colors"
+>
             Leaderboard
           </a>
         </TabsList>
