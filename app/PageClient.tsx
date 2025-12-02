@@ -1767,6 +1767,7 @@ function JournalGrouped({
                         </div>
                         <div className="col-span-1 text-right">
                           <Button variant="destructive" onClick={() => onDelete(t.id)} size="sm">
+                            className="text-[#D4AF37] hover:text-yellow-400 font-medium transition"
                             Delete
                           </Button>
                         </div>
