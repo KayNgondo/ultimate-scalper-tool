@@ -1654,9 +1654,15 @@ function MultiQuickLogger({
               </div>
 
               <div className="md:col-span-1">
-                <Button variant="destructive" onClick={() => removeRow(r.id)} disabled={locked}>
-                  Remove
-                </Button>
+                <Button
+  variant="outline"
+  className="text-yellow-500 border-yellow-500 hover:bg-yellow-500 hover:text-black transition-colors"
+  onClick={() => removeRow(r.id)}
+  disabled={locked}
+>
+  Remove
+</Button>
+
               </div>
             </div>
           ))}
