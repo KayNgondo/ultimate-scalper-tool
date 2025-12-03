@@ -1320,7 +1320,7 @@ function MarketSizerRowDeriv({ market, riskAmount }: { market: MarketName; riskA
   const lot = calcLotSizeDeriv(riskAmount, market, riskPips);
 
   return (
-    <div className="grid md:grid-cols-12 gap-3 items-end border rounded-lg p-3 bg-white/60">
+    <div className="grid md:grid-cols-12 gap-3 items-end border rounded-lg p-3 bg-[#D4AF37]/10 border-[#D4AF37]">
       <div className="md:col-span-5 font-medium">{market}</div>
       <div className="md:col-span-3">
         <Label>Risk Pips</Label>
