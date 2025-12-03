@@ -1420,7 +1420,7 @@ function UniversalSizerRow({
   const lot = calcLotSizeUniversal(riskAmount, riskPips, pipVal);
 
   return (
-    <div className="grid md:grid-cols-12 gap-3 items-end border rounded-lg p-3 bg-white/60">
+    <div className="grid md:grid-cols-12 gap-3 items-end border rounded-lg p-3 bg-[#D4AF37]/10 border-[#D4AF37]">
       <div className="md:col-span-4">
         <Label>Symbol</Label>
         <Input value={symbol} onChange={(e) => setSymbol(e.target.value.toUpperCase())} />
