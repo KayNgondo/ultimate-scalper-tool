@@ -218,7 +218,7 @@ function useToast() {
 
 const MARKET_OPTIONS = [
   "Step Index",
-  "Volatility 75 (1s) Index,
+  "Volatility 75 (1s) Index",
   "Volatility 75 Index",
   "Volatility 25 (1s) Index",
   "Volatility 25 Index",
@@ -296,7 +296,7 @@ function calcLotSizeDeriv(riskAmount: number, market: MarketName, riskPips: numb
     case "Step Index":
       return +(ra / rp).toFixed(3);
 
-    case "Volatility 75 (1s) Index:
+    case "Volatility 75 (1s) Index":
     case "Volatility 75 Index":
     case "Volatility 25 (1s) Index":
         return +((ra / rp) * 100).toFixed(3);
@@ -1465,7 +1465,7 @@ function getCustomSymbolsFromStorage() {
   // Default built-in markets
   const deriv = [
     "Step Index",
-    "Volatility 75 (1s) Index,
+    "Volatility 75 (1s) Index",
     "Volatility 75 Index",
     "Volatility 25 (1s) Index",
     "Volatility 25 Index",
@@ -1573,7 +1573,7 @@ function MultiQuickLogger({
   type Pending = { id: string; market: string; strategy: StrategyName; pnl: number };
   const emptyRow = (): Pending => ({
     id: `${Math.random().toString(36).slice(2, 8)}`,
-    market: "Volatility 75 (1s) Index,
+    market: "Volatility 75 (1s) Index",
     strategy: "Ultimate M1 Trend setup",
     pnl: 0,
   });
