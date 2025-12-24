@@ -218,11 +218,11 @@ function useToast() {
 
 const MARKET_OPTIONS = [
   "Step Index",
-  "Volatility 75 (1s)",
-  "Volatility 75",
-  "Volatility 25 (1s)",
-  "Volatility 25",
-  "Volatility 10 (1s)",
+  "Volatility 75 (1s) Index,
+  "Volatility 75 Index",
+  "Volatility 25 (1s) Index",
+  "Volatility 25 Index",
+  "Volatility 50 Index",
   "Withdrawals",
 ] as const;
 type MarketName = (typeof MARKET_OPTIONS)[number];
@@ -296,13 +296,15 @@ function calcLotSizeDeriv(riskAmount: number, market: MarketName, riskPips: numb
     case "Step Index":
       return +(ra / rp).toFixed(3);
 
-    case "Volatility 75 (1s)":
-    case "Volatility 75":
-    case "Volatility 25 (1s)":
-    case "Volatility 10 (1s)":
-      return +((ra / rp) * 100).toFixed(3);
+    case "Volatility 75 (1s) Index:
+    case "Volatility 75 Index":
+    case "Volatility 25 (1s) Index":
+        return +((ra / rp) * 100).toFixed(3);
 
-    case "Volatility 25":
+    case "Volatility 25 Index":
+      return +(ra / (rp / 1000)).toFixed(3);
+
+      case "Volatility 50 Index":
       return +(ra / (rp / 1000)).toFixed(3);
 
     default:
@@ -949,7 +951,7 @@ function PageInner() {
             storagePrefix="ust-majors"
             rows={[
               { id: "xau", defaultSymbol: "XAUUSD", defaultPipValue: 1 },   // placeholder; adjust to broker spec
-              { id: "nas", defaultSymbol: "NAS100", defaultPipValue: 1 },   // placeholder
+              { id: "nas", defaultSymbol: "US Tech 100", defaultPipValue: 1 },   // placeholder
               { id: "us30", defaultSymbol: "US30", defaultPipValue: 1 },    // placeholder
               { id: "btc", defaultSymbol: "BTCUSD", defaultPipValue: 1 },   // placeholder
             ]}
@@ -1463,11 +1465,11 @@ function getCustomSymbolsFromStorage() {
   // Default built-in markets
   const deriv = [
     "Step Index",
-    "Volatility 75 (1s)",
-    "Volatility 75",
-    "Volatility 25 (1s)",
-    "Volatility 25",
-    "Volatility 10 (1s)",
+    "Volatility 75 (1s) Index,
+    "Volatility 75 Index",
+    "Volatility 25 (1s) Index",
+    "Volatility 25 Index",
+    "Volatility 50 Index",
   ];
 
   // Default FX + Major indices if nothing is stored yet
@@ -1478,7 +1480,7 @@ function getCustomSymbolsFromStorage() {
     "AUDUSD",
     "USDCAD",
     "XAUUSD",
-    "NAS100",
+    "US Tech 100",
     "US30",
     "BTCUSD",
   ];
@@ -1571,7 +1573,7 @@ function MultiQuickLogger({
   type Pending = { id: string; market: string; strategy: StrategyName; pnl: number };
   const emptyRow = (): Pending => ({
     id: `${Math.random().toString(36).slice(2, 8)}`,
-    market: "Volatility 75 (1s)",
+    market: "Volatility 75 (1s) Index,
     strategy: "Ultimate M1 Trend setup",
     pnl: 0,
   });
