@@ -236,6 +236,147 @@ type StrategyName = (typeof STRATEGIES)[number];
 
 type ASetup = { id: string; title: string; dataUrl: string; notes?: string };
 
+type SessionSummary = {
+  sessionId: string;   // ✅ ADD THIS
+  startedAt: string; // ISO
+  endedAt: string;   // ISO
+  pnl: number;
+  trades: number;
+  wins: number;
+  losses: number;
+  bes: number;
+  winRate: number; // 0-100
+  topMarket: string;
+  disciplineScore: number; // 0-100
+  badges: string[];
+};
+
+// === UST WOW helpers (Discipline + Rules) ===
+function computeRuleBadges(input: {
+  lockOnHit: boolean;
+  maxLoss: number;
+  locked: boolean;
+  profitOnlyMode: boolean;
+  riskPct: number;
+  recommendedRiskPct: number;
+}) {
+  const badges: string[] = [];
+  if (input.maxLoss > 0) badges.push("Max Loss Guard");
+  if (input.lockOnHit) badges.push("Auto-Lock Enabled");
+  if (input.locked) badges.push("Auto-Lock Triggered");
+  if (input.profitOnlyMode) badges.push("Profit-Only Mode");
+
+  // Risk guidance: if recommendedRiskPct is meaningful, compare to current
+  if (input.recommendedRiskPct > 0) {
+    if (input.riskPct <= input.recommendedRiskPct * 1.1) badges.push("Risk Controlled");
+    if (input.riskPct <= input.recommendedRiskPct) badges.push("Risk Reduced");
+  }
+
+  // Remove duplicates
+  return Array.from(new Set(badges));
+}
+
+function computeDisciplineScore(input: {
+  startBalance: number;
+  equity: number;
+  pnl: number;
+  tradesCount: number;
+  maxLoss: number;
+  lockOnHit: boolean;
+  locked: boolean;
+  profitOnlyMode: boolean;
+  riskPct: number;
+  recommendedRiskPct: number;
+  whyTrade: string;
+  mentalReady: string;
+  sessionTarget: string;
+  setupsToday: string;
+}) {
+  // Start at 100 and subtract penalties (simple + explainable)
+  let score = 100;
+
+  // Basic reality checks
+  if (input.startBalance <= 0) score -= 20;
+  if (input.equity <= 0) score -= 20;
+
+  // Guardrails
+  if (input.maxLoss <= 0) score -= 12;
+  if (!input.lockOnHit) score -= 10;
+
+  // If max loss is set and pnl blew past it, big penalty
+  if (input.maxLoss > 0 && input.pnl < -Math.abs(input.maxLoss)) score -= 35;
+  if (input.locked && input.pnl < 0) score -= 6; // got locked on a losing day
+
+  // Over-risking (keep realistic)
+  if (input.riskPct > 10) score -= 20;
+  else if (input.riskPct > 6) score -= 12;
+
+  // Reward when user follows the recommended risk (6 losses = giveback)
+  if (input.recommendedRiskPct > 0 && input.riskPct <= input.recommendedRiskPct) score += 4;
+  if (input.profitOnlyMode) score += 3;
+
+  // Preparation fields (legit psychology)
+  const filled = [input.whyTrade, input.mentalReady, input.sessionTarget, input.setupsToday].filter(
+    (v) => String(v || "").trim().length > 0
+  ).length;
+  if (filled <= 1) score -= 12;
+  else if (filled === 2) score -= 6;
+
+  // Trading behavior
+  if (input.tradesCount === 0) score -= 18;
+  if (input.tradesCount > 10) score -= 10;
+
+  // Clamp 0..100
+  score = Math.max(0, Math.min(100, Math.round(score)));
+  return score;
+}
+
+function buildSessionSummary(input: {
+  sessionId: string;
+  startedAt: string;
+  endedAt: string;
+  pnl: number;
+  trades: Array<{ market?: string; pnl?: number }>;
+  disciplineScore: number;
+  badges: string[];
+}): SessionSummary {
+  const tradesCount = input.trades.length;
+  const wins = input.trades.filter((t) => (t.pnl || 0) > 0).length;
+  const losses = input.trades.filter((t) => (t.pnl || 0) < 0).length;
+  const bes = input.trades.filter((t) => (t.pnl || 0) === 0).length;
+  const winRate = tradesCount ? (wins / tradesCount) * 100 : 0;
+
+  // Top market = most frequent
+  const freq: Record<string, number> = {};
+  for (const t of input.trades) {
+    const m = (t.market || "Unknown").trim() || "Unknown";
+    freq[m] = (freq[m] || 0) + 1;
+  }
+  let topMarket = "—";
+  let topCount = 0;
+  for (const [k, v] of Object.entries(freq)) {
+    if (v > topCount) {
+      topMarket = k;
+      topCount = v;
+    }
+  }
+
+  return {
+    sessionId: input.sessionId,
+    startedAt: input.startedAt,
+    endedAt: input.endedAt,
+    pnl: input.pnl,
+    trades: tradesCount,
+    wins,
+    losses,
+    bes,
+    winRate,
+    topMarket,
+    disciplineScore: input.disciplineScore,
+    badges: input.badges,
+  };
+}
+
 function useLocalStorage<T>(key: string, defaultValue: T) {
   const [state, setState] = useState<T>(() => {
     if (typeof window === "undefined") return defaultValue;
@@ -375,6 +516,7 @@ function PageInner() {
   const [riskPct, setRiskPct] = useLocalStorage<number>("ust-risk-pct", 2.5);
   const [trades, setTrades] = useLocalStorage<TradeRow[]>("ust-trades", []);
   const [sessionId, setSessionId] = useLocalStorage<string | null>("ust-session-id", null);
+  const [lastSessionSummary, setLastSessionSummary] = useLocalStorage<SessionSummary | null>("ust-last-session-summary", null);
   // Checklist-only state (no app-side effects)
   const [whyTrade, setWhyTrade] = useLocalStorage<string>("ust-checklist-why",
     "To gain financial freedom, spend more time with family, travel, and help others.");
@@ -449,7 +591,61 @@ function PageInner() {
     () => trades.filter((t) => !sessionId || (t.ts || 0) >= Number(sessionId)),
     [trades, sessionId]
   );
-  const pnl = useMemo(() => sessionTrades.reduce((a, t) => a + (t.pnl || 0), 0), [sessionTrades]);
+
+  const currentRuleBadges = useMemo(
+    () =>
+      computeRuleBadges({
+        lockOnHit,
+        maxLoss,
+        locked,
+        profitOnlyMode,
+        riskPct,
+        recommendedRiskPct,
+      }),
+    [lockOnHit, maxLoss, locked, profitOnlyMode, riskPct, recommendedRiskPct]
+  );
+
+  // PnL for the current session trades
+  const pnl = useMemo(
+    () => sessionTrades.reduce((a, t) => a + (t.pnl || 0), 0),
+    [sessionTrades]
+  );
+
+  const disciplineScore = useMemo(
+    () =>
+      computeDisciplineScore({
+        startBalance,
+        equity,
+        pnl,
+        tradesCount: sessionTrades.length,
+        maxLoss,
+        lockOnHit,
+        locked,
+        profitOnlyMode,
+        riskPct,
+        recommendedRiskPct,
+        whyTrade,
+        mentalReady,
+        sessionTarget,
+        setupsToday,
+      }),
+    [
+      startBalance,
+      equity,
+      pnl,
+      sessionTrades.length,
+      maxLoss,
+      lockOnHit,
+      locked,
+      profitOnlyMode,
+      riskPct,
+      recommendedRiskPct,
+      whyTrade,
+      mentalReady,
+      sessionTarget,
+      setupsToday,
+    ]
+  );
   // === Session activity guard: require at least one trade OR equity change (pnl != 0) before ending a session ===
   const hasSessionActivity = useMemo(() => {
     return (sessionTrades.length > 0) || (Math.abs(pnl) > 0.0000001);
@@ -638,9 +834,26 @@ function PageInner() {
                 }
                 const startedAtISO = new Date(Number(sessionId || Date.now())).toISOString();
                 const endedAtISO = new Date().toISOString();
+
+                // Build + store local Session Summary (shows on Dashboard)
+                const safeSessionId = sessionId ?? crypto.randomUUID();
+                const summary = buildSessionSummary({
+                  sessionId: safeSessionId,
+                  startedAt: startedAtISO,
+                  endedAt: endedAtISO,
+                  pnl: Number(pnl || 0),
+                  trades: sessionTrades.map((t) => ({ market: t.symbol, pnl: t.pnl })),
+                  disciplineScore,
+                  badges: currentRuleBadges,
+                });
+                setLastSessionSummary(summary);
+
                 await recordSessionToLeaderboard(user.id, Number(pnl || 0), startedAtISO, endedAtISO);
                 newSessionId();
-                push({ title: "Session saved", desc: "Leaderboard updated." });
+                push({
+                  title: "Session saved",
+                  desc: `Leaderboard updated • Discipline ${summary.disciplineScore}/100`,
+                });
               } catch (e) {
                 console.error(e);
                 newSessionId();
@@ -775,10 +988,77 @@ function PageInner() {
             <DashCard title="All-time Growth" value={`${fmt(allTimeGrowthPct)}%`} hint="Based on starting capital" />
           </div>
 
+
+          {lastSessionSummary && (
+            <Card className="border-[#D4AF37]/40">
+              <CardContent className="p-5 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h4 className="text-lg font-semibold">Last Session Summary</h4>
+                    <div className="text-xs text-slate-500">
+                      {new Date(lastSessionSummary.endedAt).toLocaleString()} • {lastSessionSummary.topMarket}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm text-slate-500">Discipline</div>
+                    <div className="text-2xl font-bold">{lastSessionSummary.disciplineScore}/100</div>
+                  </div>
+                </div>
+
+                <div className="grid md:grid-cols-4 gap-3">
+                  <DashCard title="PnL" value={currency(lastSessionSummary.pnl)} />
+                  <DashCard title="Trades" value={`${lastSessionSummary.trades}`} hint={`${lastSessionSummary.wins}W / ${lastSessionSummary.losses}L / ${lastSessionSummary.bes}BE`} />
+                  <DashCard title="Win rate" value={`${fmt(lastSessionSummary.winRate)}%`} />
+                  <DashCard title="Top Market" value={lastSessionSummary.topMarket} />
+                </div>
+
+                {lastSessionSummary.badges?.length > 0 && (
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {lastSessionSummary.badges.map((b: string) => (
+                      <span
+                        key={b}
+                        className="px-2 py-1 rounded-full text-xs border border-[#D4AF37]/50 bg-[#D4AF37]/10 text-slate-700 dark:text-slate-200"
+                      >
+                        {b}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           <div className="grid lg:grid-cols-2 gap-4">
             <Card>
               <CardContent className="p-5 space-y-3">
                 <h4 className="text-lg font-semibold">Session Discipline</h4>
+                <div className="rounded-xl border border-[#D4AF37]/30 bg-[#D4AF37]/5 p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">Discipline Score</span>
+                    <span className="text-sm font-bold">{disciplineScore}/100</span>
+                  </div>
+                  <div className="h-2 w-full rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
+                    <div
+                      className="h-2 bg-[#D4AF37]"
+                      style={{ width: `${disciplineScore}%` }}
+                    />
+                  </div>
+                  {currentRuleBadges.length > 0 && (
+                    <div className="space-y-1">
+                      <div className="text-xs text-slate-500">Rules Enforced</div>
+                      <div className="flex flex-wrap gap-2">
+                      {currentRuleBadges.slice(0, 6).map((b: string) => (
+                        <span
+                          key={b}
+                          className="px-2 py-1 rounded-full text-xs border border-[#D4AF37]/50 bg-[#D4AF37]/10 text-slate-700 dark:text-slate-200"
+                        >
+                          {b}
+                        </span>
+                      ))}
+                    </div>
+                    </div>
+                  )}
+                </div>
                 <div className="grid md:grid-cols-3 gap-3 items-end">
                   <div className="md:col-span-1">
                     <Label>Daily Max Loss (USD)</Label>
