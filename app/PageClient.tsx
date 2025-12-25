@@ -222,7 +222,7 @@ const MARKET_OPTIONS = [
   "Volatility 75 Index",
   "Volatility 25 (1s) Index",
   "Volatility 25 Index",
-  "Volatility 50 Index",
+  "",
   "Withdrawals",
 ] as const;
 type MarketName = (typeof MARKET_OPTIONS)[number];
@@ -446,7 +446,7 @@ function calcLotSizeDeriv(riskAmount: number, market: MarketName, riskPips: numb
       return +(ra / (rp / 1000)).toFixed(3);
 
       case "Volatility 50 Index":
-      return +(ra / (rp / 100)).toFixed(3);
+      return +(ra / (rp / 10000)).toFixed(3);
 
     default:
       return 0; // Withdrawals
