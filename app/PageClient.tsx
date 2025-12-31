@@ -1916,12 +1916,12 @@ function getCustomSymbolsFromStorage() {
 
   // Default built-in markets
   const deriv = [
-    "Step Index",
-    "Volatility 75 (1s) Index",
-    "Volatility 75 Index",
-    "Volatility 25 (1s) Index",
-    "Volatility 25 Index",
-    "Volatility 50 Index",
+  "Step Index",
+  "Volatility 75 (1s) Index",
+  "Volatility 75 Index",
+  "Volatility 50 Index",      // ✅ ADD THIS
+  "Volatility 25 (1s) Index",
+  "Volatility 25 Index",
   ];
 
   // Default FX + Major indices if nothing is stored yet
