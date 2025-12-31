@@ -230,7 +230,6 @@ const MARKET_OPTIONS = [
   "Step Index",
   "Volatility 75 (1s) Index",
   "Volatility 75 Index",
-  "Volatility 50 Index",
   "Volatility 25 (1s) Index",
   "Volatility 25 Index",
   "",
@@ -1289,15 +1288,7 @@ function PageInner() {
 
         {/* RISK & SIZING — DERIV */}
         <TabsContent value="risk-deriv" className="space-y-4">
-          <CapitalAndRiskCard
-            startBalance={startBalance}
-            setStartBalance={setStartBalance}
-            riskPct={riskPct}
-            setRiskPct={setRiskPct}
-            equity={equity}
-            riskAmount={riskAmount}
-            tradesCount={trades.length}
-          />
+          <CapitalAndRiskSummary equity={equity} riskAmount={riskAmount} riskPct={riskPct} />
 
           <Card>
             <CardContent className="p-4 space-y-3">
@@ -1307,7 +1298,7 @@ function PageInner() {
               </p>
               <div className="space-y-3">
                 {MARKET_OPTIONS
-                  .filter((m) => m && m !== "Withdrawals")
+                  .filter((m) => m !== "Withdrawals")
                   .map((mkt) => (
                     <MarketSizerRowDeriv key={mkt} market={mkt} riskAmount={riskAmount} />
                   ))}
@@ -1460,9 +1451,21 @@ function PageInner() {
             <CardContent className="p-5 space-y-4">
               <h4 className="text-lg font-semibold">🧭 Checklist — Review & Targets</h4>
               <p className="text-sm text-slate-600 dark:text-slate-300">
-                Use this tab to confirm plan and targets. It does not change risk or lock behavior.
+                Use this tab to confirm your plan and set your Start Capital + Risk % before starting a session.
                 Copy the summary and paste to Telegram/Slack if you like.
               </p>
+
+              {/* Set Start Capital + Risk % here (recommended before every session) */}
+              <CapitalAndRiskCard
+                startBalance={startBalance}
+                setStartBalance={setStartBalance}
+                riskPct={riskPct}
+                setRiskPct={setRiskPct}
+                equity={equity}
+                riskAmount={riskAmount}
+                tradesCount={trades.length}
+              />
+
 
               <div className="grid lg:grid-cols-2 gap-4">
                 <div className="space-y-3">
