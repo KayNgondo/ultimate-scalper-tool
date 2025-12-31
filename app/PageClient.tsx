@@ -55,9 +55,17 @@ import {
 type TradeRow = {
   id: string;
   symbol: string;
+
+  // For trades:
   pnl: number;
+
+  // For withdrawals:
+  kind?: "trade" | "withdrawal";
+  amount?: number; // positive number withdrawn (e.g. 200 = $200)
+
   notes?: string;
   ts?: number;
+
   // NEW:
   source?: "manual" | "auto";
   extId?: string; // deal_ticket or order_ticket for dedupe
@@ -539,13 +547,93 @@ function PageInner() {
 
   const [weeklyTarget, setWeeklyTarget] = useLocalStorage<number>("ust-weekly-target", 0);
   const [monthlyTarget, setMonthlyTarget] = useLocalStorage<number>("ust-monthly-target", 0);
+  // Withdrawal logger UI
+  const [withdrawAmt, setWithdrawAmt] = useState<number>(0);
+  const [withdrawNote, setWithdrawNote] = useState<string>("");
+
+
+
+  // --- MIGRATE old "Withdrawals" entries so they stop counting as losses ---
+  useEffect(() => {
+    setTrades((prev) => {
+      let changed = false;
+
+      const next = prev.map((t) => {
+        const kind = t.kind ?? "trade";
+
+        const looksLikeWithdrawal =
+          kind === "trade" &&
+          (String(t.symbol || "").toLowerCase() === "withdrawals" ||
+            String(t.notes || "").toLowerCase().includes("withdraw"));
+
+        if (!looksLikeWithdrawal) {
+          // ensure kind exists going forward
+          if (!t.kind) changed = true;
+          return { ...t, kind };
+        }
+
+        changed = true;
+        const amt = Math.abs(Number(t.pnl || 0));
+        return {
+          ...t,
+          kind: "withdrawal",
+          amount: amt,
+          pnl: 0,
+          symbol: "Withdrawals",
+          notes: t.notes || "Withdrawal recorded",
+        };
+      });
+
+      return changed ? next : prev;
+    });
+    // run once
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /* Derived */
-  const totalPnlAllTime = useMemo(
-    () => trades.reduce((acc, t) => acc + (t.pnl || 0), 0),
+  const tradeRows = useMemo(
+    () =>
+      trades
+        .map((t) => ({ ...t, kind: (t.kind ?? "trade") as "trade" | "withdrawal" }))
+        .filter((t) => t.kind === "trade"),
     [trades]
   );
-  const equity = useMemo(() => startBalance + totalPnlAllTime, [startBalance, totalPnlAllTime]);
+
+  const withdrawalRows = useMemo(
+    () =>
+      trades
+        .map((t) => ({ ...t, kind: (t.kind ?? "trade") as "trade" | "withdrawal" }))
+        .filter((t) => t.kind === "withdrawal"),
+    [trades]
+  );
+
+  const totalTradePnlAllTime = useMemo(
+    () => tradeRows.reduce((acc, t) => acc + (t.pnl || 0), 0),
+    [tradeRows]
+  );
+
+  const totalWithdrawnAllTime = useMemo(
+    () => withdrawalRows.reduce((acc, w) => acc + (w.amount || 0), 0),
+    [withdrawalRows]
+  );
+
+  // Equity = starting capital + trading PnL - withdrawals
+  const equity = useMemo(
+    () => startBalance + totalTradePnlAllTime - totalWithdrawnAllTime,
+    [startBalance, totalTradePnlAllTime, totalWithdrawnAllTime]
+  );
+
+  // Monthly withdrawals (current month)
+  const monthlyWithdrawn = useMemo(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = now.getMonth();
+    const start = new Date(y, m, 1, 0, 0, 0, 0).getTime();
+    const end = new Date(y, m + 1, 1, 0, 0, 0, 0).getTime();
+    return withdrawalRows
+      .filter((w) => (w.ts || 0) >= start && (w.ts || 0) < end)
+      .reduce((acc, w) => acc + (w.amount || 0), 0);
+  }, [withdrawalRows]);
   /* === Guardrails (derived; checklist-only, read-only) === */
   const realizedProfit = useMemo(() => Math.max(0, equity - startBalance), [equity, startBalance]);
   const realizedProfitPct = useMemo(
@@ -587,11 +675,11 @@ function PageInner() {
   );
 
   const riskAmount = useMemo(() => (equity * riskPct) / 100, [equity, riskPct]);
-  const allTimeGrowthPct = startBalance ? ((equity - startBalance) / startBalance) * 100 : 0;
+  const allTimeGrowthPct = startBalance ? (totalTradePnlAllTime / startBalance) * 100 : 0;
 
   const sessionTrades = useMemo(
-    () => trades.filter((t) => !sessionId || (t.ts || 0) >= Number(sessionId)),
-    [trades, sessionId]
+    () => tradeRows.filter((t) => !sessionId || (t.ts || 0) >= Number(sessionId)),
+    [tradeRows, sessionId]
   );
 
   const currentRuleBadges = useMemo(
@@ -670,22 +758,22 @@ function PageInner() {
 
   const today = new Date();
   const todayKey = ymdLocal(today);
-  const todayPnl = useMemo(
+  const todayTradePnl = useMemo(
     () =>
-      trades
+      tradeRows
         .filter((t) => t.ts && ymdLocal(new Date(t.ts)) === todayKey)
         .reduce((a, t) => a + (t.pnl || 0), 0),
-    [trades, todayKey]
+    [tradeRows, todayKey]
   );
 
   // Lock when max-loss hit
   useEffect(() => {
     if (!lockOnHit || maxLoss <= 0) return;
-    if (todayPnl <= -Math.abs(maxLoss) && !locked) {
+    if (todayTradePnl <= -Math.abs(maxLoss) && !locked) {
       setLocked(true);
       push({ title: "Trading locked for today", desc: `Daily max loss (${currency(maxLoss)}) reached.` });
     }
-  }, [todayPnl, maxLoss, lockOnHit, locked, setLocked, push]);
+  }, [todayTradePnl, maxLoss, lockOnHit, locked, setLocked, push]);
 
   // Auto-unlock at local midnight
   useEffect(() => {
@@ -759,6 +847,7 @@ function PageInner() {
     const row: TradeRow = {
       id,
       ts: Date.now(),
+      kind: (t.kind ?? "trade") as "trade" | "withdrawal",
       // default to manual if not provided
       source: t.source ?? "manual",
       ...t,
@@ -769,7 +858,14 @@ function PageInner() {
 
   function addTradesBulk(rows: TradeRow[]) {
     if (!rows.length) return;
-    setTrades(prev => [...rows.map(r => ({ ...r, source: r.source ?? "auto" })), ...prev]);
+    setTrades(prev => [
+      ...rows.map(r => ({
+        ...r,
+        kind: (r.kind ?? "trade") as "trade" | "withdrawal",
+        source: r.source ?? "auto",
+      })),
+      ...prev,
+    ]);
   }
 
   function deleteTrade(id: string) {
@@ -984,9 +1080,22 @@ function PageInner() {
             <DashCard title="Equity" value={currency(equity)} hint={`Start: ${currency(startBalance)}`} />
           </div>
 
-          <div className="grid md:grid-cols-3 gap-4">
+          <div className="grid md:grid-cols-5 gap-4">
             <DashCard title="Starting Capital" value={currency(startBalance)} />
-            <DashCard title="All-time PnL" value={`${totalPnlAllTime >= 0 ? "+" : ""}${currency(Number(totalPnlAllTime.toFixed(2)))}`} />
+            <DashCard
+              title="All-time Trade PnL"
+              value={`${totalTradePnlAllTime >= 0 ? "+" : ""}${currency(Number(totalTradePnlAllTime.toFixed(2)))}`}
+            />
+            <DashCard
+              title="Total Withdrawn"
+              value={`-${currency(Number(totalWithdrawnAllTime.toFixed(2)))}`}
+              hint="All time"
+            />
+            <DashCard
+              title="Monthly Withdrawals"
+              value={`-${currency(Number(monthlyWithdrawn.toFixed(2)))}`}
+              hint="Current month"
+            />
             <DashCard title="All-time Growth" value={`${fmt(allTimeGrowthPct)}%`} hint="Based on starting capital" />
           </div>
 
@@ -1080,12 +1189,12 @@ function PageInner() {
                     <Label>Today PnL</Label>
                     <div
                       className={`h-10 grid place-items-center rounded-md border ${
-                        todayPnl < 0 ? "bg-red-50" : todayPnl > 0 ? "bg-blue-50" : "bg-white"
+                        todayTradePnl < 0 ? "bg-red-50" : todayTradePnl > 0 ? "bg-blue-50" : "bg-white"
                       }`}
                     >
                       <strong>
-                        {todayPnl >= 0 ? "+" : ""}
-                        {currency(Number(todayPnl.toFixed(2)))}
+                        {todayTradePnl >= 0 ? "+" : ""}
+                        {currency(Number(todayTradePnl.toFixed(2)))}
                       </strong>
                     </div>
                   </div>
@@ -1174,7 +1283,7 @@ function PageInner() {
 
         {/* ANALYTICS */}
         <TabsContent value="analytics">
-          <AnalyticsPanel trades={trades} />
+          <AnalyticsPanel trades={tradeRows} />
         </TabsContent>
 
         {/* RISK & SIZING — DERIV */}
@@ -1258,6 +1367,67 @@ function PageInner() {
             <AutoImportPanel addTradesBulkFn={addTradesBulk} />
           </div>
 
+
+          {/* Record Withdrawal (does not count as trading loss) */}
+          <Card className="border-[#D4AF37]/40 mb-4">
+            <CardContent className="p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold">Record Withdrawal</h3>
+                <span className="text-xs text-slate-500">Affects equity only (not a trading loss)</span>
+              </div>
+
+              <div className="grid md:grid-cols-12 gap-3 items-end">
+                <div className="md:col-span-4">
+                  <Label>Amount (USD)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    placeholder="e.g. 250"
+                    value={withdrawAmt}
+                    onChange={(e) => setWithdrawAmt(Number(e.target.value) || 0)}
+                  />
+                </div>
+
+                <div className="md:col-span-6">
+                  <Label>Note (optional)</Label>
+                  <Input
+                    placeholder="e.g. Paid rent / withdrew profits"
+                    value={withdrawNote}
+                    onChange={(e) => setWithdrawNote(e.target.value)}
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <Button
+                    className="w-full bg-[#D4AF37] text-black hover:bg-yellow-400"
+                    disabled={withdrawAmt <= 0}
+                    onClick={() => {
+                      const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+                      setTrades((prev) => [
+                        {
+                          id,
+                          ts: Date.now(),
+                          kind: "withdrawal",
+                          amount: Number(withdrawAmt.toFixed(2)),
+                          pnl: 0,
+                          symbol: "Withdrawals",
+                          notes: withdrawNote || "Withdrawal recorded",
+                          source: "manual",
+                        },
+                        ...prev,
+                      ]);
+                      setWithdrawAmt(0);
+                      setWithdrawNote("");
+                      push({ title: "Withdrawal recorded", desc: "Saved (does not count as a trading loss)." });
+                    }}
+                  >
+                    Save
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           <MultiQuickLogger
             initialRows={3}
             maxRows={4}
@@ -1275,7 +1445,7 @@ function PageInner() {
 
         {/* CALENDAR */}
         <TabsContent value="calendar">
-          <OldCalendar trades={trades} />
+          <OldCalendar trades={tradeRows} withdrawals={withdrawalRows} />
         </TabsContent>
 
         {/* A-SETUPS */}
@@ -2046,27 +2216,50 @@ function JournalGrouped({
                   {b.rows
                     .slice()
                     .reverse()
-                    .map((t) => (
-                      <div key={t.id} className="grid grid-cols-12 px-3 py-2 border-t text-sm">
-                        <div className="col-span-3">{t.ts ? new Date(t.ts).toLocaleString() : "—"}</div>
-                        <div className="col-span-3">{t.symbol}</div>
-                        <div className="col-span-4">{t.notes || "—"}</div>
-                        <div className={`col-span-1 text-right ${t.pnl >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
-                          {t.pnl >= 0 ? "+" : ""}
-                          {currency(t.pnl)}
-                        </div>
-                        <div className="col-span-1 text-right">
-                         <Button
-  onClick={() => onDelete(t.id)}
-  size="sm"
-  className="text-[#D4AF37] hover:text-yellow-400 border border-[#D4AF37] hover:border-yellow-400 bg-transparent transition"
->
-  Delete
-</Button>
+                    .map((t) => {
+                      const isWithdrawal = (t.kind ?? "trade") === "withdrawal";
+                      const amount = isWithdrawal ? (t.amount || 0) : (t.pnl || 0);
 
+                      return (
+                        <div key={t.id} className="grid grid-cols-12 px-3 py-2 border-t text-sm">
+                          <div className="col-span-3">{t.ts ? new Date(t.ts).toLocaleString() : "—"}</div>
+
+                          <div className="col-span-3 flex items-center gap-2">
+                            <span>{t.symbol}</span>
+                            {isWithdrawal && (
+                              <span className="inline-flex items-center rounded-full bg-[#D4AF37] text-black px-2 py-[2px] text-[11px] font-semibold">
+                                Withdrawal
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="col-span-4">{t.notes || "—"}</div>
+
+                          <div
+                            className={`col-span-1 text-right ${
+                              isWithdrawal
+                                ? "text-[#D4AF37] font-semibold"
+                                : amount >= 0
+                                ? "text-emerald-600"
+                                : "text-rose-600"
+                            }`}
+                          >
+                            {isWithdrawal ? "-" : amount >= 0 ? "+" : ""}
+                            {currency(Number(amount.toFixed(2)))}
+                          </div>
+
+                          <div className="col-span-1 text-right">
+                            <Button
+                              onClick={() => onDelete(t.id)}
+                              size="sm"
+                              className="text-[#D4AF37] hover:text-yellow-400 border border-[#D4AF37] hover:border-yellow-400 bg-transparent transition"
+                            >
+                              Delete
+                            </Button>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                 </div>
               );
             })
@@ -2315,24 +2508,37 @@ function GoalProgress({
 ============================================================================ */
 function OldCalendar({
   trades,
+  withdrawals,
 }: {
   trades: { ts?: number; pnl?: number }[];
+  withdrawals: { ts?: number; amount?: number }[];
 }) {
-  const { tradeDays, dailyTotals } = useMemo(() => {
+  const { tradeDays, dailyTradeTotals, dailyWithdrawTotals } = useMemo(() => {
     const set = new Set<string>();
-    const totals = new Map<string, number>();
+    const tradeTotals = new Map<string, number>();
+    const wdTotals = new Map<string, number>();
+
+    const keyFromTs = (ts: number) => {
+      const d = new Date(ts);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    };
+
     trades.forEach((t) => {
       if (!t.ts) return;
-      const d = new Date(t.ts);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
-        2,
-        "0"
-      )}-${String(d.getDate()).padStart(2, "0")}`;
+      const key = keyFromTs(t.ts);
       set.add(key);
-      totals.set(key, (totals.get(key) || 0) + (t.pnl ?? 0));
+      tradeTotals.set(key, (tradeTotals.get(key) || 0) + (t.pnl ?? 0));
     });
-    return { tradeDays: set, dailyTotals: totals };
-  }, [trades]);
+
+    withdrawals.forEach((w) => {
+      if (!w.ts) return;
+      const key = keyFromTs(w.ts);
+      set.add(key);
+      wdTotals.set(key, (wdTotals.get(key) || 0) + (w.amount ?? 0));
+    });
+
+    return { tradeDays: set, dailyTradeTotals: tradeTotals, dailyWithdrawTotals: wdTotals };
+  }, [trades, withdrawals]);
 
   const [viewDate, setViewDate] = useState(() => {
     const d = new Date();
@@ -2430,8 +2636,9 @@ function OldCalendar({
             const k = keyOf(d);
             const inMonth = d.getMonth() === viewMonth;
             const isToday = k === todayKey;
-            const hasTrades = tradeDays.has(k);
-            const dayPnl = dailyTotals.get(k) ?? 0;
+            const hasActivity = tradeDays.has(k);
+            const dayPnl = dailyTradeTotals.get(k) ?? 0;
+            const dayWithdrawn = dailyWithdrawTotals.get(k) ?? 0;
             const pct =
               startBalance > 0
                 ? ((dayPnl / startBalance) * 100).toFixed(2)
@@ -2448,7 +2655,7 @@ function OldCalendar({
               >
                 <div className="text-xs">{d.getDate()}</div>
 
-                {hasTrades && (
+                {(hasActivity || dayWithdrawn > 0) && (
                   <div className="flex flex-col items-end space-y-[2px]">
                     <span
                       className={[
@@ -2467,6 +2674,12 @@ function OldCalendar({
                       {dayPnl >= 0 ? "+" : ""}
                       {pct}%
                     </span>
+
+                    {dayWithdrawn > 0 && (
+                      <span className="text-[11px] text-slate-500">
+                        Withdrew: -{currency(Number(dayWithdrawn.toFixed(2)))}
+                      </span>
+                    )}
                   </div>
                 )}
               </div>
