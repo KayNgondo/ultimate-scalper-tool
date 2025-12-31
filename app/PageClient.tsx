@@ -230,6 +230,7 @@ const MARKET_OPTIONS = [
   "Step Index",
   "Volatility 75 (1s) Index",
   "Volatility 75 Index",
+  "Volatility 50 Index",
   "Volatility 25 (1s) Index",
   "Volatility 25 Index",
   "",
@@ -1306,7 +1307,7 @@ function PageInner() {
               </p>
               <div className="space-y-3">
                 {MARKET_OPTIONS
-                  .filter((m) => m !== "Withdrawals")
+                  .filter((m) => m && m !== "Withdrawals")
                   .map((mkt) => (
                     <MarketSizerRowDeriv key={mkt} market={mkt} riskAmount={riskAmount} />
                   ))}
