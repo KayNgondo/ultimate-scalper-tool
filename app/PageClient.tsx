@@ -230,10 +230,9 @@ const MARKET_OPTIONS = [
   "Step Index",
   "Volatility 75 (1s) Index",
   "Volatility 75 Index",
+  "Volatility 50 Index",
   "Volatility 25 (1s) Index",
   "Volatility 25 Index",
-  "",
-  "Withdrawals",
 ] as const;
 type MarketName = (typeof MARKET_OPTIONS)[number];
 
