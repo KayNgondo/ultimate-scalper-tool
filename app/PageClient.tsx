@@ -612,18 +612,21 @@ function PageInner() {
   // NEXT_PUBLIC_UST_ADMIN_EMAIL="you@example.com"
   const ADMIN_USER_ID = process.env.NEXT_PUBLIC_UST_ADMIN_USER_ID;
   const ADMIN_EMAIL = process.env.NEXT_PUBLIC_UST_ADMIN_EMAIL;
-  // Fallback (so you can still post even if env vars aren't set yet)
-  const ADMIN_USER_ID_FALLBACK = "39127777-9fd8-4183-96bf-03f943b56a24";
 
   const isAdmin = useMemo(() => {
     const uid = (user as any)?.id as string | undefined;
     const email = ((user as any)?.email as string | undefined)?.toLowerCase();
-    if ((ADMIN_USER_ID && uid && uid === ADMIN_USER_ID) || (uid && uid === ADMIN_USER_ID_FALLBACK)) return true;
+    if (ADMIN_USER_ID && uid && uid === ADMIN_USER_ID) return true;
     if (ADMIN_EMAIL && email && email === ADMIN_EMAIL.toLowerCase()) return true;
     return false;
   }, [user, ADMIN_USER_ID, ADMIN_EMAIL]);
 
   const [watchlistDraft, setWatchlistDraft] = useState("");
+  const [watchlistImages, setWatchlistImages] = useState<File[]>([]);
+  const [watchlistScreenshotUrls, setWatchlistScreenshotUrls] = useState<string[]>([]);
+
+  const UST_ADMIN_UUID = "39127777-9fd8-4183-96bf-03f943b56a24";
+  const watchlistCanEdit = !!user && user.id === UST_ADMIN_UUID;
   const [watchlistLatest, setWatchlistLatest] = useState<any | null>(null);
   const [watchlistHistory, setWatchlistHistory] = useState<any[]>([]);
   const [watchlistLoading, setWatchlistLoading] = useState(false);
@@ -637,25 +640,18 @@ function PageInner() {
     try {
       const { data, error } = await supabase
         .from(WATCHLIST_TABLE)
-        .select("*")
+        .select("id, content, created_at, created_by")
         .order("created_at", { ascending: false })
         .limit(7);
 
       if (error) throw error;
 
-      const latest = (data?.[0] as any) ?? null;
-      const resolvedContent =
-        (latest?.content ??
-          latest?.watchlist ??
-          latest?.watchlist_text ??
-          latest?.text ??
-          latest?.body ??
-          latest?.message ??
-          "") as string;
-
-      setWatchlistLatest(latest ? { ...latest, _resolvedContent: resolvedContent } : null);
+      const latest = data?.[0] ?? null;
+      setWatchlistLatest(latest);
       setWatchlistHistory(data ?? []);
-      if (resolvedContent) setWatchlistDraft(resolvedContent);
+      setWatchlistScreenshotUrls((latest as any)?.image_urls ?? []);
+      // keep local selected files separate
+      if (latest?.content) setWatchlistDraft(latest.content);
     } catch (e: any) {
       // Common causes: table not created yet, or RLS not configured
       setWatchlistError(e?.message ?? "Failed to load watchlist.");
@@ -666,6 +662,24 @@ function PageInner() {
     }
   }, []);
 
+
+  const WATCHLIST_BUCKET = "ust-watchlist";
+
+  async function uploadWatchlistScreenshot(file: File) {
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const path = `watchlists/${Date.now()}_${safeName}`;
+
+    const { error: upErr } = await supabase.storage.from(WATCHLIST_BUCKET).upload(path, file, {
+      cacheControl: "3600",
+      upsert: true,
+      contentType: file.type || "image/png",
+    });
+    if (upErr) throw upErr;
+
+    const { data } = supabase.storage.from(WATCHLIST_BUCKET).getPublicUrl(path);
+    return data.publicUrl;
+  }
+
   const publishWatchlist = useCallback(async () => {
     const content = watchlistDraft.trim();
     if (!content) return;
@@ -674,70 +688,41 @@ function PageInner() {
     setWatchlistError(null);
 
     try {
-      // 1) Upload screenshots (optional)
-      let screenshotUrls: string[] = [];
-      if (watchlistImages.length) {
-        setWatchlistUploading(true);
-        const bucket = "ust-watchlist"; // create this bucket in Supabase Storage (public read)
-        for (const file of watchlistImages) {
-          const safeName = (file.name || "screenshot").replace(/[^a-zA-Z0-9._-]/g, "_");
-          const objectPath = `watchlists/${new Date().toISOString().slice(0, 10)}/${Date.now()}_${safeName}`;
+      // Upload any selected screenshots (optional)
+      setWatchlistUploading(true);
+      const uploaded = watchlistImages.length
+        ? await Promise.all(watchlistImages.map((f) => uploadWatchlistScreenshot(f)))
+        : [];
+      const allUrls = [...(watchlistScreenshotUrls || []), ...uploaded];
 
-          const { error: upErr } = await supabase.storage.from(bucket).upload(objectPath, file, {
-            upsert: true,
-            contentType: file.type || undefined,
-          });
+      // Try saving with image_urls; if your table doesn’t have the column yet, we retry without it.
+      let insertPayload: any = { content: watchlistDraft.trim(), created_by: user.id };
+      if (allUrls.length) insertPayload.image_urls = allUrls;
 
-          if (upErr) throw upErr;
-
-          const { data: pub } = supabase.storage.from(bucket).getPublicUrl(objectPath);
-          if (pub?.publicUrl) screenshotUrls.push(pub.publicUrl);
-        }
-        setWatchlistUploading(false);
+      let { error } = await supabase.from("ust_watchlist").insert(insertPayload);
+      if (error && String(error.message || "").includes("image_urls")) {
+        // fallback for older schema
+        const retry = await supabase.from("ust_watchlist").insert({
+          content: watchlistDraft.trim(),
+          created_by: user.id,
+        });
+        error = retry.error;
       }
+      if (error) throw error;
 
-      const contentWithScreenshots =
-        screenshotUrls.length > 0
-          ? `${content}\n\n📷 Screenshots:\n${screenshotUrls.map((u) => `- ${u}`).join("\n")}`
-          : content;
-
-      // 2) Insert row (tolerate different column names)
-      const basePayload: any = { created_by: (user as any)?.id ?? null };
-      const contentColumns = ["content", "watchlist", "watchlist_text", "text", "body", "message"];
-
-      let lastErr: any = null;
-      for (const col of contentColumns) {
-        const payload: any = { ...basePayload, [col]: contentWithScreenshots };
-        const { error } = await supabase.from(WATCHLIST_TABLE).insert(payload);
-
-        if (!error) {
-          lastErr = null;
-          break;
-        }
-
-        lastErr = error;
-        const msg = String((error as any)?.message || "").toLowerCase();
-
-        // Try the next column name if this one doesn't exist
-        if (msg.includes("does not exist") || msg.includes("column")) continue;
-
-        // If created_by column doesn't exist, retry without it
-        if (msg.includes("created_by") && msg.includes("does not exist")) {
-          delete basePayload.created_by;
-          continue;
-        }
-
-        break;
-      }
-
-      if (lastErr) throw lastErr;
-
+      // Clear local selections after successful publish
       setWatchlistImages([]);
+      setWatchlistScreenshotUrls(allUrls);
+      setWatchlistDraft("");
+      setWatchlistError(null);
+
+      // Reload latest post (so everyone sees it immediately)
+      await loadWatchlist();
+
       await loadWatchlist();
     } catch (e: any) {
       setWatchlistError(e?.message ?? "Failed to publish watchlist.");
     } finally {
-      setWatchlistUploading(false);
       setWatchlistSaving(false);
     }
   }, [watchlistDraft, user, loadWatchlist]);
@@ -1798,7 +1783,7 @@ function PageInner() {
                 </div>
 
                 <div className="rounded-lg border bg-card/40 p-4">
-                  {(watchlistLatest as any)?._resolvedContent ? (
+                  {watchlistLatest?.content ? (
                     <pre className="whitespace-pre-wrap break-words text-sm leading-relaxed">
                       {watchlistLatest.content}
                     </pre>
@@ -1855,25 +1840,6 @@ function PageInner() {
                   className="min-h-[220px] w-full rounded-md border bg-background/30 p-3 text-sm outline-none focus:ring-2 focus:ring-primary/40"
                 />
 
-                <div className="space-y-2">
-                  <label className="text-sm text-muted-foreground">Attach chart screenshots (optional)</label>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    onChange={(e) => {
-                      const files = Array.from(e.target.files || []);
-                      setWatchlistImages(files);
-                    }}
-                    className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-primary/20 file:px-3 file:py-2 file:text-sm file:text-white hover:file:bg-primary/30"
-                  />
-                  {watchlistImages.length > 0 && (
-                    <div className="text-xs text-muted-foreground">
-                      Selected: {watchlistImages.map((f) => f.name).join(", ")}
-                    </div>
-                  )}
-                </div>
-
                 <div className="flex flex-wrap items-center gap-2">
                   <Button
                     onClick={() => void publishWatchlist()}
@@ -1884,7 +1850,7 @@ function PageInner() {
 
                   <Button
                     variant="secondary"
-                    onClick={() => setWatchlistDraft((watchlistLatest as any)?._resolvedContent ?? "")}
+                    onClick={() => setWatchlistDraft(watchlistLatest?.content ?? "")}
                     disabled={watchlistSaving || watchlistLoading}
                   >
                     Reset to Latest
