@@ -8,6 +8,7 @@ import { useSupabaseUser } from "@/lib/useSupabaseUser";
 import { supabase } from "@/lib/supabase";
 import ThemeToggle from "@/components/ThemeToggle";
 import { SHEETS_WEBAPP_URL as SHEETS_URL, READ_TOKEN as SHEETS_TOKEN, DEFAULT_UST_ACCOUNT as DEFAULT_ACCOUNT } from "@/lib/env";
+import WatchlistPanel from "@/components/WatchlistPanel";
 
 
 /* ========== shadcn/ui ========== */
