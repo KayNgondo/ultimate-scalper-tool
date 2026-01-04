@@ -653,14 +653,16 @@ function PageInner() {
   const [watchlistImages, setWatchlistImages] = useState<File[]>([]);
   const [watchlistScreenshotUrls, setWatchlistScreenshotUrls] = useState<string[]>([]);
 
-  const UST_ADMIN_UUID = "39127777-9fd8-4183-96bf-03f943b56a24";
-  const watchlistCanEdit = !!user && user.id === UST_ADMIN_UUID;
+  // Upload UI state
+  const [watchlistUploading, setWatchlistUploading] = useState(false);
+  const [watchlistUploadError, setWatchlistUploadError] = useState<string | null>(null);
+
+  // Admin check (editor should only show for admin)
+  const watchlistCanEdit = isAdmin;
   const [watchlistLatest, setWatchlistLatest] = useState<any | null>(null);
   const [watchlistHistory, setWatchlistHistory] = useState<any[]>([]);
   const [watchlistLoading, setWatchlistLoading] = useState(false);
   const [watchlistSaving, setWatchlistSaving] = useState(false);
-  const [watchlistUploading, setWatchlistUploading] = useState(false);
-  const [watchlistSaveMessage, setWatchlistSaveMessage] = useState<string | null>(null);
   const [watchlistError, setWatchlistError] = useState<string | null>(null);
 
   const loadWatchlist = useCallback(async () => {
@@ -710,12 +712,38 @@ function PageInner() {
     return data.publicUrl;
   }
 
+  // Parse a single textarea into two DB fields (primary_focus + monitor_list).
+  // This keeps your older UI (one text box) while supporting the newer table schema.
+  function splitWatchlistSections(text: string) {
+    const t = (text || "").trim();
+    if (!t) return { primary_focus: "", monitor_list: "" };
+
+    const lower = t.toLowerCase();
+    const idxPrimary = lower.indexOf("primary focus");
+    const idxMonitor = lower.indexOf("monitor list");
+
+    // If headings exist, slice around them; otherwise treat everything as primary focus.
+    if (idxPrimary !== -1 && idxMonitor !== -1 && idxMonitor > idxPrimary) {
+      const primary = t.slice(idxPrimary, idxMonitor).trim();
+      const monitor = t.slice(idxMonitor).trim();
+      return { primary_focus: primary, monitor_list: monitor };
+    }
+
+    // Fallback: if only Monitor List exists, treat text before it as primary.
+    if (idxMonitor !== -1) {
+      const primary = t.slice(0, idxMonitor).trim();
+      const monitor = t.slice(idxMonitor).trim();
+      return { primary_focus: primary, monitor_list: monitor };
+    }
+
+    return { primary_focus: t, monitor_list: "" };
+  }
+
   const publishWatchlist = useCallback(async () => {
     const content = watchlistDraft.trim();
     if (!content) return;
 
     setWatchlistSaving(true);
-      setWatchlistSaveMessage(null);
     setWatchlistError(null);
 
     try {
@@ -729,14 +757,16 @@ function PageInner() {
       // Try saving watchlist; handle older DB schemas (missing columns) gracefully.
       const baseText = watchlistDraft.trim();
       if (!baseText) throw new Error("Watchlist text is empty.");
+      const sections = splitWatchlistSections(baseText);
 
       // Prefer newer schema: content + images/image_urls
       const tryInsert = async (payload: any) => supabase.from(WATCHLIST_TABLE).insert(payload);
 
-      // 1) Try with content + image_urls
+      // 1) Try with new schema fields + content + image_urls
       let insertErr: any = null;
       let res = await tryInsert({
         content: baseText,
+        ...sections,
         created_by: user.id,
         ...(allUrls.length ? { image_urls: allUrls } : {}),
       });
@@ -748,6 +778,7 @@ function PageInner() {
         for (const col of candidates) {
           const r2 = await tryInsert({
             [col]: baseText,
+            ...sections,
             created_by: user.id,
             ...(allUrls.length ? { image_urls: allUrls } : {}),
           });
@@ -759,14 +790,14 @@ function PageInner() {
       // 3) If 'image_urls' column doesn't exist, retry without images (text will still save)
       if (insertErr && String(insertErr.message || "").toLowerCase().includes("image_urls")) {
         // First try again with content
-        const r3 = await tryInsert({ content: baseText, created_by: user.id });
+        const r3 = await tryInsert({ content: baseText, ...sections, created_by: user.id });
         insertErr = r3.error;
 
         // Then try older text columns
         if (insertErr && String(insertErr.message || "").toLowerCase().includes("content")) {
           const candidates = ["watchlist_text", "watchlist", "body", "text"];
           for (const col of candidates) {
-            const r4 = await tryInsert({ [col]: baseText, created_by: user.id });
+            const r4 = await tryInsert({ [col]: baseText, ...sections, created_by: user.id });
             insertErr = r4.error;
             if (!insertErr) break;
           }
@@ -783,15 +814,13 @@ function PageInner() {
       setWatchlistError(null);
 
       // Reload latest post (so everyone sees it immediately)
-      setWatchlistSaveMessage("Published ✅");
+      await loadWatchlist();
+
       await loadWatchlist();
     } catch (e: any) {
-      console.error("publishWatchlist error", e);
-      setWatchlistSaveMessage(null);
       setWatchlistError(e?.message ?? "Failed to publish watchlist.");
     } finally {
       setWatchlistSaving(false);
-      setWatchlistUploading(false);
     }
   }, [watchlistDraft, user, loadWatchlist]);
 
@@ -1252,7 +1281,10 @@ function PageInner() {
 >
             Calendar
           </TabsTrigger>
-            <TabsTrigger value="watchlist" className="text-xs sm:text-sm">
+            <TabsTrigger
+              value="watchlist"
+              className="text-xs sm:text-sm data-[state=active]:bg-yellow-600 data-[state=active]:text-black"
+            >
               Watchlist
             </TabsTrigger>
 
@@ -1329,17 +1361,6 @@ function PageInner() {
                     <div className="text-2xl font-bold">{lastSessionSummary.disciplineScore}/100</div>
                   </div>
                 </div>
-
-                {(watchlistSaveMessage || (isAdmin && watchlistError)) && (
-                  <div className="mt-2 space-y-1">
-                    {watchlistSaveMessage && (
-                      <div className="text-sm text-emerald-300">{watchlistSaveMessage}</div>
-                    )}
-                    {isAdmin && watchlistError && (
-                      <div className="text-sm text-red-300">{watchlistError}</div>
-                    )}
-                  </div>
-                )}
 
                 <div className="grid md:grid-cols-4 gap-3">
                   <DashCard title="PnL" value={currency(lastSessionSummary.pnl)} />
@@ -1872,6 +1893,28 @@ function PageInner() {
                       No watchlist posted yet.
                     </p>
                   )}
+
+                  {watchlistScreenshotUrls?.length ? (
+                    <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      {watchlistScreenshotUrls.map((url) => (
+                        <a
+                          key={url}
+                          href={url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="block overflow-hidden rounded-md border"
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={url}
+                            alt="Watchlist screenshot"
+                            className="h-auto w-full"
+                            loading="lazy"
+                          />
+                        </a>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
 
                 {watchlistHistory?.length ? (
@@ -1919,6 +1962,53 @@ function PageInner() {
                   placeholder="Paste your daily watchlist here…"
                   className="min-h-[220px] w-full rounded-md border bg-background/30 p-3 text-sm outline-none focus:ring-2 focus:ring-primary/40"
                 />
+
+                <div className="rounded-md border bg-background/20 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm font-medium">Screenshots (optional)</p>
+                    {watchlistUploading ? (
+                      <p className="text-xs text-muted-foreground">Uploading…</p>
+                    ) : null}
+                  </div>
+
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Add chart screenshots for your watchlist/monitor list. Only the admin can upload; everyone can view.
+                  </p>
+
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/*"
+                      onChange={(e) => {
+                        setWatchlistUploadError(null);
+                        const files = Array.from(e.target.files || []);
+                        setWatchlistImages(files);
+                      }}
+                    />
+                    {watchlistImages.length ? (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => setWatchlistImages([])}
+                      >
+                        Clear selected
+                      </Button>
+                    ) : null}
+                  </div>
+
+                  {watchlistUploadError ? (
+                    <p className="mt-2 text-xs text-red-400">{watchlistUploadError}</p>
+                  ) : null}
+
+                  {watchlistImages.length ? (
+                    <ul className="mt-2 list-disc pl-5 text-xs text-muted-foreground">
+                      {watchlistImages.map((f) => (
+                        <li key={f.name}>{f.name}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
 
                 <div className="flex flex-wrap items-center gap-2">
                   <Button
