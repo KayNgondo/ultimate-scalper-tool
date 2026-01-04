@@ -607,6 +607,24 @@ function PageInner() {
   // - INSERT/UPDATE/DELETE: only for admin (by user.id or email)
   const WATCHLIST_TABLE = "ust_watchlist";
 
+
+  // --- Watchlist helpers (handles older DB schemas safely) ---
+  const getWatchlistContent = (row: any): string =>
+    (row?.content ??
+      row?.watchlist_text ??
+      row?.watchlist ??
+      row?.body ??
+      row?.text ??
+      "").toString();
+
+  const getWatchlistImages = (row: any): string[] =>
+    (row?.images ??
+      row?.image_urls ??
+      row?.watchlist_images ??
+      row?.screenshots ??
+      []) as string[];
+
+
   // Set either of these env vars (recommended) to unlock the editor only for you:
   // NEXT_PUBLIC_UST_ADMIN_USER_ID="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
   // NEXT_PUBLIC_UST_ADMIN_EMAIL="you@example.com"
@@ -640,7 +658,7 @@ function PageInner() {
     try {
       const { data, error } = await supabase
         .from(WATCHLIST_TABLE)
-        .select("id, content, created_at, created_by")
+          .select('*')
         .order("created_at", { ascending: false })
         .limit(7);
 
@@ -695,20 +713,55 @@ function PageInner() {
         : [];
       const allUrls = [...(watchlistScreenshotUrls || []), ...uploaded];
 
-      // Try saving with image_urls; if your table doesn’t have the column yet, we retry without it.
-      let insertPayload: any = { content: watchlistDraft.trim(), created_by: user.id };
-      if (allUrls.length) insertPayload.image_urls = allUrls;
+      // Try saving watchlist; handle older DB schemas (missing columns) gracefully.
+      const baseText = watchlistDraft.trim();
+      if (!baseText) throw new Error("Watchlist text is empty.");
 
-      let { error } = await supabase.from("ust_watchlist").insert(insertPayload);
-      if (error && String(error.message || "").includes("image_urls")) {
-        // fallback for older schema
-        const retry = await supabase.from("ust_watchlist").insert({
-          content: watchlistDraft.trim(),
-          created_by: user.id,
-        });
-        error = retry.error;
+      // Prefer newer schema: content + images/image_urls
+      const tryInsert = async (payload: any) => supabase.from(WATCHLIST_TABLE).insert(payload);
+
+      // 1) Try with content + image_urls
+      let insertErr: any = null;
+      let res = await tryInsert({
+        content: baseText,
+        created_by: user.id,
+        ...(allUrls.length ? { image_urls: allUrls } : {}),
+      });
+      insertErr = res.error;
+
+      // 2) If 'content' column doesn't exist, retry with common older names
+      if (insertErr && String(insertErr.message || "").toLowerCase().includes("content")) {
+        const candidates = ["watchlist_text", "watchlist", "body", "text"];
+        for (const col of candidates) {
+          const r2 = await tryInsert({
+            [col]: baseText,
+            created_by: user.id,
+            ...(allUrls.length ? { image_urls: allUrls } : {}),
+          });
+          insertErr = r2.error;
+          if (!insertErr) break;
+        }
       }
-      if (error) throw error;
+
+      // 3) If 'image_urls' column doesn't exist, retry without images (text will still save)
+      if (insertErr && String(insertErr.message || "").toLowerCase().includes("image_urls")) {
+        // First try again with content
+        const r3 = await tryInsert({ content: baseText, created_by: user.id });
+        insertErr = r3.error;
+
+        // Then try older text columns
+        if (insertErr && String(insertErr.message || "").toLowerCase().includes("content")) {
+          const candidates = ["watchlist_text", "watchlist", "body", "text"];
+          for (const col of candidates) {
+            const r4 = await tryInsert({ [col]: baseText, created_by: user.id });
+            insertErr = r4.error;
+            if (!insertErr) break;
+          }
+        }
+      }
+
+      if (insertErr) throw insertErr;
+
 
       // Clear local selections after successful publish
       setWatchlistImages([]);
@@ -1783,7 +1836,7 @@ function PageInner() {
                 </div>
 
                 <div className="rounded-lg border bg-card/40 p-4">
-                  {watchlistLatest?.content ? (
+                  {getWatchlistContent(watchlistLatest) ? (
                     <pre className="whitespace-pre-wrap break-words text-sm leading-relaxed">
                       {watchlistLatest.content}
                     </pre>
@@ -1850,7 +1903,7 @@ function PageInner() {
 
                   <Button
                     variant="secondary"
-                    onClick={() => setWatchlistDraft(watchlistLatest?.content ?? "")}
+                    onClick={() => setWatchlistDraft(getWatchlistContent(watchlistLatest) ?? "")}
                     disabled={watchlistSaving || watchlistLoading}
                   >
                     Reset to Latest
