@@ -529,6 +529,24 @@ function PageInner() {
   const { user } = useSupabaseUser();
   const { push } = useToast();
 
+  // Persist the selected top tab (so refresh keeps you on Watchlist, Journal, etc.)
+  const [activeTab, setActiveTab] = React.useState<string>("dashboard");
+
+  React.useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem("ust_active_tab");
+      if (saved) setActiveTab(saved);
+    } catch {}
+  }, []);
+
+  const handleTabChange = React.useCallback((value: string) => {
+    setActiveTab(value);
+    try {
+      window.localStorage.setItem("ust_active_tab", value);
+    } catch {}
+  }, []);
+
+
   /* Core state */
   const [startBalance, setStartBalance] = useLocalStorage<number>("ust-start-balance", 0);
   const [riskPct, setRiskPct] = useLocalStorage<number>("ust-risk-pct", 2.5);
@@ -1075,7 +1093,7 @@ function PageInner() {
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="dashboard" className="w-full">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
         <TabsList
           className="mb-3 flex gap-1 bg-transparent p-0 overflow-x-auto whitespace-nowrap no-scrollbar"
         >
