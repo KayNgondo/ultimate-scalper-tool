@@ -759,30 +759,96 @@ function PageInner() {
       if (!baseText) throw new Error("Watchlist text is empty.");
       const sections = splitWatchlistSections(baseText);
 
-      // Prefer newer schema: content + images/image_urls
-      const tryInsert = async (payload: any) => supabase.from(WATCHLIST_TABLE).insert(payload);
+      // One watchlist per day (with edits): write to today's row.
+      // If a row already exists for today, we UPDATE (or UPSERT) instead of INSERT.
+      const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 
-      // 1) Try with new schema fields + content + image_urls
+      // Ensure we never send undefined for NOT NULL columns.
+      const safeSections = {
+        primary_focus: sections.primary_focus ?? "",
+        monitor_list: sections.monitor_list ?? "",
+      };
+
+      // Prefer newer schema: upsert on watchlist_date (unique per day)
+      const tryUpsert = async (payload: any) =>
+        supabase.from(WATCHLIST_TABLE).upsert(payload, { onConflict: "watchlist_date" });
+
+      const tryUpdateToday = async (payload: any) =>
+        supabase.from(WATCHLIST_TABLE).update(payload).eq("watchlist_date", today);
+
+      // 1) Try with new schema fields + content + image_urls (UPSERT by date)
       let insertErr: any = null;
-      let res = await tryInsert({
+      let res = await tryUpsert({
+        watchlist_date: today,
         content: baseText,
-        ...sections,
+        ...safeSections,
         created_by: user.id,
         ...(allUrls.length ? { image_urls: allUrls } : {}),
       });
       insertErr = res.error;
 
+      // If upsert isn't supported by this schema (missing watchlist_date), fall back to INSERT.
+      const tryInsert = async (payload: any) => supabase.from(WATCHLIST_TABLE).insert(payload);
+
+      if (insertErr && String(insertErr.message || "").toLowerCase().includes("watchlist_date")) {
+        // Retry without watchlist_date (older schema)
+        const rLegacy = await tryInsert({
+          content: baseText,
+          ...safeSections,
+          created_by: user.id,
+          ...(allUrls.length ? { image_urls: allUrls } : {}),
+        });
+        insertErr = rLegacy.error;
+      }
+
+      // If we hit the unique constraint anyway, do a plain UPDATE for today.
+      if (
+        insertErr &&
+        String(insertErr.message || "").toLowerCase().includes("duplicate key")
+      ) {
+        const rUpdate = await tryUpdateToday({
+          content: baseText,
+          ...safeSections,
+          ...(allUrls.length ? { image_urls: allUrls } : {}),
+        });
+        insertErr = rUpdate.error;
+      }
+
       // 2) If 'content' column doesn't exist, retry with common older names
       if (insertErr && String(insertErr.message || "").toLowerCase().includes("content")) {
         const candidates = ["watchlist_text", "watchlist", "body", "text"];
         for (const col of candidates) {
-          const r2 = await tryInsert({
+          // Try UPSERT first (newer schema), then fall back to UPDATE/INSERT as needed.
+          const r2 = await tryUpsert({
+            watchlist_date: today,
             [col]: baseText,
-            ...sections,
+            ...safeSections,
             created_by: user.id,
             ...(allUrls.length ? { image_urls: allUrls } : {}),
           });
           insertErr = r2.error;
+
+          if (
+            insertErr &&
+            String(insertErr.message || "").toLowerCase().includes("duplicate key")
+          ) {
+            const r2u = await tryUpdateToday({
+              [col]: baseText,
+              ...safeSections,
+              ...(allUrls.length ? { image_urls: allUrls } : {}),
+            });
+            insertErr = r2u.error;
+          }
+
+          if (insertErr && String(insertErr.message || "").toLowerCase().includes("watchlist_date")) {
+            const r2i = await tryInsert({
+              [col]: baseText,
+              ...safeSections,
+              created_by: user.id,
+              ...(allUrls.length ? { image_urls: allUrls } : {}),
+            });
+            insertErr = r2i.error;
+          }
           if (!insertErr) break;
         }
       }
@@ -790,15 +856,51 @@ function PageInner() {
       // 3) If 'image_urls' column doesn't exist, retry without images (text will still save)
       if (insertErr && String(insertErr.message || "").toLowerCase().includes("image_urls")) {
         // First try again with content
-        const r3 = await tryInsert({ content: baseText, ...sections, created_by: user.id });
+        const r3 = await tryUpsert({
+          watchlist_date: today,
+          content: baseText,
+          ...safeSections,
+          created_by: user.id,
+        });
         insertErr = r3.error;
+
+        if (
+          insertErr &&
+          String(insertErr.message || "").toLowerCase().includes("duplicate key")
+        ) {
+          const r3u = await tryUpdateToday({ content: baseText, ...safeSections });
+          insertErr = r3u.error;
+        }
+
+        if (insertErr && String(insertErr.message || "").toLowerCase().includes("watchlist_date")) {
+          const r3i = await tryInsert({ content: baseText, ...safeSections, created_by: user.id });
+          insertErr = r3i.error;
+        }
 
         // Then try older text columns
         if (insertErr && String(insertErr.message || "").toLowerCase().includes("content")) {
           const candidates = ["watchlist_text", "watchlist", "body", "text"];
           for (const col of candidates) {
-            const r4 = await tryInsert({ [col]: baseText, ...sections, created_by: user.id });
+            const r4 = await tryUpsert({
+              watchlist_date: today,
+              [col]: baseText,
+              ...safeSections,
+              created_by: user.id,
+            });
             insertErr = r4.error;
+
+            if (
+              insertErr &&
+              String(insertErr.message || "").toLowerCase().includes("duplicate key")
+            ) {
+              const r4u = await tryUpdateToday({ [col]: baseText, ...safeSections });
+              insertErr = r4u.error;
+            }
+
+            if (insertErr && String(insertErr.message || "").toLowerCase().includes("watchlist_date")) {
+              const r4i = await tryInsert({ [col]: baseText, ...safeSections, created_by: user.id });
+              insertErr = r4i.error;
+            }
             if (!insertErr) break;
           }
         }
@@ -810,12 +912,11 @@ function PageInner() {
       // Clear local selections after successful publish
       setWatchlistImages([]);
       setWatchlistScreenshotUrls(allUrls);
-      setWatchlistDraft("");
+      // Keep the text so you can keep editing/updating today's watchlist.
+      setWatchlistDraft(baseText);
       setWatchlistError(null);
 
       // Reload latest post (so everyone sees it immediately)
-      await loadWatchlist();
-
       await loadWatchlist();
     } catch (e: any) {
       setWatchlistError(e?.message ?? "Failed to publish watchlist.");
