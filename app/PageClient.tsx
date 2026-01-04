@@ -589,6 +589,92 @@ function PageInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+
+  /* ---------- Watchlist (shared, editable by admin) ---------- */
+  // Create a table in Supabase named: ust_watchlist
+  // Columns: id (uuid), content (text), created_at (timestamptz default now()), created_by (uuid nullable)
+  // RLS idea:
+  // - SELECT: enabled for everyone
+  // - INSERT/UPDATE/DELETE: only for admin (by user.id or email)
+  const WATCHLIST_TABLE = "ust_watchlist";
+
+  // Set either of these env vars (recommended) to unlock the editor only for you:
+  // NEXT_PUBLIC_UST_ADMIN_USER_ID="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+  // NEXT_PUBLIC_UST_ADMIN_EMAIL="you@example.com"
+  const ADMIN_USER_ID = process.env.NEXT_PUBLIC_UST_ADMIN_USER_ID;
+  const ADMIN_EMAIL = process.env.NEXT_PUBLIC_UST_ADMIN_EMAIL;
+
+  const isAdmin = useMemo(() => {
+    const uid = (user as any)?.id as string | undefined;
+    const email = ((user as any)?.email as string | undefined)?.toLowerCase();
+    if (ADMIN_USER_ID && uid && uid === ADMIN_USER_ID) return true;
+    if (ADMIN_EMAIL && email && email === ADMIN_EMAIL.toLowerCase()) return true;
+    return false;
+  }, [user, ADMIN_USER_ID, ADMIN_EMAIL]);
+
+  const [watchlistDraft, setWatchlistDraft] = useState("");
+  const [watchlistLatest, setWatchlistLatest] = useState<any | null>(null);
+  const [watchlistHistory, setWatchlistHistory] = useState<any[]>([]);
+  const [watchlistLoading, setWatchlistLoading] = useState(false);
+  const [watchlistSaving, setWatchlistSaving] = useState(false);
+  const [watchlistError, setWatchlistError] = useState<string | null>(null);
+
+  const loadWatchlist = useCallback(async () => {
+    setWatchlistLoading(true);
+    setWatchlistError(null);
+
+    try {
+      const { data, error } = await supabase
+        .from(WATCHLIST_TABLE)
+        .select("id, content, created_at, created_by")
+        .order("created_at", { ascending: false })
+        .limit(7);
+
+      if (error) throw error;
+
+      const latest = data?.[0] ?? null;
+      setWatchlistLatest(latest);
+      setWatchlistHistory(data ?? []);
+      if (latest?.content) setWatchlistDraft(latest.content);
+    } catch (e: any) {
+      // Common causes: table not created yet, or RLS not configured
+      setWatchlistError(e?.message ?? "Failed to load watchlist.");
+      setWatchlistLatest(null);
+      setWatchlistHistory([]);
+    } finally {
+      setWatchlistLoading(false);
+    }
+  }, []);
+
+  const publishWatchlist = useCallback(async () => {
+    const content = watchlistDraft.trim();
+    if (!content) return;
+
+    setWatchlistSaving(true);
+    setWatchlistError(null);
+
+    try {
+      const { error } = await supabase.from(WATCHLIST_TABLE).insert({
+        content,
+        created_by: (user as any)?.id ?? null,
+      });
+
+      if (error) throw error;
+
+      await loadWatchlist();
+    } catch (e: any) {
+      setWatchlistError(e?.message ?? "Failed to publish watchlist.");
+    } finally {
+      setWatchlistSaving(false);
+    }
+  }, [watchlistDraft, user, loadWatchlist]);
+
+  useEffect(() => {
+    // Load on first mount so everyone sees the latest watchlist immediately
+    void loadWatchlist();
+  }, [loadWatchlist]);
+
+
   /* Derived */
   const tradeRows = useMemo(
     () =>
@@ -1040,6 +1126,9 @@ function PageInner() {
 >
             Calendar
           </TabsTrigger>
+            <TabsTrigger value="watchlist" className="text-xs sm:text-sm">
+              Watchlist
+            </TabsTrigger>
 
           {/* A-Setups */}
           <TabsTrigger
@@ -1590,7 +1679,137 @@ function PageInner() {
           </Card>
         </TabsContent>
 
-      </Tabs>
+      
+        {/* Watchlist */}
+        <TabsContent value="watchlist" className="mt-6 space-y-6">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between gap-4">
+              <div>
+                <CardTitle>Daily Watchlist</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Updated by the UST admin — everyone sees the same latest plan.
+                </p>
+              </div>
+
+              <Button
+                variant="secondary"
+                onClick={() => void loadWatchlist()}
+                disabled={watchlistLoading}
+              >
+                {watchlistLoading ? "Refreshing..." : "Refresh"}
+              </Button>
+            </CardHeader>
+
+            <CardContent>
+              {watchlistError ? (
+                <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm">
+                  {watchlistError}
+                  <div className="mt-2 text-xs opacity-80">
+                    If this is your first time using it: create the Supabase table{" "}
+                    <code className="px-1">ust_watchlist</code> and allow{" "}
+                    <code className="px-1">SELECT</code> for everyone.
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
+                  <span>
+                    Latest update:{" "}
+                    <span className="text-foreground">
+                      {watchlistLatest?.created_at
+                        ? new Date(watchlistLatest.created_at).toLocaleString()
+                        : "—"}
+                    </span>
+                  </span>
+                </div>
+
+                <div className="rounded-lg border bg-card/40 p-4">
+                  {watchlistLatest?.content ? (
+                    <pre className="whitespace-pre-wrap break-words text-sm leading-relaxed">
+                      {watchlistLatest.content}
+                    </pre>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      No watchlist posted yet.
+                    </p>
+                  )}
+                </div>
+
+                {watchlistHistory?.length ? (
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground">
+                      Recent history
+                    </p>
+                    <div className="grid gap-2">
+                      {watchlistHistory.map((w) => (
+                        <div
+                          key={w.id}
+                          className="flex items-start justify-between gap-3 rounded-md border bg-background/20 p-3"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium">
+                              {w.content?.split("\n")?.[0] ?? "Watchlist"}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {w.created_at
+                                ? new Date(w.created_at).toLocaleString()
+                                : ""}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </CardContent>
+          </Card>
+
+          {isAdmin ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>Admin Editor</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Edit the watchlist here and publish — it updates for everyone.
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <textarea
+                  value={watchlistDraft}
+                  onChange={(e) => setWatchlistDraft(e.target.value)}
+                  placeholder="Paste your daily watchlist here…"
+                  className="min-h-[220px] w-full rounded-md border bg-background/30 p-3 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+                />
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    onClick={() => void publishWatchlist()}
+                    disabled={watchlistSaving || watchlistLoading || !watchlistDraft.trim()}
+                  >
+                    {watchlistSaving ? "Publishing..." : "Publish Watchlist"}
+                  </Button>
+
+                  <Button
+                    variant="secondary"
+                    onClick={() => setWatchlistDraft(watchlistLatest?.content ?? "")}
+                    disabled={watchlistSaving || watchlistLoading}
+                  >
+                    Reset to Latest
+                  </Button>
+                </div>
+
+                <p className="text-xs text-muted-foreground">
+                  Tip: set <code className="px-1">NEXT_PUBLIC_UST_ADMIN_USER_ID</code>{" "}
+                  or <code className="px-1">NEXT_PUBLIC_UST_ADMIN_EMAIL</code> so only
+                  you can see this editor.
+                </p>
+              </CardContent>
+            </Card>
+          ) : null}
+        </TabsContent>
+
+</Tabs>
     </div>
   );
 }
