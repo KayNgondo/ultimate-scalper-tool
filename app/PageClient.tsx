@@ -1,7 +1,7 @@
 /* PageClient.tsx — Ultimate Scalper Tool (3× Risk & Sizing + Combobox Logger) */
 "use client";
 
-import { useEffect, useMemo, useState, useContext } from "react";
+import { useEffect, useMemo, useState, useContext, useCallback } from "react";
 import * as React from "react";
 import AuthGate from "@/components/AuthGate";
 import { useSupabaseUser } from "@/lib/useSupabaseUser";
