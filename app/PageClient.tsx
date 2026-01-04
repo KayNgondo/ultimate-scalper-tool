@@ -107,11 +107,17 @@ type SheetItem = {
 
 
 function buildSheetsUrl(account: string, since?: string) {
-  const u = new URL(SHEETS_URL);
-  u.searchParams.set("readToken", SHEETS_TOKEN);
-  u.searchParams.set("account", account);
-  if (since) u.searchParams.set("since", since);
-  return u.toString();
+  // Guard against missing/invalid env vars to avoid crashing the whole app.
+  if (!SHEETS_URL || !SHEETS_TOKEN || !account) return null;
+  try {
+    const u = new URL(SHEETS_URL);
+    u.searchParams.set("readToken", SHEETS_TOKEN);
+    u.searchParams.set("account", account);
+    if (since) u.searchParams.set("since", since);
+    return u.toString();
+  } catch {
+    return null;
+  }
 }
 
 function normalizeToTradeRows(items: SheetItem[]): TradeRow[] {
@@ -153,7 +159,9 @@ function useSheetsImporter(addTradesBulk: (rows: TradeRow[]) => void) {
     if (!enabled || !SHEETS_URL || !SHEETS_TOKEN || !account) return;
     try {
       const url = buildSheetsUrl(account, since);
-      const r = await fetch(url, { cache: "no-store" });
+                  if (!url) return;
+if (!url) return;
+const r = await fetch(url, { cache: "no-store" });
       const data = await r.json();
       if (!data?.ok) return;
       const items: SheetItem[] = data.items || [];
