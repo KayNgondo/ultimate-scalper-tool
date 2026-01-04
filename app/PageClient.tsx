@@ -659,6 +659,8 @@ function PageInner() {
   const [watchlistHistory, setWatchlistHistory] = useState<any[]>([]);
   const [watchlistLoading, setWatchlistLoading] = useState(false);
   const [watchlistSaving, setWatchlistSaving] = useState(false);
+  const [watchlistUploading, setWatchlistUploading] = useState(false);
+  const [watchlistSaveMessage, setWatchlistSaveMessage] = useState<string | null>(null);
   const [watchlistError, setWatchlistError] = useState<string | null>(null);
 
   const loadWatchlist = useCallback(async () => {
@@ -713,6 +715,7 @@ function PageInner() {
     if (!content) return;
 
     setWatchlistSaving(true);
+      setWatchlistSaveMessage(null);
     setWatchlistError(null);
 
     try {
@@ -780,13 +783,15 @@ function PageInner() {
       setWatchlistError(null);
 
       // Reload latest post (so everyone sees it immediately)
-      await loadWatchlist();
-
+      setWatchlistSaveMessage("Published ✅");
       await loadWatchlist();
     } catch (e: any) {
+      console.error("publishWatchlist error", e);
+      setWatchlistSaveMessage(null);
       setWatchlistError(e?.message ?? "Failed to publish watchlist.");
     } finally {
       setWatchlistSaving(false);
+      setWatchlistUploading(false);
     }
   }, [watchlistDraft, user, loadWatchlist]);
 
@@ -1324,6 +1329,17 @@ function PageInner() {
                     <div className="text-2xl font-bold">{lastSessionSummary.disciplineScore}/100</div>
                   </div>
                 </div>
+
+                {(watchlistSaveMessage || (isAdmin && watchlistError)) && (
+                  <div className="mt-2 space-y-1">
+                    {watchlistSaveMessage && (
+                      <div className="text-sm text-emerald-300">{watchlistSaveMessage}</div>
+                    )}
+                    {isAdmin && watchlistError && (
+                      <div className="text-sm text-red-300">{watchlistError}</div>
+                    )}
+                  </div>
+                )}
 
                 <div className="grid md:grid-cols-4 gap-3">
                   <DashCard title="PnL" value={currency(lastSessionSummary.pnl)} />
