@@ -748,6 +748,7 @@ function PageInner() {
 
     try {
       // Upload any selected screenshots (optional)
+      setWatchlistUploadError(null);
       setWatchlistUploading(true);
       const uploaded = watchlistImages.length
         ? await Promise.all(watchlistImages.map((f) => uploadWatchlistScreenshot(f)))
@@ -922,8 +923,10 @@ function PageInner() {
       setWatchlistError(e?.message ?? "Failed to publish watchlist.");
     } finally {
       setWatchlistSaving(false);
+      setWatchlistUploading(false);
+      setWatchlistImages([]);
     }
-  }, [watchlistDraft, user, loadWatchlist]);
+  }, [watchlistDraft, watchlistImages, user, loadWatchlist]);
 
   useEffect(() => {
     // Load on first mount so everyone sees the latest watchlist immediately
