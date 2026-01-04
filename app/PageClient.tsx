@@ -632,10 +632,20 @@ function PageInner() {
   const ADMIN_EMAIL = process.env.NEXT_PUBLIC_UST_ADMIN_EMAIL;
 
   const isAdmin = useMemo(() => {
-    const uid = (user as any)?.id as string | undefined;
-    const email = ((user as any)?.email as string | undefined)?.toLowerCase();
-    if (ADMIN_USER_ID && uid && uid === ADMIN_USER_ID) return true;
-    if (ADMIN_EMAIL && email && email === ADMIN_EMAIL.toLowerCase()) return true;
+    const uid = (user as any)?.id || (user as any)?.user?.id; // supports both shapes
+    const email = (user as any)?.email || (user as any)?.user?.email;
+
+    // Fallback admin UID (your provided UUID) if env var is not set.
+    const adminUid = ADMIN_USER_ID || "39127777-9fd8-4183-96bf-03f943b56a24";
+
+    if (!uid) return false;
+
+    // Primary check: UID match
+    if (uid === adminUid) return true;
+
+    // Optional secondary check: email match (only if env var is set)
+    if (ADMIN_EMAIL && email && String(email).toLowerCase() === String(ADMIN_EMAIL).toLowerCase()) return true;
+
     return false;
   }, [user, ADMIN_USER_ID, ADMIN_EMAIL]);
 
@@ -1800,6 +1810,7 @@ function PageInner() {
                 <p className="text-sm text-muted-foreground">
                   Updated by the UST admin — everyone sees the same latest plan.
                 </p>
+                <p className="text-xs opacity-70 mt-1">Signed in UID: {(user as any)?.id || (user as any)?.user?.id || "—"} {isAdmin ? "(admin)" : ""}</p>
               </div>
 
               <Button
