@@ -214,7 +214,7 @@ function ToastProvider({ children }: { children: React.ReactNode }) {
       {children}
       <div className="fixed top-4 right-4 z-[60] space-y-2">
         {items.map((t) => (
-          <div key={t.id} className="rounded-lg border bg-white shadow px-3 py-2 w-72">
+          <div key={t.id} className="rounded-lg border bg-white shadow px-3 py-2 w-72 dark:border-slate-800 dark:bg-slate-950">
             <div className="text-sm font-medium">{t.title}</div>
             {t.desc ? (
               <div className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">{t.desc}</div>
@@ -1418,40 +1418,77 @@ function PageInner() {
         </TabsList>
 
         {/* DASHBOARD */}
-        <TabsContent value="dashboard" className="space-y-4">
-          <div className="grid md:grid-cols-4 gap-4">
-            <DashCard title="Win rate" value={`${fmt(winRate)}%`} hint={`${wins}W / ${losses}L / ${bes}BE`} />
-            <DashCard
-              title="PNL (this session)"
-              value={currency(pnl)}
-              hint={`Closed trades: ${closed}${sessionPct ? ` • ${sessionPct}` : ""}`}
-            />
-            <DashCard title="Sessions" value={`${sessionsCount}`} hint={badge ? badge.name : "Starter"} />
-            <DashCard title="Equity" value={currency(equity)} hint={`Start: ${currency(startBalance)}`} />
+        <TabsContent value="dashboard" className="space-y-5">
+          <div className="rounded-2xl border border-[#D4AF37]/25 bg-gradient-to-br from-[#D4AF37]/15 via-transparent to-transparent p-4 md:p-5 shadow-sm">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#D4AF37]">Trading Command Centre</p>
+                <h2 className="text-xl font-bold md:text-2xl">Dashboard Overview</h2>
+              </div>
+              <div className={`rounded-full border px-3 py-1 text-xs font-semibold ${locked && lockOnHit ? "border-rose-300 bg-rose-50 text-rose-700 dark:bg-rose-950/30 dark:text-rose-300" : "border-emerald-300 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300"}`}>
+                {locked && lockOnHit ? "Trading Locked" : "Trading Active"}
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-4">
+              <DashCard title="Equity" value={currency(equity)} hint={`Start: ${currency(startBalance)}`} tone={equity >= startBalance ? "positive" : "negative"} featured />
+              <DashCard
+                title="PNL (this session)"
+                value={currency(pnl)}
+                hint={`Closed trades: ${closed}${sessionPct ? ` • ${sessionPct}` : ""}`}
+                tone={pnl > 0 ? "positive" : pnl < 0 ? "negative" : "neutral"}
+                featured
+              />
+              <DashCard title="Win rate" value={`${fmt(winRate)}%`} hint={`${wins}W / ${losses}L / ${bes}BE`} tone={winRate >= 50 ? "positive" : closed > 0 ? "warning" : "neutral"} featured />
+              <DashCard title="Discipline" value={`${disciplineScore}/100`} hint={currentRuleBadges.length ? `${currentRuleBadges.length} rules active` : "Checklist pending"} tone={disciplineScore >= 80 ? "positive" : disciplineScore >= 60 ? "warning" : "negative"} featured />
+            </div>
           </div>
 
-          <div className="grid md:grid-cols-5 gap-4">
+          <SectionLabel title="Capital & Growth" />
+          <div className="grid gap-4 md:grid-cols-5">
             <DashCard title="Starting Capital" value={currency(startBalance)} />
             <DashCard
               title="All-time Trade PnL"
               value={`${totalTradePnlAllTime >= 0 ? "+" : ""}${currency(Number(totalTradePnlAllTime.toFixed(2)))}`}
+              tone={totalTradePnlAllTime > 0 ? "positive" : totalTradePnlAllTime < 0 ? "negative" : "neutral"}
             />
             <DashCard
               title="Total Withdrawn"
               value={`-${currency(Number(totalWithdrawnAllTime.toFixed(2)))}`}
               hint="All time"
+              tone={totalWithdrawnAllTime > 0 ? "warning" : "neutral"}
             />
             <DashCard
               title="Monthly Withdrawals"
               value={`-${currency(Number(monthlyWithdrawn.toFixed(2)))}`}
               hint="Current month"
+              tone={monthlyWithdrawn > 0 ? "warning" : "neutral"}
             />
-            <DashCard title="All-time Growth" value={`${fmt(allTimeGrowthPct)}%`} hint="Based on starting capital" />
+            <DashCard title="All-time Growth" value={`${fmt(allTimeGrowthPct)}%`} hint="Based on starting capital" tone={allTimeGrowthPct > 0 ? "positive" : allTimeGrowthPct < 0 ? "negative" : "neutral"} />
           </div>
 
+          <SectionLabel title="Session Snapshot" />
+          <div className="grid gap-4 lg:grid-cols-3">
+            <Card className="lg:col-span-2 overflow-hidden border-[#D4AF37]/30 bg-white/70 shadow-sm backdrop-blur dark:bg-slate-950/60">
+              <CardContent className="p-5">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h4 className="text-lg font-semibold">Target Progress</h4>
+                    <p className="text-xs text-slate-500">Weekly and monthly trading performance</p>
+                  </div>
+                  <span className="rounded-full border border-[#D4AF37]/40 bg-[#D4AF37]/10 px-3 py-1 text-xs font-semibold text-[#8A6A00] dark:text-[#F5D76E]">Goal Tracker</span>
+                </div>
+                <div className="mt-4 grid gap-4 md:grid-cols-2">
+                  <MiniProgress title="Weekly" current={weeklyProgress} target={weeklyTarget} />
+                  <MiniProgress title="Monthly" current={monthlyProgress} target={monthlyTarget} />
+                </div>
+              </CardContent>
+            </Card>
+            <DashCard title="Sessions" value={`${sessionsCount}`} hint={badge ? badge.name : "Starter"} tone="gold" featured />
+          </div>
 
           {lastSessionSummary && (
-            <Card className="border-[#D4AF37]/40">
+            <Card className="border-[#D4AF37]/40 bg-white/70 shadow-sm backdrop-blur dark:bg-slate-950/60">
               <CardContent className="p-5 space-y-3">
                 <div className="flex items-center justify-between gap-3">
                   <div>
@@ -2149,15 +2186,73 @@ function PageInner() {
 /* =========================================================================
    Reusable UI blocks
 ============================================================================ */
-function DashCard({ title, value, hint }: { title: string; value: string; hint?: string }) {
+type DashTone = "neutral" | "positive" | "negative" | "warning" | "gold";
+
+function SectionLabel({ title }: { title: string }) {
   return (
-    <Card>
-      <CardContent className="p-4">
-        <div className="text-sm text-slate-600 dark:text-slate-300">{title}</div>
-        <div className="text-2xl font-semibold">{value}</div>
-        {hint && <div className="text-xs text-slate-500">{hint}</div>}
+    <div className="flex items-center gap-3 pt-1">
+      <h3 className="text-xs font-bold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">{title}</h3>
+      <div className="h-px flex-1 bg-gradient-to-r from-[#D4AF37]/50 to-transparent" />
+    </div>
+  );
+}
+
+function toneClasses(tone: DashTone = "neutral") {
+  switch (tone) {
+    case "positive":
+      return "border-emerald-300/50 bg-emerald-50/60 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-950/20 dark:text-emerald-300";
+    case "negative":
+      return "border-rose-300/50 bg-rose-50/60 text-rose-700 dark:border-rose-500/30 dark:bg-rose-950/20 dark:text-rose-300";
+    case "warning":
+      return "border-amber-300/50 bg-amber-50/60 text-amber-700 dark:border-amber-500/30 dark:bg-amber-950/20 dark:text-amber-300";
+    case "gold":
+      return "border-[#D4AF37]/50 bg-[#D4AF37]/10 text-[#8A6A00] dark:text-[#F5D76E]";
+    default:
+      return "border-slate-200/80 bg-white/70 text-slate-900 dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-100";
+  }
+}
+
+function DashCard({
+  title,
+  value,
+  hint,
+  tone = "neutral",
+  featured = false,
+}: {
+  title: string;
+  value: string;
+  hint?: string;
+  tone?: DashTone;
+  featured?: boolean;
+}) {
+  return (
+    <Card className={`group overflow-hidden shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${toneClasses(tone)}`}>
+      <CardContent className={featured ? "p-5" : "p-4"}>
+        <div className="text-sm font-medium text-slate-600 dark:text-slate-300">{title}</div>
+        <div className={`${featured ? "text-3xl" : "text-2xl"} mt-1 font-bold tracking-tight`}>{value}</div>
+        {hint && <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">{hint}</div>}
       </CardContent>
     </Card>
+  );
+}
+
+function MiniProgress({ title, current, target }: { title: string; current: number; target: number }) {
+  const pct = target > 0 ? Math.max(0, Math.min(100, (current / target) * 100)) : 0;
+  const tone = current >= target && target > 0 ? "text-emerald-600 dark:text-emerald-300" : current < 0 ? "text-rose-600 dark:text-rose-300" : "text-[#8A6A00] dark:text-[#F5D76E]";
+  return (
+    <div className="rounded-xl border border-slate-200/80 bg-white/60 p-4 dark:border-slate-800 dark:bg-slate-900/40">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <div>
+          <div className="text-sm font-semibold">{title}</div>
+          <div className="text-xs text-slate-500">Target: {target > 0 ? currency(target) : "Not set"}</div>
+        </div>
+        <div className={`text-right text-lg font-bold ${tone}`}>{current >= 0 ? "+" : ""}{currency(Number(current.toFixed(2)))}</div>
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+        <div className="h-full rounded-full bg-[#D4AF37] transition-all" style={{ width: `${pct}%` }} />
+      </div>
+      <div className="mt-1 text-right text-xs text-slate-500">{target > 0 ? `${fmt(pct)}% reached` : "Add a target in Goals"}</div>
+    </div>
   );
 }
 function InfoStat({ label, value }: { label: string; value: string }) {
