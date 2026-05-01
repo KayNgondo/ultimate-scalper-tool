@@ -3252,48 +3252,139 @@ function AutoImportPanel({ addTradesBulkFn }: { addTradesBulkFn: (rows: TradeRow
   const { enabled, setEnabled, account, setAccount, since, setSince, lastSync, runImport } =
     useSheetsImporter(addTradesBulkFn);
 
+  // Manual backfill/import range. This allows old trades to be pulled even after auto-sync has moved forward.
+  const [manualFrom, setManualFrom] = React.useState<string>(since || "");
+  const [manualTo, setManualTo] = React.useState<string>("");
+  const [manualImporting, setManualImporting] = React.useState(false);
+
+  async function runManualImport() {
+    if (!SHEETS_URL || !SHEETS_TOKEN || !account) return;
+
+    setManualImporting(true);
+
+    try {
+      const url = buildSheetsUrl(account, manualFrom);
+      if (!url) return;
+
+      const r = await fetch(url, { cache: "no-store" });
+      const data = await r.json();
+      if (!data?.ok) return;
+
+      let rows = normalizeToTradeRows(data.items || []);
+
+      // Optional end-date filter for manual backfills.
+      if (manualTo) {
+        const untilEnd = new Date(`${manualTo}T23:59:59`).getTime();
+        rows = rows.filter((t) => (t.ts || 0) <= untilEnd);
+      }
+
+      // Dedupe against the actual journal, not the last sync time.
+      // This lets you import older dates without creating duplicates.
+      const existingRaw = localStorage.getItem("ust-trades");
+      const existing: TradeRow[] = existingRaw ? JSON.parse(existingRaw) : [];
+      const existingKeys = new Set(
+        existing.map((t) => t.extId || `${t.ts}-${t.symbol}-${t.pnl}`)
+      );
+
+      const freshRows = rows.filter(
+        (t) => !existingKeys.has(t.extId || `${t.ts}-${t.symbol}-${t.pnl}`)
+      );
+
+      if (freshRows.length) {
+        addTradesBulkFn(freshRows);
+      }
+
+      localStorage.setItem("ust:lastSync", JSON.stringify(Date.now()));
+    } catch (e) {
+      console.warn("Manual import failed:", e);
+    } finally {
+      setManualImporting(false);
+    }
+  }
+
   return (
-    <div className="grid md:grid-cols-12 gap-3 items-end">
-      <div className="md:col-span-2">
-        <label className="block text-xs mb-1">Enabled</label>
-        <select
-          value={String(enabled)}
-          onChange={(e) => setEnabled(e.target.value === "true")}
-          className="w-full border rounded px-2 py-1"
-        >
-          <option value="true">Yes</option>
-          <option value="false">No</option>
-        </select>
+    <div className="space-y-4">
+      <div className="grid md:grid-cols-12 gap-3 items-end">
+        <div className="md:col-span-2">
+          <label className="block text-xs mb-1">Enabled</label>
+          <select
+            value={String(enabled)}
+            onChange={(e) => setEnabled(e.target.value === "true")}
+            className="w-full border rounded px-2 py-1"
+          >
+            <option value="true">Yes</option>
+            <option value="false">No</option>
+          </select>
+        </div>
+
+        <div className="md:col-span-3">
+          <label className="block text-xs mb-1">Account #</label>
+          <input
+            value={account}
+            onChange={(e) => setAccount(e.target.value)}
+            placeholder="12345789"
+            className="w-full border rounded px-2 py-1"
+          />
+        </div>
+
+        <div className="md:col-span-3">
+          <label className="block text-xs mb-1">Auto Since</label>
+          <input
+            type="date"
+            value={since}
+            onChange={(e) => setSince(e.target.value)}
+            className="w-full border rounded px-2 py-1"
+          />
+        </div>
+
+        <div className="md:col-span-2">
+          <button onClick={runImport} className="w-full border rounded px-3 py-1">
+            Import Now
+          </button>
+        </div>
+
+        <div className="md:col-span-2 text-xs text-slate-500">
+          Last sync: {lastSync ? new Date(lastSync).toLocaleTimeString() : "—"}
+        </div>
       </div>
 
-      <div className="md:col-span-3">
-        <label className="block text-xs mb-1">Account #</label>
-        <input
-          value={account}
-          onChange={(e) => setAccount(e.target.value)}
-          placeholder="12345789"
-          className="w-full border rounded px-2 py-1"
-        />
-      </div>
+      <div className="rounded-lg border border-[#D4AF37]/40 bg-[#D4AF37]/10 p-3">
+        <div className="text-sm font-semibold mb-2">Manual Import / Backfill by Date</div>
+        <div className="grid md:grid-cols-12 gap-3 items-end">
+          <div className="md:col-span-4">
+            <label className="block text-xs mb-1">Import From</label>
+            <input
+              type="date"
+              value={manualFrom}
+              onChange={(e) => setManualFrom(e.target.value)}
+              className="w-full border rounded px-2 py-1"
+            />
+          </div>
 
-      <div className="md:col-span-3">
-        <label className="block text-xs mb-1">Since (YYYY-MM-DD, optional)</label>
-        <input
-          value={since}
-          onChange={(e) => setSince(e.target.value)}
-          placeholder="2025-11-01"
-          className="w-full border rounded px-2 py-1"
-        />
-      </div>
+          <div className="md:col-span-4">
+            <label className="block text-xs mb-1">Import To</label>
+            <input
+              type="date"
+              value={manualTo}
+              onChange={(e) => setManualTo(e.target.value)}
+              className="w-full border rounded px-2 py-1"
+            />
+          </div>
 
-      <div className="md:col-span-2">
-        <button onClick={runImport} className="w-full border rounded px-3 py-1">
-          Import Now
-        </button>
-      </div>
+          <div className="md:col-span-2">
+            <button
+              onClick={runManualImport}
+              disabled={manualImporting || !manualFrom}
+              className="w-full border rounded px-3 py-1 bg-[#D4AF37] text-black disabled:opacity-60"
+            >
+              {manualImporting ? "Importing..." : "Import Dates"}
+            </button>
+          </div>
 
-      <div className="md:col-span-2 text-xs text-slate-500">
-        Last sync: {lastSync ? new Date(lastSync).toLocaleTimeString() : "—"}
+          <div className="md:col-span-2 text-xs text-slate-500">
+            Use this for missed/older trades.
+          </div>
+        </div>
       </div>
     </div>
   );
