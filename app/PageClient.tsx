@@ -35,7 +35,7 @@ import {
   CommandItem,
   CommandGroup,
 } from "@/components/ui/command";
-import { ChevronsUpDown, Check } from "lucide-react";
+import { ChevronsUpDown, Check, Wallet, TrendingUp, TrendingDown, BarChart3, CalendarDays, Target, ShieldCheck, Activity, Info, PieChart, Star, Scale } from "lucide-react";
 
 /* ========== recharts ========== */
 import {
@@ -1418,220 +1418,172 @@ function PageInner() {
         </TabsList>
 
         {/* DASHBOARD */}
-        <TabsContent value="dashboard" className="space-y-5">
-          <div className="rounded-2xl border border-[#D4AF37]/25 bg-gradient-to-br from-[#D4AF37]/15 via-transparent to-transparent p-4 md:p-5 shadow-sm">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <TabsContent value="dashboard" className="space-y-4">
+          <div className="rounded-2xl border border-slate-800/80 bg-[radial-gradient(circle_at_top_left,rgba(212,175,55,0.13),transparent_28%),linear-gradient(135deg,#07111f_0%,#0b1220_55%,#101827_100%)] p-3 shadow-2xl shadow-black/25 dark:border-slate-700/70 md:p-5">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#D4AF37]">Trading Command Centre</p>
-                <h2 className="text-xl font-bold md:text-2xl">Dashboard Overview</h2>
+                <p className="text-xs font-bold uppercase tracking-[0.35em] text-[#F6C945]">Trading Command Centre</p>
+                <h2 className="mt-1 text-2xl font-extrabold tracking-tight text-white md:text-3xl">Dashboard Overview</h2>
               </div>
-              <div className={`rounded-full border px-3 py-1 text-xs font-semibold ${locked && lockOnHit ? "border-rose-300 bg-rose-50 text-rose-700 dark:bg-rose-950/30 dark:text-rose-300" : "border-emerald-300 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300"}`}>
+              <div className={`inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-bold shadow-lg ${locked && lockOnHit ? "border-rose-500/50 bg-rose-500/10 text-rose-300 shadow-rose-950/30" : "border-emerald-400/50 bg-emerald-500/10 text-emerald-300 shadow-emerald-950/30"}`}>
+                <Activity className="h-4 w-4" />
                 {locked && lockOnHit ? "Trading Locked" : "Trading Active"}
               </div>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-4">
-              <DashCard title="Equity" value={currency(equity)} hint={`Start: ${currency(startBalance)}`} tone={equity >= startBalance ? "positive" : "negative"} featured />
+            <div className="grid gap-4 lg:grid-cols-4">
+              <DashCard title="Equity" value={currency(equity)} hint={`Start: ${currency(startBalance)}`} tone={equity >= startBalance ? "positive" : "negative"} featured icon="wallet" spark="up" />
               <DashCard
                 title="PNL (this session)"
                 value={currency(pnl)}
                 hint={`Closed trades: ${closed}${sessionPct ? ` • ${sessionPct}` : ""}`}
-                tone={pnl > 0 ? "positive" : pnl < 0 ? "negative" : "neutral"}
+                tone={pnl > 0 ? "positive" : pnl < 0 ? "negative" : "blue"}
                 featured
+                icon="trend"
+                spark="flat"
               />
-              <DashCard title="Win rate" value={`${fmt(winRate)}%`} hint={`${wins}W / ${losses}L / ${bes}BE`} tone={winRate >= 50 ? "positive" : closed > 0 ? "warning" : "neutral"} featured />
-              <DashCard title="Discipline" value={`${disciplineScore}/100`} hint={currentRuleBadges.length ? `${currentRuleBadges.length} rules active` : "Checklist pending"} tone={disciplineScore >= 80 ? "positive" : disciplineScore >= 60 ? "warning" : "negative"} featured />
+              <DashCard title="Win rate" value={`${fmt(winRate)}%`} hint={`${wins}W / ${losses}L / ${bes}BE`} tone={winRate >= 50 ? "purple" : closed > 0 ? "warning" : "purple"} featured icon="pie" />
+              <DashCard title="Discipline" value={`${disciplineScore}/100`} hint={currentRuleBadges.length ? `${currentRuleBadges.length} rules active` : "Checklist pending"} tone={disciplineScore >= 80 ? "positive" : disciplineScore >= 60 ? "gold" : "negative"} featured icon="shield" progress={disciplineScore} />
             </div>
           </div>
 
-          <SectionLabel title="Capital & Growth" />
-          <div className="grid gap-4 md:grid-cols-5">
-            <DashCard title="Starting Capital" value={currency(startBalance)} />
+          <SectionLabel title="Capital & Growth" icon="bars" />
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+            <DashCard title="Starting Capital" value={currency(startBalance)} icon="wallet" />
             <DashCard
               title="All-time Trade PnL"
               value={`${totalTradePnlAllTime >= 0 ? "+" : ""}${currency(Number(totalTradePnlAllTime.toFixed(2)))}`}
               tone={totalTradePnlAllTime > 0 ? "positive" : totalTradePnlAllTime < 0 ? "negative" : "neutral"}
+              icon="growth"
             />
             <DashCard
               title="Total Withdrawn"
               value={`-${currency(Number(totalWithdrawnAllTime.toFixed(2)))}`}
               hint="All time"
-              tone={totalWithdrawnAllTime > 0 ? "warning" : "neutral"}
+              tone={totalWithdrawnAllTime > 0 ? "negative" : "neutral"}
+              icon="down"
             />
             <DashCard
               title="Monthly Withdrawals"
               value={`-${currency(Number(monthlyWithdrawn.toFixed(2)))}`}
               hint="Current month"
-              tone={monthlyWithdrawn > 0 ? "warning" : "neutral"}
+              tone={monthlyWithdrawn > 0 ? "negative" : "neutral"}
+              icon="calendar"
             />
-            <DashCard title="All-time Growth" value={`${fmt(allTimeGrowthPct)}%`} hint="Based on starting capital" tone={allTimeGrowthPct > 0 ? "positive" : allTimeGrowthPct < 0 ? "negative" : "neutral"} />
+            <DashCard title="All-time Growth" value={`${fmt(allTimeGrowthPct)}%`} hint="Based on starting capital" tone={allTimeGrowthPct > 0 ? "positive" : allTimeGrowthPct < 0 ? "negative" : "neutral"} icon="growth" />
           </div>
 
-          <SectionLabel title="Session Snapshot" />
-          <div className="grid gap-4 lg:grid-cols-3">
-            <Card className="lg:col-span-2 overflow-hidden border-[#D4AF37]/30 bg-white/70 shadow-sm backdrop-blur dark:bg-slate-950/60">
+          <div className="grid gap-4 xl:grid-cols-3">
+            <Card className="border-slate-800/80 bg-gradient-to-br from-[#0b1220] to-[#111827] text-slate-100 shadow-xl shadow-black/20 xl:col-span-1">
               <CardContent className="p-5">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <h4 className="text-lg font-semibold">Target Progress</h4>
-                    <p className="text-xs text-slate-500">Weekly and monthly trading performance</p>
-                  </div>
-                  <span className="rounded-full border border-[#D4AF37]/40 bg-[#D4AF37]/10 px-3 py-1 text-xs font-semibold text-[#8A6A00] dark:text-[#F5D76E]">Goal Tracker</span>
+                <div className="mb-4 flex items-center gap-3">
+                  <div className="grid h-8 w-8 place-items-center rounded-lg border border-[#F6C945]/35 bg-[#F6C945]/10 text-[#F6C945]"><BarChart3 className="h-4 w-4" /></div>
+                  <h4 className="text-base font-extrabold uppercase tracking-wide text-white">Performance Summary</h4>
                 </div>
-                <div className="mt-4 grid gap-4 md:grid-cols-2">
-                  <MiniProgress title="Weekly" current={weeklyProgress} target={weeklyTarget} />
-                  <MiniProgress title="Monthly" current={monthlyProgress} target={monthlyTarget} />
+                <div className="space-y-2">
+                  <MetricRow label="Best Day" value={currency(Math.max(todayTradePnl, pnl, 0))} tone="positive" icon="trophy" />
+                  <MetricRow label="Worst Day" value={currency(Math.min(todayTradePnl, pnl, 0))} tone="negative" icon="down" />
+                  <MetricRow label="Average Daily PnL" value={currency(Number(todayTradePnl.toFixed(2)))} tone={todayTradePnl >= 0 ? "blue" : "negative"} icon="bars" />
+                  <MetricRow label="Profit Factor" value={closed ? fmt(wins / Math.max(losses, 1)) : "0.00"} tone="purple" icon="scale" />
                 </div>
               </CardContent>
             </Card>
-            <DashCard title="Sessions" value={`${sessionsCount}`} hint={badge ? badge.name : "Starter"} tone="gold" featured />
-          </div>
 
-          {lastSessionSummary && (
-            <Card className="border-[#D4AF37]/40 bg-white/70 shadow-sm backdrop-blur dark:bg-slate-950/60">
-              <CardContent className="p-5 space-y-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <h4 className="text-lg font-semibold">Last Session Summary</h4>
-                    <div className="text-xs text-slate-500">
-                      {new Date(lastSessionSummary.endedAt).toLocaleString()} • {lastSessionSummary.topMarket}
+            <Card className="border-slate-800/80 bg-gradient-to-br from-[#0b1220] to-[#111827] text-slate-100 shadow-xl shadow-black/20 xl:col-span-1">
+              <CardContent className="p-5">
+                <div className="mb-4 flex items-center gap-3">
+                  <div className="grid h-8 w-8 place-items-center rounded-lg border border-white/15 bg-white/5 text-white"><Target className="h-4 w-4" /></div>
+                  <h4 className="text-base font-extrabold uppercase tracking-wide text-white">Daily Target Progress</h4>
+                </div>
+                <div className="mb-3 flex items-center justify-between text-sm text-slate-300">
+                  <span>Daily Target</span>
+                  <span>{currency(sessionTarget || 0)}</span>
+                </div>
+                <div className="text-3xl font-black text-[#F6C945]">{sessionTarget > 0 ? fmt(Math.max(0, Math.min(100, (pnl / sessionTarget) * 100))) : "0"}%</div>
+                <div className="mt-3 h-3 overflow-hidden rounded-full bg-slate-800">
+                  <div className="h-full rounded-full bg-gradient-to-r from-[#F6C945] to-amber-400" style={{ width: `${sessionTarget > 0 ? Math.max(0, Math.min(100, (pnl / sessionTarget) * 100)) : 0}%` }} />
+                </div>
+                <div className="mt-2 flex justify-between text-xs text-slate-400">
+                  <span>{currency(Math.max(0, pnl))} achieved</span>
+                  <span>{currency(Math.max(0, (sessionTarget || 0) - pnl))} remaining</span>
+                </div>
+                <div className="mt-4 rounded-lg border border-[#F6C945]/30 bg-[#F6C945]/10 px-3 py-2 text-sm text-slate-200">
+                  <Star className="mr-2 inline h-4 w-4 text-[#F6C945]" /> Stay focused. Consistency compounds.
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-slate-800/80 bg-gradient-to-br from-[#0b1220] to-[#111827] text-slate-100 shadow-xl shadow-black/20 xl:col-span-1">
+              <CardContent className="p-5">
+                <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="grid h-8 w-8 place-items-center rounded-lg border border-[#F6C945]/35 bg-[#F6C945]/10 text-[#F6C945]"><CalendarDays className="h-4 w-4" /></div>
+                    <div>
+                      <h4 className="text-base font-extrabold uppercase tracking-wide text-white">Last Session Summary</h4>
+                      <p className="text-xs text-slate-400">{lastSessionSummary ? `${new Date(lastSessionSummary.endedAt).toLocaleString()} • ${lastSessionSummary.topMarket}` : "No previous session recorded"}</p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <div className="text-sm text-slate-500">Discipline</div>
-                    <div className="text-2xl font-bold">{lastSessionSummary.disciplineScore}/100</div>
-                  </div>
+                  <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-slate-200">{lastSessionSummary ? "Completed" : "No Trades"}</span>
                 </div>
-
-                <div className="grid md:grid-cols-4 gap-3">
-                  <DashCard title="PnL" value={currency(lastSessionSummary.pnl)} />
-                  <DashCard title="Trades" value={`${lastSessionSummary.trades}`} hint={`${lastSessionSummary.wins}W / ${lastSessionSummary.losses}L / ${lastSessionSummary.bes}BE`} />
-                  <DashCard title="Win rate" value={`${fmt(lastSessionSummary.winRate)}%`} />
-                  <DashCard title="Top Market" value={lastSessionSummary.topMarket} />
+                <div className="grid grid-cols-4 gap-3 text-center">
+                  <MiniStat label="Trades" value={`${lastSessionSummary?.trades ?? 0}`} tone="blue" />
+                  <MiniStat label="Win Rate" value={`${fmt(lastSessionSummary?.winRate ?? 0)}%`} tone="positive" />
+                  <MiniStat label="Best Trade" value={currency(Math.max(...sessionTrades.map(t => t.pnl || 0), 0))} tone="positive" />
+                  <MiniStat label="Worst Trade" value={currency(Math.min(...sessionTrades.map(t => t.pnl || 0), 0))} tone="negative" />
                 </div>
-
-                {lastSessionSummary.badges?.length > 0 && (
-                  <div className="flex flex-wrap gap-2 pt-1">
-                    {lastSessionSummary.badges.map((b: string) => (
-                      <span
-                        key={b}
-                        className="px-2 py-1 rounded-full text-xs border border-[#D4AF37]/50 bg-[#D4AF37]/10 text-slate-700 dark:text-slate-200"
-                      >
-                        {b}
-                      </span>
-                    ))}
-                  </div>
-                )}
+                <div className="mt-5 rounded-lg border border-blue-500/30 bg-blue-500/10 p-3 text-sm text-blue-200">
+                  <Info className="mr-2 inline h-4 w-4" />
+                  {closed ? "Review entries with precision. Repeat what worked and remove what failed." : "No trades recorded this session. Execute with precision. Review with purpose."}
+                </div>
               </CardContent>
             </Card>
-          )}
+          </div>
+
+          <div className="rounded-xl border border-slate-800/80 bg-gradient-to-r from-[#0b1220] to-[#111827] px-4 py-3 text-center text-sm text-slate-300 shadow-lg">
+            <span className="text-[#F6C945]">⚡</span> Discipline is doing what needs to be done, even when you don&apos;t feel like doing it.
+          </div>
 
           <div className="grid lg:grid-cols-2 gap-4">
-            <Card>
+            <Card className="border-slate-800/80 bg-gradient-to-br from-[#0b1220] to-[#111827] text-slate-100 shadow-xl shadow-black/20">
               <CardContent className="p-5 space-y-3">
-                <h4 className="text-lg font-semibold">Session Discipline</h4>
+                <h4 className="text-lg font-semibold text-white">Session Discipline</h4>
                 <div className="rounded-xl border border-[#D4AF37]/30 bg-[#D4AF37]/5 p-3 space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">Discipline Score</span>
-                    <span className="text-sm font-bold">{disciplineScore}/100</span>
+                    <span className="text-sm font-medium text-slate-200">Discipline Score</span>
+                    <span className="text-sm font-bold text-[#F6C945]">{disciplineScore}/100</span>
                   </div>
-                  <div className="h-2 w-full rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
-                    <div
-                      className="h-2 bg-[#D4AF37]"
-                      style={{ width: `${disciplineScore}%` }}
-                    />
+                  <div className="h-2 w-full rounded-full bg-slate-800 overflow-hidden">
+                    <div className="h-2 bg-[#D4AF37]" style={{ width: `${disciplineScore}%` }} />
                   </div>
                   {currentRuleBadges.length > 0 && (
                     <div className="space-y-1">
-                      <div className="text-xs text-slate-500">Rules Enforced</div>
+                      <div className="text-xs text-slate-400">Rules Enforced</div>
                       <div className="flex flex-wrap gap-2">
                       {currentRuleBadges.slice(0, 6).map((b: string) => (
-                        <span
-                          key={b}
-                          className="px-2 py-1 rounded-full text-xs border border-[#D4AF37]/50 bg-[#D4AF37]/10 text-slate-700 dark:text-slate-200"
-                        >
-                          {b}
-                        </span>
+                        <span key={b} className="px-2 py-1 rounded-full text-xs border border-[#D4AF37]/50 bg-[#D4AF37]/10 text-slate-200">{b}</span>
                       ))}
                     </div>
                     </div>
                   )}
                 </div>
                 <div className="grid md:grid-cols-3 gap-3 items-end">
-                  <div className="md:col-span-1">
-                    <Label>Daily Max Loss (USD)</Label>
-                    <Input type="number" value={maxLoss} onChange={(e) => setMaxLoss(Number(e.target.value) || 0)} />
-                  </div>
-                  <div className="md:col-span-1">
-                    <Label>Stop trading at -Max Loss</Label>
-                    <Select value={String(lockOnHit)} onValueChange={(v: string) => setLockOnHit(v === "true")}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent className="z-[70] bg-white border shadow-md">
-                        <SelectItem value="true">Enabled</SelectItem>
-                        <SelectItem value="false">Disabled</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="md:col-span-1">
-                    <Label>Today PnL</Label>
-                    <div
-                      className={`h-10 grid place-items-center rounded-md border ${
-                        todayTradePnl < 0 ? "bg-red-50" : todayTradePnl > 0 ? "bg-blue-50" : "bg-white"
-                      }`}
-                    >
-                      <strong>
-                        {todayTradePnl >= 0 ? "+" : ""}
-                        {currency(Number(todayTradePnl.toFixed(2)))}
-                      </strong>
-                    </div>
-                  </div>
+                  <div className="md:col-span-1"><Label>Daily Max Loss (USD)</Label><Input type="number" value={maxLoss} onChange={(e) => setMaxLoss(Number(e.target.value) || 0)} /></div>
+                  <div className="md:col-span-1"><Label>Stop trading at -Max Loss</Label><Select value={String(lockOnHit)} onValueChange={(v: string) => setLockOnHit(v === "true")}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent className="z-[70] bg-white border shadow-md"><SelectItem value="true">Enabled</SelectItem><SelectItem value="false">Disabled</SelectItem></SelectContent></Select></div>
+                  <div className="md:col-span-1"><Label>Today PnL</Label><div className={`h-10 grid place-items-center rounded-md border ${todayTradePnl < 0 ? "border-rose-500/30 bg-rose-500/10 text-rose-300" : todayTradePnl > 0 ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300" : "border-slate-700 bg-slate-900 text-slate-200"}`}><strong>{todayTradePnl >= 0 ? "+" : ""}{currency(Number(todayTradePnl.toFixed(2)))}</strong></div></div>
                 </div>
-
-                <div
-                  className={`rounded-md border p-3 text-sm ${
-                    locked && lockOnHit
-                      ? "bg-rose-50 border-rose-200 text-rose-700"
-                      : "bg-emerald-50 border-emerald-200 text-emerald-700"
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span>
-                      <strong>Status:</strong> {locked && lockOnHit ? "Locked for today (max loss hit)" : "Active"}
-                    </span>
-                    <div className="flex gap-2">
-                      <Button variant="outline" onClick={resetDailyLock}>Reset Lock</Button>
-                      {locked && lockOnHit && (
-                        <Button
-                          onClick={() => {
-                            setLockOnHit(false);
-                            push({ title: "Override", desc: "Lock disabled for today." });
-                          }}
-                        >
-                          Override
-                        </Button>
-                      )}
-                    </div>
-                  </div>
+                <div className={`rounded-md border p-3 text-sm ${locked && lockOnHit ? "bg-rose-500/10 border-rose-500/30 text-rose-300" : "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"}`}>
+                  <div className="flex items-center justify-between gap-2"><span><strong>Status:</strong> {locked && lockOnHit ? "Locked for today (max loss hit)" : "Active"}</span><div className="flex gap-2"><Button variant="outline" onClick={resetDailyLock}>Reset Lock</Button>{locked && lockOnHit && (<Button onClick={() => { setLockOnHit(false); push({ title: "Override", desc: "Lock disabled for today." }); }}>Override</Button>)}</div></div>
                 </div>
-
-                <div className="text-xs text-slate-500">
-                  When enabled, Quick Logger and New Trade are disabled once today&apos;s PnL ≤ -Daily Max Loss. Auto-unlocks at local midnight.
-                </div>
+                <div className="text-xs text-slate-400">When enabled, Quick Logger and New Trade are disabled once today&apos;s PnL ≤ -Daily Max Loss. Auto-unlocks at local midnight.</div>
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="border-slate-800/80 bg-gradient-to-br from-[#0b1220] to-[#111827] text-slate-100 shadow-xl shadow-black/20">
               <CardContent className="p-5 space-y-4">
-                <h4 className="text-lg font-semibold">Goals</h4>
+                <h4 className="text-lg font-semibold text-white">Goals</h4>
                 <div className="grid md:grid-cols-2 gap-3">
-                  <div>
-                    <Label>Weekly Target (USD)</Label>
-                    <Input type="number" value={weeklyTarget} onChange={(e) => setWeeklyTarget(Number(e.target.value) || 0)} />
-                  </div>
-                  <div>
-                    <Label>Monthly Target (USD)</Label>
-                    <Input type="number" value={monthlyTarget} onChange={(e) => setMonthlyTarget(Number(e.target.value) || 0)} />
-                  </div>
+                  <div><Label>Weekly Target (USD)</Label><Input type="number" value={weeklyTarget} onChange={(e) => setWeeklyTarget(Number(e.target.value) || 0)} /></div>
+                  <div><Label>Monthly Target (USD)</Label><Input type="number" value={monthlyTarget} onChange={(e) => setMonthlyTarget(Number(e.target.value) || 0)} /></div>
                 </div>
                 <GoalProgress label="Weekly Progress" progress={Number(weeklyProgress.toFixed(2))} target={weeklyTarget || 0} />
                 <GoalProgress label="Monthly Progress" progress={Number(monthlyProgress.toFixed(2))} target={monthlyTarget || 0} />
@@ -1641,26 +1593,17 @@ function PageInner() {
 
           <BadgeShowcase badge={badge} sessionsCount={sessionsCount} />
 
-          <Card>
+          <Card className="border-slate-800/80 bg-gradient-to-br from-[#0b1220] to-[#111827] text-slate-100 shadow-xl shadow-black/20">
             <CardContent className="p-5">
-              <h4 className="text-lg font-semibold mb-2">Equity Curve (All Time)</h4>
+              <h4 className="text-lg font-semibold mb-2 text-white">Equity Curve (All Time)</h4>
               <div className="h-72">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={equitySeries} margin={{ top: 8, right: 12, bottom: 20, left: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis />
-                    <YAxis />
-                    <RTooltip
-                      labelFormatter={(v) =>
-                        new Date(v).toLocaleDateString(undefined, {
-                          weekday: "short",
-                          month: "short",
-                          day: "numeric",
-                          year: "numeric",
-                        })
-                      }
-                    />
-                    <Line type="monotone" dataKey="equity" stroke="#2563eb" dot={false} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
+                    <XAxis stroke="#94a3b8" />
+                    <YAxis stroke="#94a3b8" />
+                    <RTooltip labelFormatter={(v) => new Date(v).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", year: "numeric" })} />
+                    <Line type="monotone" dataKey="equity" stroke="#22c55e" dot={false} strokeWidth={2} />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
@@ -2186,30 +2129,94 @@ function PageInner() {
 /* =========================================================================
    Reusable UI blocks
 ============================================================================ */
-type DashTone = "neutral" | "positive" | "negative" | "warning" | "gold";
+type DashTone = "neutral" | "positive" | "negative" | "warning" | "gold" | "blue" | "purple";
+type DashIcon = "wallet" | "trend" | "growth" | "down" | "calendar" | "shield" | "pie" | "bars" | "trophy" | "scale";
 
-function SectionLabel({ title }: { title: string }) {
+function SectionLabel({ title, icon }: { title: string; icon?: DashIcon }) {
   return (
     <div className="flex items-center gap-3 pt-1">
-      <h3 className="text-xs font-bold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">{title}</h3>
-      <div className="h-px flex-1 bg-gradient-to-r from-[#D4AF37]/50 to-transparent" />
+      {icon && (
+        <div className="grid h-8 w-8 place-items-center rounded-lg border border-[#F6C945]/30 bg-[#F6C945]/10 text-[#F6C945]">
+          <DashIconView icon={icon} className="h-4 w-4" />
+        </div>
+      )}
+      <h3 className="text-sm font-extrabold uppercase tracking-[0.18em] text-slate-700 dark:text-slate-100">{title}</h3>
+      <div className="h-px flex-1 bg-gradient-to-r from-[#D4AF37]/70 to-transparent" />
     </div>
   );
+}
+
+function DashIconView({ icon, className = "h-5 w-5" }: { icon: DashIcon; className?: string }) {
+  switch (icon) {
+    case "wallet":
+      return <Wallet className={className} />;
+    case "trend":
+    case "growth":
+    case "trophy":
+      return <TrendingUp className={className} />;
+    case "down":
+      return <TrendingDown className={className} />;
+    case "calendar":
+      return <CalendarDays className={className} />;
+    case "shield":
+      return <ShieldCheck className={className} />;
+    case "pie":
+      return <PieChart className={className} />;
+    case "scale":
+      return <Scale className={className} />;
+    case "bars":
+    default:
+      return <BarChart3 className={className} />;
+  }
 }
 
 function toneClasses(tone: DashTone = "neutral") {
   switch (tone) {
     case "positive":
-      return "border-emerald-300/50 bg-emerald-50/60 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-950/20 dark:text-emerald-300";
+      return "border-emerald-500/35 bg-gradient-to-br from-emerald-500/14 to-slate-950 text-emerald-300 shadow-emerald-950/25";
     case "negative":
-      return "border-rose-300/50 bg-rose-50/60 text-rose-700 dark:border-rose-500/30 dark:bg-rose-950/20 dark:text-rose-300";
+      return "border-rose-500/35 bg-gradient-to-br from-rose-500/14 to-slate-950 text-rose-300 shadow-rose-950/25";
     case "warning":
-      return "border-amber-300/50 bg-amber-50/60 text-amber-700 dark:border-amber-500/30 dark:bg-amber-950/20 dark:text-amber-300";
+      return "border-amber-500/35 bg-gradient-to-br from-amber-500/14 to-slate-950 text-amber-300 shadow-amber-950/25";
     case "gold":
-      return "border-[#D4AF37]/50 bg-[#D4AF37]/10 text-[#8A6A00] dark:text-[#F5D76E]";
+      return "border-[#F6C945]/40 bg-gradient-to-br from-[#F6C945]/14 to-slate-950 text-[#F6C945] shadow-amber-950/25";
+    case "blue":
+      return "border-blue-500/35 bg-gradient-to-br from-blue-500/14 to-slate-950 text-blue-300 shadow-blue-950/25";
+    case "purple":
+      return "border-violet-500/35 bg-gradient-to-br from-violet-500/14 to-slate-950 text-violet-300 shadow-violet-950/25";
     default:
-      return "border-slate-200/80 bg-white/70 text-slate-900 dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-100";
+      return "border-slate-700/80 bg-gradient-to-br from-slate-900 to-slate-950 text-slate-100 shadow-black/20";
   }
+}
+
+function toneText(tone: DashTone = "neutral") {
+  switch (tone) {
+    case "positive":
+      return "text-emerald-400";
+    case "negative":
+      return "text-rose-400";
+    case "warning":
+      return "text-amber-300";
+    case "gold":
+      return "text-[#F6C945]";
+    case "blue":
+      return "text-blue-400";
+    case "purple":
+      return "text-violet-400";
+    default:
+      return "text-white";
+  }
+}
+
+function SparkLine({ kind = "flat", tone = "positive" }: { kind?: "up" | "flat"; tone?: DashTone }) {
+  const stroke = tone === "positive" ? "#22c55e" : tone === "negative" ? "#f43f5e" : tone === "blue" ? "#3b82f6" : "#F6C945";
+  const points = kind === "up" ? "0,44 18,42 34,36 50,24 68,30 86,30 104,20 122,27 140,24 158,18 176,29 194,28 212,10 230,14 248,19 266,11 284,2" : "0,28 22,28 44,25 66,30 88,27 110,29 132,27 154,28 176,28 198,26 220,30 242,24 264,31 284,23";
+  return (
+    <svg viewBox="0 0 284 48" className="mt-4 h-12 w-full opacity-90">
+      <polyline points={points} fill="none" stroke={stroke} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+      <line x1="0" y1="44" x2="284" y2="44" stroke={stroke} strokeOpacity="0.18" />
+    </svg>
+  );
 }
 
 function DashCard({
@@ -2218,43 +2225,84 @@ function DashCard({
   hint,
   tone = "neutral",
   featured = false,
+  icon,
+  spark,
+  progress,
 }: {
   title: string;
   value: string;
   hint?: string;
   tone?: DashTone;
   featured?: boolean;
+  icon?: DashIcon;
+  spark?: "up" | "flat";
+  progress?: number;
 }) {
   return (
-    <Card className={`group overflow-hidden shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${toneClasses(tone)}`}>
-      <CardContent className={featured ? "p-5" : "p-4"}>
-        <div className="text-sm font-medium text-slate-600 dark:text-slate-300">{title}</div>
-        <div className={`${featured ? "text-3xl" : "text-2xl"} mt-1 font-bold tracking-tight`}>{value}</div>
-        {hint && <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">{hint}</div>}
+    <Card className={`group overflow-hidden border shadow-xl transition-all duration-200 hover:-translate-y-0.5 hover:shadow-2xl ${toneClasses(tone)}`}>
+      <CardContent className={featured ? "relative min-h-[150px] p-5" : "relative min-h-[105px] p-4"}>
+        {icon && (
+          <div className={`absolute right-4 top-4 grid h-11 w-11 place-items-center rounded-full border bg-white/5 ${toneText(tone)} border-current/30`}>
+            <DashIconView icon={icon} className="h-5 w-5" />
+          </div>
+        )}
+        <div className="pr-12 text-sm font-bold text-slate-200">{title}</div>
+        <div className={`${featured ? "text-3xl" : "text-2xl"} mt-2 font-black tracking-tight ${toneText(tone)}`}>{value}</div>
+        {hint && <div className="mt-1 text-sm text-slate-400">{hint}</div>}
+        {spark && <SparkLine kind={spark} tone={tone} />}
+        {typeof progress === "number" && (
+          <div className="mt-5 h-3 overflow-hidden rounded-full bg-slate-800">
+            <div className="h-full rounded-full bg-gradient-to-r from-[#F6C945] to-amber-400" style={{ width: `${Math.max(0, Math.min(100, progress))}%` }} />
+          </div>
+        )}
       </CardContent>
     </Card>
   );
 }
 
-function MiniProgress({ title, current, target }: { title: string; current: number; target: number }) {
-  const pct = target > 0 ? Math.max(0, Math.min(100, (current / target) * 100)) : 0;
-  const tone = current >= target && target > 0 ? "text-emerald-600 dark:text-emerald-300" : current < 0 ? "text-rose-600 dark:text-rose-300" : "text-[#8A6A00] dark:text-[#F5D76E]";
+function MetricRow({ label, value, tone = "neutral", icon = "bars" }: { label: string; value: string; tone?: DashTone; icon?: DashIcon }) {
   return (
-    <div className="rounded-xl border border-slate-200/80 bg-white/60 p-4 dark:border-slate-800 dark:bg-slate-900/40">
-      <div className="mb-2 flex items-center justify-between gap-3">
-        <div>
-          <div className="text-sm font-semibold">{title}</div>
-          <div className="text-xs text-slate-500">Target: {target > 0 ? currency(target) : "Not set"}</div>
+    <div className="flex items-center justify-between rounded-lg border border-slate-800/70 bg-white/[0.03] px-3 py-2">
+      <div className="flex items-center gap-3">
+        <div className={`grid h-8 w-8 place-items-center rounded-lg bg-white/5 ${toneText(tone)}`}>
+          <DashIconView icon={icon} className="h-4 w-4" />
         </div>
-        <div className={`text-right text-lg font-bold ${tone}`}>{current >= 0 ? "+" : ""}{currency(Number(current.toFixed(2)))}</div>
+        <span className="font-semibold text-slate-200">{label}</span>
       </div>
-      <div className="h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
-        <div className="h-full rounded-full bg-[#D4AF37] transition-all" style={{ width: `${pct}%` }} />
-      </div>
-      <div className="mt-1 text-right text-xs text-slate-500">{target > 0 ? `${fmt(pct)}% reached` : "Add a target in Goals"}</div>
+      <span className={`font-extrabold ${toneText(tone)}`}>{value}</span>
     </div>
   );
 }
+
+function MiniStat({ label, value, tone = "neutral" }: { label: string; value: string; tone?: DashTone }) {
+  return (
+    <div>
+      <div className={`mb-1 text-xl font-black ${toneText(tone)}`}>{value}</div>
+      <div className="text-xs text-slate-400">{label}</div>
+    </div>
+  );
+}
+
+function MiniProgress({ title, current, target }: { title: string; current: number; target: number }) {
+  const pct = target > 0 ? Math.max(0, Math.min(100, (current / target) * 100)) : 0;
+  const tone = current >= target && target > 0 ? "text-emerald-400" : current < 0 ? "text-rose-400" : "text-[#F6C945]";
+  return (
+    <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 text-slate-100">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <div>
+          <div className="text-sm font-semibold text-white">{title}</div>
+          <div className="text-xs text-slate-400">Target: {target > 0 ? currency(target) : "Not set"}</div>
+        </div>
+        <div className={`text-right text-lg font-bold ${tone}`}>{current >= 0 ? "+" : ""}{currency(Number(current.toFixed(2)))}</div>
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-slate-800">
+        <div className="h-full rounded-full bg-[#D4AF37] transition-all" style={{ width: `${pct}%` }} />
+      </div>
+      <div className="mt-1 text-right text-xs text-slate-400">{target > 0 ? `${fmt(pct)}% reached` : "Add a target in Goals"}</div>
+    </div>
+  );
+}
+
 function InfoStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border bg-white p-3">
