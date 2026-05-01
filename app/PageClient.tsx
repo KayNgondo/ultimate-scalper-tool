@@ -2837,135 +2837,125 @@ function JournalGrouped({
   sessionId: string | null;
   startBalance: number;
 }) {
+  const [journalSearch, setJournalSearch] = React.useState("");
+  const [journalFilter, setJournalFilter] = React.useState<"all" | "wins" | "losses" | "withdrawals">("all");
+  const [selectedTrade, setSelectedTrade] = React.useState<TradeRow | null>(null);
+
   const histRaw = typeof window !== "undefined" ? localStorage.getItem("ust-session-history") : "[]";
   const hist: string[] = histRaw ? JSON.parse(histRaw) : [];
   const sessionsSorted = [...hist].map(Number).sort((a, b) => a - b);
+  const all = [...trades].sort((a, b) => (a.ts || 0) - (b.ts || 0));
+  const tradeOnly = all.filter((t) => (t.kind ?? "trade") !== "withdrawal");
+  const withdrawalsOnly = all.filter((t) => (t.kind ?? "trade") === "withdrawal");
+  const wins = tradeOnly.filter((t) => (t.pnl || 0) > 0).length;
+  const losses = tradeOnly.filter((t) => (t.pnl || 0) < 0).length;
+  const be = tradeOnly.filter((t) => (t.pnl || 0) === 0).length;
+  const totalPnl = tradeOnly.reduce((a, t) => a + (t.pnl || 0), 0);
+  const totalWithdrawn = withdrawalsOnly.reduce((a, t) => a + (t.amount || 0), 0);
+  const winRate = tradeOnly.length ? (wins / tradeOnly.length) * 100 : 0;
+  const avgPnl = tradeOnly.length ? totalPnl / tradeOnly.length : 0;
+  const bestTrade = tradeOnly.length ? Math.max(...tradeOnly.map((t) => t.pnl || 0)) : 0;
+  const worstTrade = tradeOnly.length ? Math.min(...tradeOnly.map((t) => t.pnl || 0)) : 0;
+
+  const filteredAll = all.filter((t) => {
+    const q = journalSearch.trim().toLowerCase();
+    const matchesText = !q || `${t.symbol} ${t.notes || ""} ${t.source || ""}`.toLowerCase().includes(q);
+    const kind = t.kind ?? "trade";
+    const matchesFilter = journalFilter === "all" ||
+      (journalFilter === "wins" && kind !== "withdrawal" && (t.pnl || 0) > 0) ||
+      (journalFilter === "losses" && kind !== "withdrawal" && (t.pnl || 0) < 0) ||
+      (journalFilter === "withdrawals" && kind === "withdrawal");
+    return matchesText && matchesFilter;
+  });
 
   type Bucket = { title: string; rows: TradeRow[]; startTs?: number };
   const buckets: Bucket[] = [];
-  const all = [...trades].sort((a, b) => (a.ts || 0) - (b.ts || 0));
-
   function titleFor(ts: number, idx: number) {
     const d = new Date(ts);
-    return `Session ${idx + 1} (${d.toLocaleDateString(undefined, {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    })})`;
+    return `Session ${idx + 1} (${d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", year: "numeric" })})`;
   }
-
   if (sessionsSorted.length) {
     for (let i = 0; i < sessionsSorted.length; i++) {
       const start = sessionsSorted[i];
       const end = i < sessionsSorted.length - 1 ? sessionsSorted[i + 1] : Infinity;
-      const rows = all.filter((t) => (t.ts || 0) >= start && (t.ts || 0) < end);
+      const rows = filteredAll.filter((t) => (t.ts || 0) >= start && (t.ts || 0) < end);
       if (rows.length) buckets.push({ title: titleFor(start, i), rows, startTs: start });
     }
-  } else {
-    if (all.length) buckets.push({ title: "All Trades", rows: all });
-  }
+  } else if (filteredAll.length) buckets.push({ title: "All Trades", rows: filteredAll });
 
-  const totalAll = (rows: TradeRow[]) => rows.reduce((a, t) => a + (t.pnl || 0), 0);
-  const priorPnlBefore = (ts: number) =>
-    all.filter((t) => (t.ts || 0) < ts).reduce((a, t) => a + (t.pnl || 0), 0);
+  const totalAll = (rows: TradeRow[]) => rows.reduce((a, t) => a + ((t.kind ?? "trade") === "withdrawal" ? 0 : (t.pnl || 0)), 0);
+  const priorPnlBefore = (ts: number) => all.filter((t) => (t.ts || 0) < ts && (t.kind ?? "trade") !== "withdrawal").reduce((a, t) => a + (t.pnl || 0), 0);
+  const qualityLabel = winRate >= 60 && totalPnl >= 0 ? "A-Grade Execution" : winRate >= 45 ? "Needs Review" : tradeOnly.length ? "Protect Capital" : "No Trades Yet";
+  const qualityTone = winRate >= 60 && totalPnl >= 0 ? "border-emerald-400/40 bg-emerald-500/10 text-emerald-300" : winRate >= 45 ? "border-[#F6C945]/40 bg-[#F6C945]/10 text-[#F6C945]" : tradeOnly.length ? "border-rose-400/40 bg-rose-500/10 text-rose-300" : "border-slate-600 bg-slate-800/60 text-slate-300";
 
   return (
-    <Card>
-      <CardContent className="p-0">
-        <div className="px-3 py-2 border-b bg-slate-50 text-sm font-medium flex items-center justify-between">
-          <div>Trade Journal (grouped by session)</div>
-          <Button variant="outline" onClick={() => exportCsv(trades)}>
-            Export CSV
-          </Button>
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-slate-800/80 bg-[radial-gradient(circle_at_top_left,rgba(34,197,94,0.14),transparent_28%),linear-gradient(135deg,#07111f_0%,#0b1220_55%,#101827_100%)] p-4 text-slate-100 shadow-2xl shadow-black/25 md:p-5">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.35em] text-[#F6C945]">Trade Intelligence Centre</p>
+            <h3 className="mt-1 text-2xl font-extrabold tracking-tight text-white md:text-3xl">Journal Overview</h3>
+            <p className="mt-1 text-sm text-slate-400">Review execution quality, market performance, and every logged trade.</p>
+          </div>
+          <div className={`inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-bold shadow-lg ${qualityTone}`}>
+            <ShieldCheck className="h-4 w-4" />{qualityLabel}
+          </div>
         </div>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+          <div className="rounded-xl border border-emerald-400/25 bg-emerald-500/10 p-4 shadow-lg shadow-emerald-950/20 xl:col-span-2">
+            <p className="text-sm font-bold text-slate-300">Net Trade PnL</p>
+            <div className={`mt-2 text-4xl font-black ${totalPnl >= 0 ? "text-emerald-400" : "text-rose-400"}`}>{totalPnl >= 0 ? "+" : ""}{currency(Number(totalPnl.toFixed(2)))}</div>
+            <p className="mt-1 text-sm text-slate-400">Growth: {formatPct(totalPnl, startBalance) || "0.00%"}</p>
+          </div>
+          <JournalStat label="Trades" value={`${tradeOnly.length}`} hint={`${wins}W / ${losses}L / ${be}BE`} tone="blue" />
+          <JournalStat label="Win Rate" value={`${fmt(winRate)}%`} hint="Closed trades" tone={winRate >= 50 ? "positive" : "warning"} />
+          <JournalStat label="Avg PnL" value={currency(Number(avgPnl.toFixed(2)))} hint="Per trade" tone={avgPnl >= 0 ? "positive" : "negative"} />
+          <JournalStat label="Withdrawn" value={`-${currency(Number(totalWithdrawn.toFixed(2)))}`} hint="All time" tone={totalWithdrawn > 0 ? "gold" : "neutral"} />
+        </div>
+      </div>
 
-        {buckets.length ? (
-          buckets
-            .slice()
-            .reverse()
-            .map((b, i) => {
-              const total = totalAll(b.rows);
-              const baseEquity = b.startTs ? startBalance + priorPnlBefore(b.startTs) : startBalance;
-              const pct = formatPct(total, baseEquity);
+      <div className="grid gap-4 xl:grid-cols-3">
+        <Card className="border-slate-800/80 bg-gradient-to-br from-[#0b1220] to-[#111827] text-slate-100 shadow-xl shadow-black/20 xl:col-span-2">
+          <CardContent className="p-4 md:p-5">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="grid h-9 w-9 place-items-center rounded-lg border border-[#F6C945]/35 bg-[#F6C945]/10 text-[#F6C945]"><BarChart3 className="h-4 w-4" /></div>
+                <div><h4 className="text-base font-extrabold uppercase tracking-wide text-white">Trade Log</h4><p className="text-xs text-slate-400">Grouped by session with smart filters.</p></div>
+              </div>
+              <Button variant="outline" onClick={() => exportCsv(trades)} className="border-[#F6C945]/50 bg-[#F6C945]/10 text-[#F6C945] hover:bg-[#F6C945] hover:text-black">Export CSV</Button>
+            </div>
+            <div className="mb-4 grid gap-3 md:grid-cols-[1fr_auto]">
+              <Input value={journalSearch} onChange={(e) => setJournalSearch(e.target.value)} placeholder="Search market, notes, source..." className="border-slate-700 bg-slate-950/60 text-white placeholder:text-slate-500" />
+              <div className="flex flex-wrap gap-2">
+                {(["all", "wins", "losses", "withdrawals"] as const).map((f) => (
+                  <Button key={f} type="button" variant="outline" onClick={() => setJournalFilter(f)} className={`${journalFilter === f ? "border-[#F6C945] bg-[#F6C945] text-black" : "border-slate-700 bg-slate-950/40 text-slate-300 hover:bg-slate-800"} capitalize`}>{f}</Button>
+                ))}
+              </div>
+            </div>
+            {buckets.length ? <div className="space-y-4">{buckets.slice().reverse().map((b, i) => {
+              const total = totalAll(b.rows); const baseEquity = b.startTs ? startBalance + priorPnlBefore(b.startTs) : startBalance; const pct = formatPct(total, baseEquity);
+              const rowsTradeOnly = b.rows.filter((r) => (r.kind ?? "trade") !== "withdrawal"); const sw = rowsTradeOnly.filter((r) => (r.pnl || 0) > 0).length; const sessionWinRate = rowsTradeOnly.length ? (sw / rowsTradeOnly.length) * 100 : 0;
+              return <div key={i} className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-950/35">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 bg-slate-900/70 px-4 py-3"><div><div className="font-bold text-white">{b.title}</div><div className="text-xs text-slate-400">{rowsTradeOnly.length} trades • {fmt(sessionWinRate)}% WR</div></div><div className="flex items-baseline gap-2"><div className={`text-xl font-black ${total >= 0 ? "text-emerald-400" : "text-rose-400"}`}>{total >= 0 ? "+" : ""}{currency(Number(total.toFixed(2)))}</div>{pct && <span className="text-xs text-slate-400">({pct})</span>}</div></div>
+                <div className="hidden grid-cols-12 border-b border-slate-800 bg-slate-950/70 px-4 py-2 text-xs font-bold uppercase tracking-wide text-slate-400 md:grid"><div className="col-span-2">Time</div><div className="col-span-2">Market</div><div className="col-span-4">Strategy / Notes</div><div className="col-span-2">Source</div><div className="col-span-1 text-right">PnL</div><div className="col-span-1 text-right">Action</div></div>
+                {b.rows.slice().reverse().map((t) => { const isWithdrawal = (t.kind ?? "trade") === "withdrawal"; const amount = isWithdrawal ? (t.amount || 0) : (t.pnl || 0); const amountTone = isWithdrawal ? "text-[#F6C945]" : amount >= 0 ? "text-emerald-400" : "text-rose-400"; return <div key={t.id} onClick={() => setSelectedTrade(t)} className="grid cursor-pointer grid-cols-1 gap-2 border-b border-slate-800/70 px-4 py-3 text-sm text-slate-200 transition hover:bg-slate-800/55 md:grid-cols-12 md:items-center"><div className="text-slate-300 md:col-span-2">{t.ts ? new Date(t.ts).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}</div><div className="flex items-center gap-2 font-bold text-white md:col-span-2"><span>{t.symbol}</span>{isWithdrawal && <span className="rounded-full bg-[#F6C945] px-2 py-[2px] text-[10px] font-black text-black">Withdrawal</span>}</div><div className="text-slate-300 md:col-span-4">{t.notes || "—"}</div><div className="md:col-span-2"><span className="rounded-full border border-slate-700 bg-slate-900 px-2 py-1 text-xs capitalize text-slate-300">{t.source || "manual"}</span></div><div className={`font-black md:col-span-1 md:text-right ${amountTone}`}>{isWithdrawal ? "-" : amount >= 0 ? "+" : ""}{currency(Number(amount.toFixed(2)))}</div><div className="md:col-span-1 md:text-right"><Button onClick={(e) => { e.stopPropagation(); onDelete(t.id); }} size="sm" className="border border-rose-400/40 bg-rose-500/10 text-rose-300 hover:bg-rose-500 hover:text-white">Delete</Button></div></div>})}
+              </div>
+            })}</div> : <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-8 text-center text-sm text-slate-400">No matching trades yet. Use Quick Logger above or adjust your filter.</div>}
+          </CardContent>
+        </Card>
 
-              return (
-                <div key={i} className="border-b">
-                  <div className="flex items-center justify-between px-3 py-2 text-sm font-medium bg-white">
-                    <div>{b.title}</div>
-                    <div className="flex items-baseline gap-2">
-                      <div className={`${total >= 0 ? "text-indigo-600" : "text-rose-600"}`}>
-                        {total >= 0 ? "+" : ""}
-                        {currency(total)}
-                      </div>
-                      {pct && <span className="text-xs text-slate-500">({pct})</span>}
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-12 px-3 py-2 text-xs font-medium bg-slate-50">
-                    <div className="col-span-3">Time</div>
-                    <div className="col-span-3">Market</div>
-                    <div className="col-span-4">Strategy / Notes</div>
-                    <div className="col-span-1 text-right">PnL</div>
-                    <div className="col-span-1 text-right pr-1">Actions</div>
-                  </div>
-
-                  {b.rows
-                    .slice()
-                    .reverse()
-                    .map((t) => {
-                      const isWithdrawal = (t.kind ?? "trade") === "withdrawal";
-                      const amount = isWithdrawal ? (t.amount || 0) : (t.pnl || 0);
-
-                      return (
-                        <div key={t.id} className="grid grid-cols-12 px-3 py-2 border-t text-sm">
-                          <div className="col-span-3">{t.ts ? new Date(t.ts).toLocaleString() : "—"}</div>
-
-                          <div className="col-span-3 flex items-center gap-2">
-                            <span>{t.symbol}</span>
-                            {isWithdrawal && (
-                              <span className="inline-flex items-center rounded-full bg-[#D4AF37] text-black px-2 py-[2px] text-[11px] font-semibold">
-                                Withdrawal
-                              </span>
-                            )}
-                          </div>
-
-                          <div className="col-span-4">{t.notes || "—"}</div>
-
-                          <div
-                            className={`col-span-1 text-right ${
-                              isWithdrawal
-                                ? "text-[#D4AF37] font-semibold"
-                                : amount >= 0
-                                ? "text-emerald-600"
-                                : "text-rose-600"
-                            }`}
-                          >
-                            {isWithdrawal ? "-" : amount >= 0 ? "+" : ""}
-                            {currency(Number(amount.toFixed(2)))}
-                          </div>
-
-                          <div className="col-span-1 text-right">
-                            <Button
-                              onClick={() => onDelete(t.id)}
-                              size="sm"
-                              className="text-[#D4AF37] hover:text-yellow-400 border border-[#D4AF37] hover:border-yellow-400 bg-transparent transition"
-                            >
-                              Delete
-                            </Button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                </div>
-              );
-            })
-        ) : (
-          <div className="p-4 text-sm text-slate-600 dark:text-slate-300">No trades yet. Use Quick Logger above.</div>
-        )}
-      </CardContent>
-    </Card>
+        <div className="space-y-4">
+          <Card className="border-slate-800/80 bg-gradient-to-br from-[#0b1220] to-[#111827] text-slate-100 shadow-xl shadow-black/20"><CardContent className="p-5"><div className="mb-4 flex items-center gap-3"><div className="grid h-9 w-9 place-items-center rounded-lg border border-emerald-400/35 bg-emerald-500/10 text-emerald-300"><Target className="h-4 w-4" /></div><h4 className="text-base font-extrabold uppercase tracking-wide text-white">Execution Snapshot</h4></div><div className="space-y-2"><MetricRow label="Best Trade" value={currency(Number(bestTrade.toFixed(2)))} tone="positive" icon="growth" /><MetricRow label="Worst Trade" value={currency(Number(worstTrade.toFixed(2)))} tone="negative" icon="down" /><MetricRow label="Break Even" value={`${be}`} tone="blue" icon="scale" /><MetricRow label="Total Trades" value={`${tradeOnly.length}`} tone="purple" icon="bars" /></div></CardContent></Card>
+          <Card className="border-slate-800/80 bg-gradient-to-br from-[#0b1220] to-[#111827] text-slate-100 shadow-xl shadow-black/20"><CardContent className="p-5"><div className="mb-4 flex items-center gap-3"><div className="grid h-9 w-9 place-items-center rounded-lg border border-[#F6C945]/35 bg-[#F6C945]/10 text-[#F6C945]"><Info className="h-4 w-4" /></div><h4 className="text-base font-extrabold uppercase tracking-wide text-white">Selected Trade</h4></div>{selectedTrade ? <div className="space-y-3 text-sm"><div className="rounded-xl border border-slate-800 bg-slate-950/50 p-3"><p className="text-xs uppercase tracking-widest text-slate-500">Market</p><p className="text-lg font-black text-white">{selectedTrade.symbol}</p></div><div className="grid grid-cols-2 gap-3"><div className="rounded-xl border border-slate-800 bg-slate-950/50 p-3"><p className="text-xs uppercase tracking-widest text-slate-500">Result</p><p className={`text-xl font-black ${(selectedTrade.kind ?? "trade") === "withdrawal" ? "text-[#F6C945]" : (selectedTrade.pnl || 0) >= 0 ? "text-emerald-400" : "text-rose-400"}`}>{(selectedTrade.kind ?? "trade") === "withdrawal" ? `-${currency(selectedTrade.amount || 0)}` : `${(selectedTrade.pnl || 0) >= 0 ? "+" : ""}${currency(selectedTrade.pnl || 0)}`}</p></div><div className="rounded-xl border border-slate-800 bg-slate-950/50 p-3"><p className="text-xs uppercase tracking-widest text-slate-500">Source</p><p className="text-lg font-black capitalize text-white">{selectedTrade.source || "manual"}</p></div></div><div className="rounded-xl border border-slate-800 bg-slate-950/50 p-3"><p className="text-xs uppercase tracking-widest text-slate-500">Notes</p><p className="mt-1 text-slate-300">{selectedTrade.notes || "No notes captured."}</p></div></div> : <p className="rounded-xl border border-slate-800 bg-slate-950/50 p-4 text-sm text-slate-400">Click any trade row to inspect the full journal detail here.</p>}</CardContent></Card>
+        </div>
+      </div>
+    </div>
   );
+}
+
+function JournalStat({ label, value, hint, tone = "neutral" }: { label: string; value: string; hint?: string; tone?: "positive" | "negative" | "warning" | "gold" | "blue" | "neutral" }) {
+  const toneCls = tone === "positive" ? "text-emerald-400 border-emerald-400/25 bg-emerald-500/10" : tone === "negative" ? "text-rose-400 border-rose-400/25 bg-rose-500/10" : tone === "warning" || tone === "gold" ? "text-[#F6C945] border-[#F6C945]/25 bg-[#F6C945]/10" : tone === "blue" ? "text-blue-400 border-blue-400/25 bg-blue-500/10" : "text-white border-slate-700 bg-slate-900/70";
+  return <div className={`rounded-xl border p-4 shadow-lg shadow-black/10 ${toneCls}`}><p className="text-sm font-bold text-slate-300">{label}</p><div className="mt-2 text-3xl font-black">{value}</div>{hint && <p className="mt-1 text-sm text-slate-400">{hint}</p>}</div>;
 }
 
 /* =========================================================================
