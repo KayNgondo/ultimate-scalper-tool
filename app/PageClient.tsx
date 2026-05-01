@@ -3200,191 +3200,294 @@ function GoalProgress({
   );
 }
 
+
 /* =========================================================================
-   Old Calendar (with daily PnL chips + % growth)
+   Pro Calendar (heatmap + monthly/weekly summaries + click day drill-down)
 ============================================================================ */
 function OldCalendar({
   trades,
   withdrawals,
 }: {
-  trades: { ts?: number; pnl?: number }[];
+  trades: { ts?: number; pnl?: number; symbol?: string; notes?: string }[];
   withdrawals: { ts?: number; amount?: number }[];
 }) {
-  const { tradeDays, dailyTradeTotals, dailyWithdrawTotals } = useMemo(() => {
-    const set = new Set<string>();
-    const tradeTotals = new Map<string, number>();
-    const wdTotals = new Map<string, number>();
-
-    const keyFromTs = (ts: number) => {
-      const d = new Date(ts);
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    };
-
-    trades.forEach((t) => {
-      if (!t.ts) return;
-      const key = keyFromTs(t.ts);
-      set.add(key);
-      tradeTotals.set(key, (tradeTotals.get(key) || 0) + (t.pnl ?? 0));
-    });
-
-    withdrawals.forEach((w) => {
-      if (!w.ts) return;
-      const key = keyFromTs(w.ts);
-      set.add(key);
-      wdTotals.set(key, (wdTotals.get(key) || 0) + (w.amount ?? 0));
-    });
-
-    return { tradeDays: set, dailyTradeTotals: tradeTotals, dailyWithdrawTotals: wdTotals };
-  }, [trades, withdrawals]);
-
   const [viewDate, setViewDate] = useState(() => {
     const d = new Date();
     d.setDate(1);
     d.setHours(0, 0, 0, 0);
     return d;
   });
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
-  const startBalanceRaw =
-    typeof window !== "undefined"
-      ? Number(localStorage.getItem("ust-start-balance") || 0)
-      : 0;
+  function startOfMonth(d: Date) { const x = new Date(d); x.setDate(1); x.setHours(0,0,0,0); return x; }
+  function startOfCalendar(d: Date) { const x = startOfMonth(d); const dow = (x.getDay()+6)%7; x.setDate(x.getDate()-dow); return x; }
+  function keyOf(d: Date) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
+  function keyFromTs(ts: number) { const d = new Date(ts); return keyOf(d); }
+
+  const startBalanceRaw = typeof window !== "undefined" ? Number(localStorage.getItem("ust-start-balance") || 0) : 0;
   const startBalance = startBalanceRaw > 0 ? startBalanceRaw : 1000;
-
-  function startOfMonth(d: Date) {
-    const x = new Date(d);
-    x.setDate(1);
-    x.setHours(0, 0, 0, 0);
-    return x;
-  }
-  function startOfCalendar(d: Date) {
-    const x = startOfMonth(d);
-    const dow = (x.getDay() + 6) % 7; // Monday=0
-    x.setDate(x.getDate() - dow);
-    return x;
-  }
-
   const days = useMemo(() => {
     const start = startOfCalendar(viewDate);
     const arr: Date[] = [];
-    for (let i = 0; i < 42; i++) {
-      const x = new Date(start);
-      x.setDate(start.getDate() + i);
-      arr.push(x);
-    }
+    for (let i=0; i<42; i++) { const x = new Date(start); x.setDate(start.getDate()+i); arr.push(x); }
     return arr;
   }, [viewDate]);
+  const weeks = useMemo(() => {
+    const out: Date[][] = [];
+    for (let i=0; i<days.length; i+=7) out.push(days.slice(i, i+7));
+    return out;
+  }, [days]);
 
-  const monthLabel = viewDate.toLocaleDateString(undefined, {
-    month: "long",
-    year: "numeric",
-  });
-
-  function keyOf(d: Date) {
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
-      2,
-      "0"
-    )}-${String(d.getDate()).padStart(2, "0")}`;
-  }
-
+  const monthLabel = viewDate.toLocaleDateString(undefined, { month: "long", year: "numeric" });
   const todayKey = keyOf(new Date());
   const viewMonth = viewDate.getMonth();
 
+  const calendarStats = useMemo(() => {
+    const byDay = new Map<string, { pnl: number; trades: number; wins: number; losses: number; withdrawals: number; symbols: Set<string>; items: { ts?: number; pnl?: number; symbol?: string; notes?: string }[] }>();
+    const ensure = (key: string) => {
+      if (!byDay.has(key)) byDay.set(key, { pnl: 0, trades: 0, wins: 0, losses: 0, withdrawals: 0, symbols: new Set(), items: [] });
+      return byDay.get(key)!;
+    };
+
+    trades.forEach((t) => {
+      if (!t.ts) return;
+      const d = ensure(keyFromTs(t.ts));
+      const pnl = Number(t.pnl || 0);
+      d.pnl += pnl;
+      d.trades += 1;
+      if (pnl > 0) d.wins += 1;
+      if (pnl < 0) d.losses += 1;
+      if (t.symbol) d.symbols.add(t.symbol);
+      d.items.push(t);
+    });
+
+    withdrawals.forEach((w) => {
+      if (!w.ts) return;
+      ensure(keyFromTs(w.ts)).withdrawals += Number(w.amount || 0);
+    });
+
+    const monthKeys = Array.from(byDay.keys()).filter((key) => {
+      const d = new Date(`${key}T00:00:00`);
+      return d.getMonth() === viewDate.getMonth() && d.getFullYear() === viewDate.getFullYear();
+    });
+
+    const monthlyPnl = monthKeys.reduce((sum, key) => sum + (byDay.get(key)?.pnl || 0), 0);
+    const monthlyTrades = monthKeys.reduce((sum, key) => sum + (byDay.get(key)?.trades || 0), 0);
+    const monthlyWins = monthKeys.reduce((sum, key) => sum + (byDay.get(key)?.wins || 0), 0);
+    const monthlyWithdrawals = monthKeys.reduce((sum, key) => sum + (byDay.get(key)?.withdrawals || 0), 0);
+    const activeDays = monthKeys.filter((key) => (byDay.get(key)?.trades || 0) > 0).length;
+    const bestDay = monthKeys.reduce((best, key) => Math.max(best, byDay.get(key)?.pnl || 0), 0);
+    const worstDay = monthKeys.reduce((worst, key) => Math.min(worst, byDay.get(key)?.pnl || 0), 0);
+
+    return {
+      byDay,
+      monthlyPnl,
+      monthlyTrades,
+      monthlyWins,
+      monthlyWithdrawals,
+      activeDays,
+      bestDay,
+      worstDay,
+      monthlyWinRate: monthlyTrades ? (monthlyWins / monthlyTrades) * 100 : 0,
+    };
+  }, [trades, withdrawals, viewDate]);
+
+  const selectedDay = selectedKey ? calendarStats.byDay.get(selectedKey) : null;
+
+  function pnlTone(pnl: number) {
+    if (pnl > 0) return "text-emerald-300";
+    if (pnl < 0) return "text-rose-300";
+    return "text-slate-100";
+  }
+
+  function heatClass(pnl: number, hasActivity: boolean) {
+    if (!hasActivity) return "bg-[#101827] hover:bg-[#142033]";
+    if (pnl > 0) return pnl >= startBalance * 0.25 ? "bg-emerald-500/20 border-emerald-400/45 shadow-[0_0_22px_rgba(16,185,129,0.18)]" : "bg-emerald-500/10 border-emerald-400/30";
+    if (pnl < 0) return Math.abs(pnl) >= startBalance * 0.1 ? "bg-rose-500/20 border-rose-400/45 shadow-[0_0_22px_rgba(244,63,94,0.16)]" : "bg-rose-500/10 border-rose-400/30";
+    return "bg-slate-700/20 border-slate-500/30";
+  }
+
   return (
-    <Card>
-      <CardContent className="p-4">
-        <div className="flex items-center justify-between mb-3">
-          <Button
-            variant="outline"
-            onClick={() => {
-              const d = new Date(viewDate);
-              d.setMonth(d.getMonth() - 1);
-              setViewDate(startOfMonth(d));
-            }}
-          >
-            ← Prev
-          </Button>
+    <div className="space-y-5">
+      <div className="rounded-2xl border border-slate-700/70 bg-[#07111f] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.35)]">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-center gap-3">
+            <div className="grid h-10 w-10 place-items-center rounded-xl border border-[#F6C945]/35 bg-[#F6C945]/10 text-[#F6C945]">
+              <CalendarDays className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.32em] text-[#F6C945]">Trading Calendar</p>
+              <h2 className="text-2xl font-extrabold text-slate-100">{monthLabel}</h2>
+            </div>
+          </div>
 
-          <div className="text-lg font-semibold">{monthLabel}</div>
-
-          <Button
-            variant="outline"
-            onClick={() => {
-              const d = new Date(viewDate);
-              d.setMonth(d.getMonth() + 1);
-              setViewDate(startOfMonth(d));
-            }}
-          >
-            Next →
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" className="border-slate-700 bg-slate-950/40 text-slate-100 hover:bg-slate-800" onClick={() => { const d = new Date(viewDate); d.setMonth(d.getMonth()-1); setViewDate(startOfMonth(d)); }}>← Prev</Button>
+            <Button variant="outline" className="border-slate-700 bg-slate-950/40 text-slate-100 hover:bg-slate-800" onClick={() => setViewDate(startOfMonth(new Date()))}>Today</Button>
+            <Button variant="outline" className="border-slate-700 bg-slate-950/40 text-slate-100 hover:bg-slate-800" onClick={() => { const d = new Date(viewDate); d.setMonth(d.getMonth()+1); setViewDate(startOfMonth(d)); }}>Next →</Button>
+          </div>
         </div>
 
-        <div className="grid grid-cols-7 text-xs font-medium text-slate-600 dark:text-slate-300 mb-1">
-          <div className="p-2 text-center">Mon</div>
-          <div className="p-2 text-center">Tue</div>
-          <div className="p-2 text-center">Wed</div>
-          <div className="p-2 text-center">Thu</div>
-          <div className="p-2 text-center">Fri</div>
-          <div className="p-2 text-center">Sat</div>
-          <div className="p-2 text-center">Sun</div>
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+          <CalendarMetric label="Month PnL" value={`${calendarStats.monthlyPnl >= 0 ? "+" : ""}${currency(Number(calendarStats.monthlyPnl.toFixed(2)))}`} tone={calendarStats.monthlyPnl > 0 ? "good" : calendarStats.monthlyPnl < 0 ? "bad" : "neutral"} />
+          <CalendarMetric label="Win Rate" value={`${calendarStats.monthlyWinRate.toFixed(0)}%`} tone="blue" />
+          <CalendarMetric label="Trades" value={String(calendarStats.monthlyTrades)} tone="neutral" />
+          <CalendarMetric label="Active Days" value={String(calendarStats.activeDays)} tone="neutral" />
+          <CalendarMetric label="Best Day" value={`${calendarStats.bestDay >= 0 ? "+" : ""}${currency(Number(calendarStats.bestDay.toFixed(2)))}`} tone="good" />
+          <CalendarMetric label="Withdrawn" value={`-${currency(Number(calendarStats.monthlyWithdrawals.toFixed(2)))}`} tone="bad" />
         </div>
+      </div>
 
-        <div className="grid grid-cols-7 gap-[6px]">
-          {days.map((d, i) => {
-            const k = keyOf(d);
-            const inMonth = d.getMonth() === viewMonth;
-            const isToday = k === todayKey;
-            const hasActivity = tradeDays.has(k);
-            const dayPnl = dailyTradeTotals.get(k) ?? 0;
-            const dayWithdrawn = dailyWithdrawTotals.get(k) ?? 0;
-            const pct =
-              startBalance > 0
-                ? ((dayPnl / startBalance) * 100).toFixed(2)
-                : "0.00";
+      <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
+        <div className="rounded-2xl border border-slate-700/70 bg-[#07111f] p-4 shadow-[0_18px_60px_rgba(0,0,0,0.28)]">
+          <div className="grid grid-cols-7 text-xs font-bold uppercase tracking-wider text-slate-300">
+            {["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map((d) => <div key={d} className="p-2 text-center">{d}</div>)}
+          </div>
 
-            return (
-              <div
-                key={i}
-                className={[
-                  "h-24 rounded-md border p-2 flex flex-col justify-between bg-white",
-                  inMonth ? "" : "opacity-40",
-                  isToday ? "border-indigo-500 ring-2 ring-indigo-200" : "",
-                ].join(" ")}
-              >
-                <div className="text-xs">{d.getDate()}</div>
+          <div className="mt-1 grid grid-cols-7 gap-2">
+            {days.map((d, i) => {
+              const k = keyOf(d);
+              const inMonth = d.getMonth() === viewMonth;
+              const isToday = k === todayKey;
+              const day = calendarStats.byDay.get(k);
+              const dayPnl = day?.pnl || 0;
+              const hasActivity = !!day && (day.trades > 0 || day.withdrawals > 0);
+              const winRate = day?.trades ? (day.wins / day.trades) * 100 : 0;
+              const pct = startBalance > 0 ? (dayPnl / startBalance) * 100 : 0;
 
-                {(hasActivity || dayWithdrawn > 0) && (
-                  <div className="flex flex-col items-end space-y-[2px]">
-                    <span
-                      className={[
-                        "inline-flex items-center justify-center rounded-full border px-2 py-[3px] text-[13px] font-semibold",
-                        dayPnl > 0
-                          ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                          : dayPnl < 0
-                          ? "bg-rose-50 text-rose-700 border-rose-200"
-                          : "bg-slate-50 text-slate-700 border-slate-200",
-                      ].join(" ")}
-                    >
-                      {dayPnl >= 0 ? "+" : ""}
-                      {currency(Number(dayPnl.toFixed(2)))}
-                    </span>
-                    <span className="text-[11px] text-slate-500">
-                      {dayPnl >= 0 ? "+" : ""}
-                      {pct}%
-                    </span>
-
-                    {dayWithdrawn > 0 && (
-                      <span className="text-[11px] text-slate-500">
-                        Withdrew: -{currency(Number(dayWithdrawn.toFixed(2)))}
-                      </span>
+              return (
+                <button
+                  type="button"
+                  key={i}
+                  onClick={() => setSelectedKey(k)}
+                  className={[
+                    "min-h-[118px] rounded-xl border border-slate-800 p-3 text-left transition duration-200 hover:-translate-y-0.5 hover:border-[#F6C945]/55",
+                    heatClass(dayPnl, hasActivity),
+                    inMonth ? "opacity-100" : "opacity-35",
+                    isToday ? "ring-2 ring-[#F6C945]/80 shadow-[0_0_26px_rgba(246,201,69,0.20)]" : "",
+                    selectedKey === k ? "border-[#F6C945]/80 ring-1 ring-[#F6C945]/45" : "",
+                  ].join(" ")}
+                >
+                  <div className="flex items-start justify-between">
+                    <span className="text-sm font-semibold text-slate-100">{d.getDate()}</span>
+                    {hasActivity && (
+                      <span className={[
+                        "h-2.5 w-2.5 rounded-full",
+                        dayPnl > 0 ? "bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.7)]" : dayPnl < 0 ? "bg-rose-400 shadow-[0_0_12px_rgba(251,113,133,0.7)]" : "bg-slate-400"
+                      ].join(" ")} />
                     )}
                   </div>
-                )}
-              </div>
-            );
-          })}
+
+                  {hasActivity ? (
+                    <div className="mt-5 space-y-1.5">
+                      <div className={`text-lg font-extrabold ${pnlTone(dayPnl)}`}>{dayPnl >= 0 ? "+" : ""}{currency(Number(dayPnl.toFixed(2)))}</div>
+                      <div className="flex items-center justify-between text-[11px] text-slate-300">
+                        <span>{day?.trades || 0} trades</span>
+                        <span>{winRate.toFixed(0)}% WR</span>
+                      </div>
+                      <div className="h-1.5 overflow-hidden rounded-full bg-slate-800">
+                        <div className={dayPnl >= 0 ? "h-full bg-emerald-400" : "h-full bg-rose-400"} style={{ width: `${Math.min(100, Math.max(8, Math.abs(pct)))}%` }} />
+                      </div>
+                      <div className="text-right text-[11px] text-slate-400">{dayPnl >= 0 ? "+" : ""}{pct.toFixed(2)}%</div>
+                    </div>
+                  ) : (
+                    <div className="mt-8 text-xs text-slate-500">No trades</div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
         </div>
-      </CardContent>
-    </Card>
+
+        <div className="space-y-5">
+          <div className="rounded-2xl border border-slate-700/70 bg-[#07111f] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.28)]">
+            <div className="flex items-center gap-2 text-slate-100">
+              <Activity className="h-5 w-5 text-[#F6C945]" />
+              <h3 className="font-extrabold">Day Drill-down</h3>
+            </div>
+
+            {selectedKey && selectedDay ? (
+              <div className="mt-4 space-y-4">
+                <div>
+                  <p className="text-sm text-slate-400">{new Date(`${selectedKey}T00:00:00`).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" })}</p>
+                  <p className={`mt-1 text-3xl font-black ${pnlTone(selectedDay.pnl)}`}>{selectedDay.pnl >= 0 ? "+" : ""}{currency(Number(selectedDay.pnl.toFixed(2)))}</p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="rounded-xl border border-slate-700 bg-slate-950/40 p-3"><span className="text-slate-400">Trades</span><strong className="block text-slate-100">{selectedDay.trades}</strong></div>
+                  <div className="rounded-xl border border-slate-700 bg-slate-950/40 p-3"><span className="text-slate-400">Win Rate</span><strong className="block text-slate-100">{selectedDay.trades ? ((selectedDay.wins / selectedDay.trades) * 100).toFixed(0) : 0}%</strong></div>
+                  <div className="rounded-xl border border-slate-700 bg-slate-950/40 p-3"><span className="text-slate-400">Best Trade</span><strong className="block text-emerald-300">{currency(Number(Math.max(0, ...selectedDay.items.map(t => Number(t.pnl || 0))).toFixed(2)))}</strong></div>
+                  <div className="rounded-xl border border-slate-700 bg-slate-950/40 p-3"><span className="text-slate-400">Worst Trade</span><strong className="block text-rose-300">{currency(Number(Math.min(0, ...selectedDay.items.map(t => Number(t.pnl || 0))).toFixed(2)))}</strong></div>
+                </div>
+
+                {selectedDay.withdrawals > 0 && (
+                  <div className="rounded-xl border border-rose-400/30 bg-rose-500/10 p-3 text-sm text-rose-200">Withdrawal: -{currency(Number(selectedDay.withdrawals.toFixed(2)))}</div>
+                )}
+
+                <div className="max-h-64 space-y-2 overflow-auto pr-1">
+                  {selectedDay.items.slice(0, 12).map((t, idx) => (
+                    <div key={idx} className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/35 p-3 text-sm">
+                      <div>
+                        <div className="font-semibold text-slate-100">{t.symbol || "Unknown"}</div>
+                        <div className="text-xs text-slate-500">{t.ts ? new Date(t.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}</div>
+                      </div>
+                      <div className={`font-extrabold ${pnlTone(Number(t.pnl || 0))}`}>{Number(t.pnl || 0) >= 0 ? "+" : ""}{currency(Number(Number(t.pnl || 0).toFixed(2)))}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="mt-4 rounded-xl border border-slate-800 bg-slate-950/35 p-4 text-sm text-slate-400">
+                Click any calendar day to review its trades, win rate, best trade and worst trade.
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-2xl border border-slate-700/70 bg-[#07111f] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.28)]">
+            <div className="flex items-center gap-2 text-slate-100">
+              <BarChart3 className="h-5 w-5 text-[#F6C945]" />
+              <h3 className="font-extrabold">Weekly Summary</h3>
+            </div>
+            <div className="mt-4 space-y-2">
+              {weeks.map((week, idx) => {
+                const keys = week.map(keyOf);
+                const pnl = keys.reduce((sum, key) => sum + (calendarStats.byDay.get(key)?.pnl || 0), 0);
+                const tradesCount = keys.reduce((sum, key) => sum + (calendarStats.byDay.get(key)?.trades || 0), 0);
+                const wins = keys.reduce((sum, key) => sum + (calendarStats.byDay.get(key)?.wins || 0), 0);
+                const wr = tradesCount ? (wins / tradesCount) * 100 : 0;
+                return (
+                  <div key={idx} className="rounded-xl border border-slate-800 bg-slate-950/35 p-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-semibold text-slate-300">Week {idx + 1}</span>
+                      <span className={`font-extrabold ${pnlTone(pnl)}`}>{pnl >= 0 ? "+" : ""}{currency(Number(pnl.toFixed(2)))}</span>
+                    </div>
+                    <div className="mt-1 flex items-center justify-between text-xs text-slate-500">
+                      <span>{tradesCount} trades</span>
+                      <span>{wr.toFixed(0)}% WR</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CalendarMetric({ label, value, tone }: { label: string; value: string; tone: "good" | "bad" | "blue" | "neutral" }) {
+  const toneClass =
+    tone === "good" ? "text-emerald-300 border-emerald-400/25 bg-emerald-500/10" :
+    tone === "bad" ? "text-rose-300 border-rose-400/25 bg-rose-500/10" :
+    tone === "blue" ? "text-blue-300 border-blue-400/25 bg-blue-500/10" :
+    "text-slate-100 border-slate-700 bg-slate-950/35";
+
+  return (
+    <div className={`rounded-xl border p-4 ${toneClass}`}>
+      <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">{label}</p>
+      <p className="mt-2 text-xl font-black">{value}</p>
+    </div>
   );
 }
 
