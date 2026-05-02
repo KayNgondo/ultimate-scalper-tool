@@ -1327,6 +1327,17 @@ function PageInner() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        {/* Desktop quick return button — keeps Dashboard visible as first navigation item */}
+        <div className="mb-3 hidden md:flex">
+          <Button
+            type="button"
+            variant={activeTab === "dashboard" ? "default" : "outline"}
+            onClick={() => setActiveTab("dashboard")}
+            className={`rounded-xl px-4 py-2 text-sm font-semibold transition-colors ${activeTab === "dashboard" ? "bg-[#D4AF37] text-black hover:bg-[#c9a42f]" : "border-slate-700 bg-transparent text-slate-100 hover:bg-slate-900"}`}
+          >
+            Dashboard
+          </Button>
+        </div>
         {/* Mobile quick return buttons — keeps Dashboard reachable even when the top tab rail is scrolled */}
         <div className="mb-3 grid grid-cols-2 gap-2 md:hidden">
           <Button
@@ -1352,7 +1363,7 @@ function PageInner() {
           {/* Dashboard */}
          <TabsTrigger
   value="dashboard"
-  className="snap-start rounded-xl px-4 py-2 text-sm data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black transition-colors"
+  className="snap-start rounded-xl px-4 py-2 text-sm md:hidden data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black transition-colors"
 >
   Dashboard
 </TabsTrigger>
