@@ -1186,12 +1186,12 @@ function PageInner() {
   const [badge, setBadge] = useState<{ name: string; imagePath: string } | null>(null);
   useEffect(() => {
     const s = badgeTradeCount;
-    if (s >= 30) setBadge({ name: "Legendary • 30 Sessions Untouchable", imagePath: "/badges/legendary.png" });
-    else if (s >= 25) setBadge({ name: "Elite • 25 Sessions Mastered", imagePath: "/badges/elite.png" });
-    else if (s >= 20) setBadge({ name: "Diamond • 20 Sessions Mastered", imagePath: "/badges/diamond.png" });
-    else if (s >= 15) setBadge({ name: "Platinum • 15 Sessions Dominated", imagePath: "/badges/platinum.png" });
-    else if (s >= 10) setBadge({ name: "Gold • 10 Sessions Conquered", imagePath: "/badges/gold.png" });
-    else if (s >= 5) setBadge({ name: "Silver • 5 Sessions Survived", imagePath: "/badges/silver.png" });
+    if (s >= 30) setBadge({ name: "Legendary • 30 Trades Smashed Untouchable", imagePath: "/badges/legendary.png" });
+    else if (s >= 25) setBadge({ name: "Elite • 25 Trades Mastered", imagePath: "/badges/elite.png" });
+    else if (s >= 20) setBadge({ name: "Diamond • 20 Trades Mastered", imagePath: "/badges/diamond.png" });
+    else if (s >= 15) setBadge({ name: "Platinum • 15 Trades Dominated", imagePath: "/badges/platinum.png" });
+    else if (s >= 10) setBadge({ name: "Gold • 10 Trades Conquered", imagePath: "/badges/gold.png" });
+    else if (s >= 5) setBadge({ name: "Silver • 5 Trades Survived", imagePath: "/badges/silver.png" });
     else setBadge(null);
   }, [badgeTradeCount]);
 
