@@ -1111,6 +1111,37 @@ function PageInner() {
     [tradeRows, todayKey]
   );
 
+
+  // Performance Summary should use ALL journal trades, not only today's/session trades.
+  const performanceSummary = useMemo(() => {
+    const dailyPnls = new Map<string, number>();
+    let grossProfit = 0;
+    let grossLoss = 0;
+
+    for (const t of tradeRows) {
+      const value = Number(t.pnl || 0);
+      if (value > 0) grossProfit += value;
+      if (value < 0) grossLoss += Math.abs(value);
+
+      const key = t.ts ? ymdLocal(new Date(t.ts)) : "Unknown";
+      dailyPnls.set(key, (dailyPnls.get(key) || 0) + value);
+    }
+
+    const days = Array.from(dailyPnls.values());
+    const bestDay = days.length ? Math.max(...days) : 0;
+    const worstDay = days.length ? Math.min(...days) : 0;
+    const averageDailyPnl = days.length
+      ? days.reduce((sum, value) => sum + value, 0) / days.length
+      : 0;
+    const profitFactor = grossLoss > 0
+      ? grossProfit / grossLoss
+      : grossProfit > 0
+        ? grossProfit
+        : 0;
+
+    return { bestDay, worstDay, averageDailyPnl, profitFactor };
+  }, [tradeRows]);
+
   // Lock when max-loss hit
   useEffect(() => {
     if (!lockOnHit || maxLoss <= 0) return;
@@ -1155,12 +1186,12 @@ function PageInner() {
   const [badge, setBadge] = useState<{ name: string; imagePath: string } | null>(null);
   useEffect(() => {
     const s = badgeTradeCount;
-    if (s >= 30) setBadge({ name: "Legendary • 30 Trades Untouchable", imagePath: "/badges/legendary.png" });
-    else if (s >= 25) setBadge({ name: "Elite • 25 Trades Mastered", imagePath: "/badges/elite.png" });
-    else if (s >= 20) setBadge({ name: "Diamond • 20 Trades Mastered", imagePath: "/badges/diamond.png" });
-    else if (s >= 15) setBadge({ name: "Platinum • 15 Trades Dominated", imagePath: "/badges/platinum.png" });
-    else if (s >= 10) setBadge({ name: "Gold • 10 Trades Conquered", imagePath: "/badges/gold.png" });
-    else if (s >= 5) setBadge({ name: "Silver • 5 Trades Survived", imagePath: "/badges/silver.png" });
+    if (s >= 30) setBadge({ name: "Legendary • 30 Sessions Untouchable", imagePath: "/badges/legendary.png" });
+    else if (s >= 25) setBadge({ name: "Elite • 25 Sessions Mastered", imagePath: "/badges/elite.png" });
+    else if (s >= 20) setBadge({ name: "Diamond • 20 Sessions Mastered", imagePath: "/badges/diamond.png" });
+    else if (s >= 15) setBadge({ name: "Platinum • 15 Sessions Dominated", imagePath: "/badges/platinum.png" });
+    else if (s >= 10) setBadge({ name: "Gold • 10 Sessions Conquered", imagePath: "/badges/gold.png" });
+    else if (s >= 5) setBadge({ name: "Silver • 5 Sessions Survived", imagePath: "/badges/silver.png" });
     else setBadge(null);
   }, [badgeTradeCount]);
 
@@ -1497,10 +1528,10 @@ function PageInner() {
                   <h4 className="text-base font-extrabold uppercase tracking-wide text-white">Performance Summary</h4>
                 </div>
                 <div className="space-y-2">
-                  <MetricRow label="Best Day" value={currency(Math.max(todayTradePnl, pnl, 0))} tone="positive" icon="trophy" />
-                  <MetricRow label="Worst Day" value={currency(Math.min(todayTradePnl, pnl, 0))} tone="negative" icon="down" />
-                  <MetricRow label="Average Daily PnL" value={currency(Number(todayTradePnl.toFixed(2)))} tone={todayTradePnl >= 0 ? "blue" : "negative"} icon="bars" />
-                  <MetricRow label="Profit Factor" value={closed ? fmt(wins / Math.max(losses, 1)) : "0.00"} tone="purple" icon="scale" />
+                  <MetricRow label="Best Day" value={currency(Number(performanceSummary.bestDay.toFixed(2)))} tone="positive" icon="trophy" />
+                  <MetricRow label="Worst Day" value={currency(Number(performanceSummary.worstDay.toFixed(2)))} tone="negative" icon="down" />
+                  <MetricRow label="Average Daily PnL" value={currency(Number(performanceSummary.averageDailyPnl.toFixed(2)))} tone={performanceSummary.averageDailyPnl >= 0 ? "blue" : "negative"} icon="bars" />
+                  <MetricRow label="Profit Factor" value={fmt(performanceSummary.profitFactor)} tone="purple" icon="scale" />
                 </div>
               </CardContent>
             </Card>
