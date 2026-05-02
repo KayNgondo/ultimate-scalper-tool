@@ -35,7 +35,7 @@ import {
   CommandItem,
   CommandGroup,
 } from "@/components/ui/command";
-import { ChevronsUpDown, Check, Wallet, TrendingUp, TrendingDown, BarChart3, CalendarDays, Target, ShieldCheck, Activity, Info, PieChart, Star, Scale } from "lucide-react";
+import { ChevronsUpDown, Check, Wallet, TrendingUp, TrendingDown, BarChart3, CalendarDays, Target, ShieldCheck, Activity, Info, PieChart, Star, Scale, Home, MoreHorizontal, Settings, BookOpen, ClipboardCheck } from "lucide-react";
 
 /* ========== recharts ========== */
 import {
@@ -1231,6 +1231,7 @@ function PageInner() {
   return (
     <div className="mx-auto max-w-7xl space-y-4 px-3 pb-24 pt-4 sm:px-4 sm:py-6">
       {/* Header */}
+      <div className="rounded-2xl border border-slate-800/80 bg-slate-950/40 p-3 shadow-xl shadow-black/20 md:border-0 md:bg-transparent md:p-0 md:shadow-none">
       <div className="flex flex-col items-stretch justify-between gap-3 md:flex-row md:items-center">
         {/* LEFT: logo + title + status */}
         <div className="flex min-w-0 items-center gap-3">
@@ -1239,7 +1240,7 @@ function PageInner() {
             alt="Ultimate Scalper Tool"
             className="h-8 w-auto shrink-0 select-none sm:h-9"
           />
-          <h1 className="max-w-[14rem] text-2xl font-bold leading-tight tracking-tight sm:max-w-none md:text-3xl">
+          <h1 className="max-w-[15rem] text-2xl font-extrabold leading-tight tracking-tight sm:max-w-none md:text-3xl">
             Ultimate Scalper Tool – Strategy Console
           </h1>
 
@@ -1324,129 +1325,57 @@ function PageInner() {
           )}
         </div>
       </div>
+      </div>
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        {/* Desktop quick return button — keeps Dashboard visible as first navigation item */}
-        <div className="mb-3 hidden md:flex">
-          <Button
-            type="button"
-            variant={activeTab === "dashboard" ? "default" : "outline"}
-            onClick={() => setActiveTab("dashboard")}
-            className={`rounded-xl px-4 py-2 text-sm font-semibold transition-colors ${activeTab === "dashboard" ? "bg-[#D4AF37] text-black hover:bg-[#c9a42f]" : "border-slate-700 bg-transparent text-slate-100 hover:bg-slate-900"}`}
-          >
-            Dashboard
-          </Button>
-        </div>
-        {/* Mobile quick return buttons — keeps Dashboard reachable even when the top tab rail is scrolled */}
-        <div className="mb-3 grid grid-cols-2 gap-2 md:hidden">
-          <Button
-            type="button"
-            variant={activeTab === "dashboard" ? "default" : "outline"}
-            onClick={() => setActiveTab("dashboard")}
-            className="rounded-xl bg-[#D4AF37] text-black hover:bg-[#c9a42f] data-[state=inactive]:bg-transparent"
-          >
-            Dashboard
-          </Button>
-          <Button
-            type="button"
-            variant={activeTab === "journal" ? "default" : "outline"}
-            onClick={() => setActiveTab("journal")}
-            className="rounded-xl"
-          >
-            Trade Journal
-          </Button>
-        </div>
-        <TabsList
-          className="no-scrollbar mb-3 flex w-full snap-x scroll-px-2 gap-2 overflow-x-auto whitespace-nowrap bg-transparent p-0 pb-2"
-        >
-          {/* Dashboard */}
-         <TabsTrigger
-  value="dashboard"
-  className="snap-start rounded-xl px-4 py-2 text-sm md:hidden data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black transition-colors"
->
-  Dashboard
-</TabsTrigger>
-
-
-          {/* Analytics */}
-          <TabsTrigger
-            value="analytics"
-            className="snap-start rounded-xl px-4 py-2 text-sm data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black transition-colors"
->
-            Analytics
+        {/* Primary navigation redesigned for desktop + mobile */}
+        <TabsList className="mb-4 hidden h-auto w-full flex-wrap items-center gap-2 bg-transparent p-0 md:flex">
+          <TabsTrigger value="dashboard" className="rounded-xl border border-slate-700/80 px-4 py-2 text-sm font-semibold data-[state=active]:border-[#D4AF37] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black">
+            <Home className="mr-2 h-4 w-4" /> Dashboard
           </TabsTrigger>
-
-          {/* Risk & Sizing (Deriv) */}
-          <TabsTrigger
-            value="risk-deriv"
-            className="snap-start rounded-xl px-4 py-2 text-sm data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black transition-colors"
->
-            Risk &amp; Sizing (Deriv)
+          <TabsTrigger value="analytics" className="rounded-xl border border-slate-700/80 px-4 py-2 text-sm font-semibold data-[state=active]:border-[#D4AF37] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black">
+            <BarChart3 className="mr-2 h-4 w-4" /> Analytics
           </TabsTrigger>
-
-          {/* Risk & Sizing (FX) */}
-          <TabsTrigger
-            value="risk-fx"
-            className="snap-start rounded-xl px-4 py-2 text-sm data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black transition-colors"
->
-            Risk &amp; Sizing (FX)
-          </TabsTrigger>
-
-          {/* Risk & Sizing (XAU/NAS/US30/BTC) */}
-          <TabsTrigger
-            value="risk-majors"
-            className="snap-start rounded-xl px-4 py-2 text-sm data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black transition-colors"
->
-            Risk &amp; Sizing (XAU/NAS/US30/BTC)
-          </TabsTrigger>
-
-          {/* Trade Journal */}
-          <TabsTrigger
-            value="journal"
-            className="snap-start rounded-xl px-4 py-2 text-sm data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black transition-colors"
->
-            Trade Journal
-          </TabsTrigger>
-
-          {/* Calendar */}
-          <TabsTrigger
-            value="calendar"
-            className="snap-start rounded-xl px-4 py-2 text-sm data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black transition-colors"
->
-            Calendar
-          </TabsTrigger>
-            <TabsTrigger
-              value="watchlist"
-              className="snap-start rounded-xl px-4 py-2 text-sm data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black"
-            >
-              Watchlist
-            </TabsTrigger>
-
-          {/* A-Setups */}
-          <TabsTrigger
-            value="asetups"
-            className="snap-start rounded-xl px-4 py-2 text-sm data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black transition-colors"
->
-            A-Setups
-          </TabsTrigger>
-
-          {/* Checklist */}
-          <TabsTrigger
-            value="checklist"
-            className="snap-start rounded-xl px-4 py-2 text-sm data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black transition-colors"
->
-            Checklist
-          </TabsTrigger>
-
-          {/* Leaderboard */}
-          <a
-            href="/leaderboard"
-            className="snap-start rounded-xl px-4 py-2 text-sm data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black transition-colors"
->
-            Leaderboard
-          </a>
+          <TabsTrigger value="risk-deriv" className="rounded-xl border border-slate-700/80 px-4 py-2 text-sm font-semibold data-[state=active]:border-[#D4AF37] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black">Risk &amp; Sizing (Deriv)</TabsTrigger>
+          <TabsTrigger value="risk-fx" className="rounded-xl border border-slate-700/80 px-4 py-2 text-sm font-semibold data-[state=active]:border-[#D4AF37] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black">Risk &amp; Sizing (FX)</TabsTrigger>
+          <TabsTrigger value="risk-majors" className="rounded-xl border border-slate-700/80 px-4 py-2 text-sm font-semibold data-[state=active]:border-[#D4AF37] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black">Risk &amp; Sizing (XAU/NAS/US30/BTC)</TabsTrigger>
+          <TabsTrigger value="journal" className="rounded-xl border border-slate-700/80 px-4 py-2 text-sm font-semibold data-[state=active]:border-[#D4AF37] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black">Trade Journal</TabsTrigger>
+          <TabsTrigger value="calendar" className="rounded-xl border border-slate-700/80 px-4 py-2 text-sm font-semibold data-[state=active]:border-[#D4AF37] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black">Calendar</TabsTrigger>
+          <TabsTrigger value="watchlist" className="rounded-xl border border-slate-700/80 px-4 py-2 text-sm font-semibold data-[state=active]:border-[#D4AF37] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black">Watchlist</TabsTrigger>
+          <TabsTrigger value="asetups" className="rounded-xl border border-slate-700/80 px-4 py-2 text-sm font-semibold data-[state=active]:border-[#D4AF37] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black">A-Setups</TabsTrigger>
+          <TabsTrigger value="checklist" className="rounded-xl border border-slate-700/80 px-4 py-2 text-sm font-semibold data-[state=active]:border-[#D4AF37] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black">Checklist</TabsTrigger>
+          <a href="/leaderboard" className="rounded-xl border border-slate-700/80 px-4 py-2 text-sm font-semibold text-slate-100 hover:bg-slate-900">Leaderboards</a>
         </TabsList>
+
+        {/* Mobile: gold dashboard button + compact icon shortcuts. Bottom nav remains fixed. */}
+        <div className="mb-4 space-y-3 md:hidden">
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+            <Button type="button" onClick={() => setActiveTab('dashboard')} className="shrink-0 rounded-xl bg-[#D4AF37] px-5 py-2 font-bold text-black hover:bg-[#c9a42f]">
+              <Home className="mr-2 h-4 w-4" /> Dashboard
+            </Button>
+            <Button type="button" variant="outline" onClick={() => setActiveTab('journal')} className="shrink-0 rounded-xl">Journal</Button>
+            <Button type="button" variant="outline" onClick={() => setActiveTab('calendar')} className="shrink-0 rounded-xl">Calendar</Button>
+            <Button type="button" variant="outline" onClick={() => setActiveTab('watchlist')} className="shrink-0 rounded-xl">Watchlist</Button>
+          </div>
+          <TabsList className="grid h-auto grid-cols-5 gap-2 bg-transparent p-0">
+            <TabsTrigger value="analytics" className="flex flex-col gap-1 rounded-2xl border border-slate-700/80 px-2 py-3 text-[10px] data-[state=active]:bg-slate-800">
+              <BarChart3 className="h-4 w-4" /> Analytics
+            </TabsTrigger>
+            <TabsTrigger value="risk-deriv" className="flex flex-col gap-1 rounded-2xl border border-slate-700/80 px-2 py-3 text-[10px] data-[state=active]:bg-slate-800">
+              <ShieldCheck className="h-4 w-4" /> Risk D
+            </TabsTrigger>
+            <TabsTrigger value="risk-fx" className="flex flex-col gap-1 rounded-2xl border border-slate-700/80 px-2 py-3 text-[10px] data-[state=active]:bg-slate-800">
+              <Scale className="h-4 w-4" /> Risk FX
+            </TabsTrigger>
+            <TabsTrigger value="risk-majors" className="flex flex-col gap-1 rounded-2xl border border-slate-700/80 px-2 py-3 text-[10px] data-[state=active]:bg-slate-800">
+              <Target className="h-4 w-4" /> XAU+
+            </TabsTrigger>
+            <TabsTrigger value="checklist" className="flex flex-col gap-1 rounded-2xl border border-slate-700/80 px-2 py-3 text-[10px] data-[state=active]:bg-slate-800">
+              <MoreHorizontal className="h-4 w-4" /> More
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
         {/* DASHBOARD */}
         <TabsContent value="dashboard" className="space-y-4">
@@ -2154,11 +2083,11 @@ function PageInner() {
 
 
         <TabsList className="fixed inset-x-3 bottom-3 z-50 grid grid-cols-5 gap-1 rounded-2xl border border-slate-700/80 bg-slate-950/95 p-2 shadow-2xl shadow-black/50 backdrop-blur md:hidden">
-          <TabsTrigger value="dashboard" className="rounded-xl px-2 py-2 text-[11px] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black">Dashboard</TabsTrigger>
-          <TabsTrigger value="journal" className="rounded-xl px-2 py-2 text-[11px] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black">Journal</TabsTrigger>
-          <TabsTrigger value="calendar" className="rounded-xl px-2 py-2 text-[11px] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black">Calendar</TabsTrigger>
-          <TabsTrigger value="analytics" className="rounded-xl px-2 py-2 text-[11px] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black">Stats</TabsTrigger>
-          <TabsTrigger value="checklist" className="rounded-xl px-2 py-2 text-[11px] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black">Plan</TabsTrigger>
+          <TabsTrigger value="dashboard" className="flex flex-col rounded-xl px-2 py-2 text-[10px] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black"><Home className="mb-1 h-4 w-4" />Dashboard</TabsTrigger>
+          <TabsTrigger value="journal" className="flex flex-col rounded-xl px-2 py-2 text-[10px] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black"><BookOpen className="mb-1 h-4 w-4" />Journal</TabsTrigger>
+          <TabsTrigger value="calendar" className="flex flex-col rounded-xl px-2 py-2 text-[10px] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black"><CalendarDays className="mb-1 h-4 w-4" />Calendar</TabsTrigger>
+          <TabsTrigger value="analytics" className="flex flex-col rounded-xl px-2 py-2 text-[10px] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black"><BarChart3 className="mb-1 h-4 w-4" />Stats</TabsTrigger>
+          <TabsTrigger value="checklist" className="flex flex-col rounded-xl px-2 py-2 text-[10px] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black"><MoreHorizontal className="mb-1 h-4 w-4" />More</TabsTrigger>
         </TabsList>
 
 </Tabs>
