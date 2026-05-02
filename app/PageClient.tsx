@@ -1228,17 +1228,17 @@ function PageInner() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-6 space-y-4">
+    <div className="mx-auto max-w-7xl space-y-4 px-3 pb-24 pt-4 sm:px-4 sm:py-6">
       {/* Header */}
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-col items-stretch justify-between gap-3 md:flex-row md:items-center">
         {/* LEFT: logo + title + status */}
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 items-center gap-3">
           <img
             src="/ust-logo.png"
             alt="Ultimate Scalper Tool"
-            className="h-9 w-auto select-none"
+            className="h-8 w-auto shrink-0 select-none sm:h-9"
           />
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
+          <h1 className="max-w-[14rem] text-2xl font-bold leading-tight tracking-tight sm:max-w-none md:text-3xl">
             Ultimate Scalper Tool – Strategy Console
           </h1>
 
@@ -1260,7 +1260,7 @@ function PageInner() {
         </div>
 
         {/* RIGHT: theme toggle + actions */}
-        <div className="flex items-center gap-2">
+        <div className="flex w-full items-center gap-2 overflow-x-auto pb-1 md:w-auto md:justify-end">
           <ThemeToggle />
 
           <Button disabled={!hasSessionActivity}
@@ -1302,7 +1302,7 @@ function PageInner() {
               }
             }}
           >
-            End Session / Start New
+            <span className="hidden sm:inline">End Session / Start New</span><span className="sm:hidden">End / New</span>
           </Button>
 
           {user && (
@@ -1327,12 +1327,12 @@ function PageInner() {
       {/* Tabs */}
       <Tabs defaultValue="dashboard" className="w-full">
         <TabsList
-          className="mb-3 flex gap-1 bg-transparent p-0 overflow-x-auto whitespace-nowrap no-scrollbar"
+          className="no-scrollbar mb-3 flex w-full snap-x gap-2 overflow-x-auto whitespace-nowrap bg-transparent p-0 pb-2"
         >
           {/* Dashboard */}
          <TabsTrigger
   value="dashboard"
-  className="data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black transition-colors"
+  className="snap-start rounded-xl px-4 py-2 text-sm data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black transition-colors"
 >
   Dashboard
 </TabsTrigger>
@@ -1341,7 +1341,7 @@ function PageInner() {
           {/* Analytics */}
           <TabsTrigger
             value="analytics"
-            className="data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black transition-colors"
+            className="snap-start rounded-xl px-4 py-2 text-sm data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black transition-colors"
 >
             Analytics
           </TabsTrigger>
@@ -1349,7 +1349,7 @@ function PageInner() {
           {/* Risk & Sizing (Deriv) */}
           <TabsTrigger
             value="risk-deriv"
-            className="data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black transition-colors"
+            className="snap-start rounded-xl px-4 py-2 text-sm data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black transition-colors"
 >
             Risk &amp; Sizing (Deriv)
           </TabsTrigger>
@@ -1357,7 +1357,7 @@ function PageInner() {
           {/* Risk & Sizing (FX) */}
           <TabsTrigger
             value="risk-fx"
-            className="data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black transition-colors"
+            className="snap-start rounded-xl px-4 py-2 text-sm data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black transition-colors"
 >
             Risk &amp; Sizing (FX)
           </TabsTrigger>
@@ -1365,7 +1365,7 @@ function PageInner() {
           {/* Risk & Sizing (XAU/NAS/US30/BTC) */}
           <TabsTrigger
             value="risk-majors"
-            className="data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black transition-colors"
+            className="snap-start rounded-xl px-4 py-2 text-sm data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black transition-colors"
 >
             Risk &amp; Sizing (XAU/NAS/US30/BTC)
           </TabsTrigger>
@@ -1373,7 +1373,7 @@ function PageInner() {
           {/* Trade Journal */}
           <TabsTrigger
             value="journal"
-            className="data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black transition-colors"
+            className="snap-start rounded-xl px-4 py-2 text-sm data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black transition-colors"
 >
             Trade Journal
           </TabsTrigger>
@@ -1381,13 +1381,13 @@ function PageInner() {
           {/* Calendar */}
           <TabsTrigger
             value="calendar"
-            className="data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black transition-colors"
+            className="snap-start rounded-xl px-4 py-2 text-sm data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black transition-colors"
 >
             Calendar
           </TabsTrigger>
             <TabsTrigger
               value="watchlist"
-              className="text-xs sm:text-sm data-[state=active]:bg-yellow-600 data-[state=active]:text-black"
+              className="snap-start rounded-xl px-4 py-2 text-sm data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black"
             >
               Watchlist
             </TabsTrigger>
@@ -1395,7 +1395,7 @@ function PageInner() {
           {/* A-Setups */}
           <TabsTrigger
             value="asetups"
-            className="data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black transition-colors"
+            className="snap-start rounded-xl px-4 py-2 text-sm data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black transition-colors"
 >
             A-Setups
           </TabsTrigger>
@@ -1403,7 +1403,7 @@ function PageInner() {
           {/* Checklist */}
           <TabsTrigger
             value="checklist"
-            className="data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black transition-colors"
+            className="snap-start rounded-xl px-4 py-2 text-sm data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black transition-colors"
 >
             Checklist
           </TabsTrigger>
@@ -1411,7 +1411,7 @@ function PageInner() {
           {/* Leaderboard */}
           <a
             href="/leaderboard"
-            className="data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black transition-colors"
+            className="snap-start rounded-xl px-4 py-2 text-sm data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black transition-colors"
 >
             Leaderboard
           </a>
@@ -1423,7 +1423,7 @@ function PageInner() {
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.35em] text-[#F6C945]">Trading Command Centre</p>
-                <h2 className="mt-1 text-2xl font-extrabold tracking-tight text-white md:text-3xl">Dashboard Overview</h2>
+                <h2 className="mt-1 text-2xl font-extrabold leading-tight tracking-tight text-white md:text-3xl">Dashboard Overview</h2>
               </div>
               <div className={`inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-bold shadow-lg ${locked && lockOnHit ? "border-rose-500/50 bg-rose-500/10 text-rose-300 shadow-rose-950/30" : "border-emerald-400/50 bg-emerald-500/10 text-emerald-300 shadow-emerald-950/30"}`}>
                 <Activity className="h-4 w-4" />
@@ -2120,6 +2120,15 @@ function PageInner() {
             </Card>
           ) : null}
         </TabsContent>
+
+
+        <TabsList className="fixed inset-x-3 bottom-3 z-50 grid grid-cols-5 gap-1 rounded-2xl border border-slate-700/80 bg-slate-950/95 p-2 shadow-2xl shadow-black/50 backdrop-blur md:hidden">
+          <TabsTrigger value="dashboard" className="rounded-xl px-2 py-2 text-[11px] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black">Home</TabsTrigger>
+          <TabsTrigger value="journal" className="rounded-xl px-2 py-2 text-[11px] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black">Journal</TabsTrigger>
+          <TabsTrigger value="calendar" className="rounded-xl px-2 py-2 text-[11px] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black">Calendar</TabsTrigger>
+          <TabsTrigger value="analytics" className="rounded-xl px-2 py-2 text-[11px] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black">Stats</TabsTrigger>
+          <TabsTrigger value="checklist" className="rounded-xl px-2 py-2 text-[11px] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black">Plan</TabsTrigger>
+        </TabsList>
 
 </Tabs>
     </div>
@@ -2894,15 +2903,15 @@ function JournalGrouped({
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.35em] text-[#F6C945]">Trade Intelligence Centre</p>
-            <h3 className="mt-1 text-2xl font-extrabold tracking-tight text-white md:text-3xl">Journal Overview</h3>
+            <h3 className="mt-1 text-2xl font-extrabold leading-tight tracking-tight text-white md:text-3xl">Journal Overview</h3>
             <p className="mt-1 text-sm text-slate-400">Review execution quality, market performance, and every logged trade.</p>
           </div>
           <div className={`inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-bold shadow-lg ${qualityTone}`}>
             <ShieldCheck className="h-4 w-4" />{qualityLabel}
           </div>
         </div>
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
-          <div className="rounded-xl border border-emerald-400/25 bg-emerald-500/10 p-4 shadow-lg shadow-emerald-950/20 xl:col-span-2">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-2 xl:grid-cols-6">
+          <div className="col-span-2 rounded-xl border border-emerald-400/25 bg-emerald-500/10 p-4 shadow-lg shadow-emerald-950/20 xl:col-span-2">
             <p className="text-sm font-bold text-slate-300">Net Trade PnL</p>
             <div className={`mt-2 text-4xl font-black ${totalPnl >= 0 ? "text-emerald-400" : "text-rose-400"}`}>{totalPnl >= 0 ? "+" : ""}{currency(Number(totalPnl.toFixed(2)))}</div>
             <p className="mt-1 text-sm text-slate-400">Growth: {formatPct(totalPnl, startBalance) || "0.00%"}</p>
@@ -2938,7 +2947,7 @@ function JournalGrouped({
               return <div key={i} className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-950/35">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 bg-slate-900/70 px-4 py-3"><div><div className="font-bold text-white">{b.title}</div><div className="text-xs text-slate-400">{rowsTradeOnly.length} trades • {fmt(sessionWinRate)}% WR</div></div><div className="flex items-baseline gap-2"><div className={`text-xl font-black ${total >= 0 ? "text-emerald-400" : "text-rose-400"}`}>{total >= 0 ? "+" : ""}{currency(Number(total.toFixed(2)))}</div>{pct && <span className="text-xs text-slate-400">({pct})</span>}</div></div>
                 <div className="hidden grid-cols-12 border-b border-slate-800 bg-slate-950/70 px-4 py-2 text-xs font-bold uppercase tracking-wide text-slate-400 md:grid"><div className="col-span-2">Time</div><div className="col-span-2">Market</div><div className="col-span-4">Strategy / Notes</div><div className="col-span-2">Source</div><div className="col-span-1 text-right">PnL</div><div className="col-span-1 text-right">Action</div></div>
-                {b.rows.slice().reverse().map((t) => { const isWithdrawal = (t.kind ?? "trade") === "withdrawal"; const amount = isWithdrawal ? (t.amount || 0) : (t.pnl || 0); const amountTone = isWithdrawal ? "text-[#F6C945]" : amount >= 0 ? "text-emerald-400" : "text-rose-400"; return <div key={t.id} onClick={() => setSelectedTrade(t)} className="grid cursor-pointer grid-cols-1 gap-2 border-b border-slate-800/70 px-4 py-3 text-sm text-slate-200 transition hover:bg-slate-800/55 md:grid-cols-12 md:items-center"><div className="text-slate-300 md:col-span-2">{t.ts ? new Date(t.ts).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}</div><div className="flex items-center gap-2 font-bold text-white md:col-span-2"><span>{t.symbol}</span>{isWithdrawal && <span className="rounded-full bg-[#F6C945] px-2 py-[2px] text-[10px] font-black text-black">Withdrawal</span>}</div><div className="text-slate-300 md:col-span-4">{t.notes || "—"}</div><div className="md:col-span-2"><span className="rounded-full border border-slate-700 bg-slate-900 px-2 py-1 text-xs capitalize text-slate-300">{t.source || "manual"}</span></div><div className={`font-black md:col-span-1 md:text-right ${amountTone}`}>{isWithdrawal ? "-" : amount >= 0 ? "+" : ""}{currency(Number(amount.toFixed(2)))}</div><div className="md:col-span-1 md:text-right"><Button onClick={(e) => { e.stopPropagation(); onDelete(t.id); }} size="sm" className="border border-rose-400/40 bg-rose-500/10 text-rose-300 hover:bg-rose-500 hover:text-white">Delete</Button></div></div>})}
+                {b.rows.slice().reverse().map((t) => { const isWithdrawal = (t.kind ?? "trade") === "withdrawal"; const amount = isWithdrawal ? (t.amount || 0) : (t.pnl || 0); const amountTone = isWithdrawal ? "text-[#F6C945]" : amount >= 0 ? "text-emerald-400" : "text-rose-400"; return <div key={t.id} onClick={() => setSelectedTrade(t)} className="mx-3 mb-3 grid cursor-pointer grid-cols-1 gap-2 rounded-xl border border-slate-800/80 bg-slate-900/40 px-3 py-3 text-sm text-slate-200 transition hover:bg-slate-800/55 md:mx-0 md:mb-0 md:grid-cols-12 md:items-center md:rounded-none md:border-0 md:border-b md:border-slate-800/70 md:bg-transparent md:px-4"><div className="text-slate-300 md:col-span-2">{t.ts ? new Date(t.ts).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}</div><div className="flex items-center gap-2 font-bold text-white md:col-span-2"><span>{t.symbol}</span>{isWithdrawal && <span className="rounded-full bg-[#F6C945] px-2 py-[2px] text-[10px] font-black text-black">Withdrawal</span>}</div><div className="text-slate-300 md:col-span-4">{t.notes || "—"}</div><div className="md:col-span-2"><span className="rounded-full border border-slate-700 bg-slate-900 px-2 py-1 text-xs capitalize text-slate-300">{t.source || "manual"}</span></div><div className={`font-black md:col-span-1 md:text-right ${amountTone}`}>{isWithdrawal ? "-" : amount >= 0 ? "+" : ""}{currency(Number(amount.toFixed(2)))}</div><div className="md:col-span-1 md:text-right"><Button onClick={(e) => { e.stopPropagation(); onDelete(t.id); }} size="sm" className="border border-rose-400/40 bg-rose-500/10 text-rose-300 hover:bg-rose-500 hover:text-white">Delete</Button></div></div>})}
               </div>
             })}</div> : <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-8 text-center text-sm text-slate-400">No matching trades yet. Use Quick Logger above or adjust your filter.</div>}
           </CardContent>
@@ -2955,7 +2964,7 @@ function JournalGrouped({
 
 function JournalStat({ label, value, hint, tone = "neutral" }: { label: string; value: string; hint?: string; tone?: "positive" | "negative" | "warning" | "gold" | "blue" | "neutral" }) {
   const toneCls = tone === "positive" ? "text-emerald-400 border-emerald-400/25 bg-emerald-500/10" : tone === "negative" ? "text-rose-400 border-rose-400/25 bg-rose-500/10" : tone === "warning" || tone === "gold" ? "text-[#F6C945] border-[#F6C945]/25 bg-[#F6C945]/10" : tone === "blue" ? "text-blue-400 border-blue-400/25 bg-blue-500/10" : "text-white border-slate-700 bg-slate-900/70";
-  return <div className={`rounded-xl border p-4 shadow-lg shadow-black/10 ${toneCls}`}><p className="text-sm font-bold text-slate-300">{label}</p><div className="mt-2 text-3xl font-black">{value}</div>{hint && <p className="mt-1 text-sm text-slate-400">{hint}</p>}</div>;
+  return <div className={`rounded-xl border p-3 shadow-lg shadow-black/10 sm:p-4 ${toneCls}`}><p className="text-xs font-bold text-slate-300 sm:text-sm">{label}</p><div className="mt-2 break-words text-2xl font-black sm:text-3xl">{value}</div>{hint && <p className="mt-1 text-xs text-slate-400 sm:text-sm">{hint}</p>}</div>;
 }
 
 /* =========================================================================
