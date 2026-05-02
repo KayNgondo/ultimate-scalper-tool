@@ -1148,17 +1148,13 @@ function PageInner() {
     [trades, today]
   );
 
-  const sessionsCount = useMemo(() => {
-    const raw = localStorage.getItem("ust-session-history");
-    const hist: string[] = raw ? JSON.parse(raw) : [];
-    const uniq = new Set(hist);
-    if (sessionId) uniq.add(sessionId);
-    return uniq.size;
-  }, [sessionId]);
+  // Badge progress now uses total journal trades, not sessions.
+  // Withdrawals are excluded because tradeRows only contains real trades.
+  const badgeTradeCount = useMemo(() => tradeRows.length, [tradeRows]);
 
   const [badge, setBadge] = useState<{ name: string; imagePath: string } | null>(null);
   useEffect(() => {
-    const s = sessionsCount;
+    const s = badgeTradeCount;
     if (s >= 30) setBadge({ name: "Legendary • 30 Sessions Untouchable", imagePath: "/badges/legendary.png" });
     else if (s >= 25) setBadge({ name: "Elite • 25 Sessions Mastered", imagePath: "/badges/elite.png" });
     else if (s >= 20) setBadge({ name: "Diamond • 20 Sessions Mastered", imagePath: "/badges/diamond.png" });
@@ -1166,7 +1162,7 @@ function PageInner() {
     else if (s >= 10) setBadge({ name: "Gold • 10 Sessions Conquered", imagePath: "/badges/gold.png" });
     else if (s >= 5) setBadge({ name: "Silver • 5 Sessions Survived", imagePath: "/badges/silver.png" });
     else setBadge(null);
-  }, [sessionsCount]);
+  }, [badgeTradeCount]);
 
   const equitySeries = useMemo(() => {
     const sorted = [...trades].sort((a, b) => (a.ts || 0) - (b.ts || 0));
@@ -1611,7 +1607,7 @@ function PageInner() {
             </Card>
           </div>
 
-          <BadgeShowcase badge={badge} sessionsCount={sessionsCount} />
+          <BadgeShowcase badge={badge} tradeCount={badgeTradeCount} />
 
           <Card className="border-slate-800/80 bg-gradient-to-br from-[#0b1220] to-[#111827] text-slate-100 shadow-xl shadow-black/20">
             <CardContent className="p-5">
@@ -2424,10 +2420,10 @@ function CapitalAndRiskSummary({
 ============================================================================ */
 function BadgeShowcase({
   badge,
-  sessionsCount,
+  tradeCount,
 }: {
   badge: { name: string; imagePath: string } | null;
-  sessionsCount: number;
+  tradeCount: number;
 }) {
   const tiers = [
     { key: "Silver", name: "Silver • 5 Sessions Survived", at: 5, img: "/badges/silver.png" },
@@ -2437,10 +2433,10 @@ function BadgeShowcase({
     { key: "Elite", name: "Elite • 25 Sessions Mastered", at: 25, img: "/badges/elite.png" },
     { key: "Legendary", name: "Legendary • 30 Sessions Untouchable", at: 30, img: "/badges/legendary.png" },
   ];
-  const current = badge ?? (sessionsCount >= 5 ? { name: tiers[0].name, imagePath: tiers[0].img } : null);
-  const nextTier = tiers.find((t) => sessionsCount < t.at);
-  const pct = nextTier ? Math.min(100, Math.round((sessionsCount / nextTier.at) * 100)) : 100;
-  const left = nextTier ? Math.max(0, nextTier.at - sessionsCount) : 0;
+  const current = badge ?? (tradeCount >= 5 ? { name: tiers[0].name, imagePath: tiers[0].img } : null);
+  const nextTier = tiers.find((t) => tradeCount < t.at);
+  const pct = nextTier ? Math.min(100, Math.round((tradeCount / nextTier.at) * 100)) : 100;
+  const left = nextTier ? Math.max(0, nextTier.at - tradeCount) : 0;
 
   return (
     <Card>
@@ -2456,20 +2452,21 @@ function BadgeShowcase({
             </div>
           </div>
           <div className="md:col-span-2">
-            <div className="text-xl font-semibold">{current?.name || "Starter • Keep building sessions"}</div>
+            <div className="text-xl font-semibold">{current?.name || "Starter • Keep building trades"}</div>
+            <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">Badges are now issued from total journal trade count.</div>
             <div className="text-sm text-slate-600 dark:text-slate-300 mt-1">
-              Sessions completed: <strong>{sessionsCount}</strong>
+              Journal trades counted: <strong>{tradeCount}</strong>
             </div>
             {nextTier ? (
               <>
                 <div className="text-sm text-slate-600 dark:text-slate-300 mt-2">
-                  Next badge: <strong>{nextTier.key}</strong> at {nextTier.at} sessions.
+                  Next badge: <strong>{nextTier.key}</strong> at {nextTier.at} trades.
                 </div>
                 <div className="w-full h-2 rounded-full bg-slate-50 dark:bg-slate-800 mt-2 overflow-hidden">
                   <div className="h-2 bg-indigo-500 transition-all" style={{ width: `${pct}%` }} />
                 </div>
                 <div className="text-xs text-slate-500 mt-1">
-                  {left} more session(s) to {nextTier.key}.
+                  {left} more trade(s) to {nextTier.key}.
                 </div>
               </>
             ) : (
