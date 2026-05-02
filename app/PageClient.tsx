@@ -528,6 +528,7 @@ function PageClientWrapper() {
 function PageInner() {
   const { user } = useSupabaseUser();
   const { push } = useToast();
+  const [activeTab, setActiveTab] = useState<string>("dashboard");
 
   /* Core state */
   const [startBalance, setStartBalance] = useLocalStorage<number>("ust-start-balance", 0);
@@ -1325,9 +1326,28 @@ function PageInner() {
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="dashboard" className="w-full">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        {/* Mobile quick return buttons — keeps Dashboard reachable even when the top tab rail is scrolled */}
+        <div className="mb-3 grid grid-cols-2 gap-2 md:hidden">
+          <Button
+            type="button"
+            variant={activeTab === "dashboard" ? "default" : "outline"}
+            onClick={() => setActiveTab("dashboard")}
+            className="rounded-xl bg-[#D4AF37] text-black hover:bg-[#c9a42f] data-[state=inactive]:bg-transparent"
+          >
+            Dashboard
+          </Button>
+          <Button
+            type="button"
+            variant={activeTab === "journal" ? "default" : "outline"}
+            onClick={() => setActiveTab("journal")}
+            className="rounded-xl"
+          >
+            Trade Journal
+          </Button>
+        </div>
         <TabsList
-          className="no-scrollbar mb-3 flex w-full snap-x gap-2 overflow-x-auto whitespace-nowrap bg-transparent p-0 pb-2"
+          className="no-scrollbar mb-3 flex w-full snap-x scroll-px-2 gap-2 overflow-x-auto whitespace-nowrap bg-transparent p-0 pb-2"
         >
           {/* Dashboard */}
          <TabsTrigger
@@ -2123,7 +2143,7 @@ function PageInner() {
 
 
         <TabsList className="fixed inset-x-3 bottom-3 z-50 grid grid-cols-5 gap-1 rounded-2xl border border-slate-700/80 bg-slate-950/95 p-2 shadow-2xl shadow-black/50 backdrop-blur md:hidden">
-          <TabsTrigger value="dashboard" className="rounded-xl px-2 py-2 text-[11px] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black">Home</TabsTrigger>
+          <TabsTrigger value="dashboard" className="rounded-xl px-2 py-2 text-[11px] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black">Dashboard</TabsTrigger>
           <TabsTrigger value="journal" className="rounded-xl px-2 py-2 text-[11px] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black">Journal</TabsTrigger>
           <TabsTrigger value="calendar" className="rounded-xl px-2 py-2 text-[11px] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black">Calendar</TabsTrigger>
           <TabsTrigger value="analytics" className="rounded-xl px-2 py-2 text-[11px] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black">Stats</TabsTrigger>
