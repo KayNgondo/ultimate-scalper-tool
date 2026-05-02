@@ -3347,6 +3347,8 @@ function OldCalendar({
           </div>
         </div>
 
+        <p className="mt-4 text-xs text-slate-400 sm:hidden">Swipe the calendar left or right to view each day clearly.</p>
+
         <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
           <CalendarMetric label="Month PnL" value={`${calendarStats.monthlyPnl >= 0 ? "+" : ""}${currency(Number(calendarStats.monthlyPnl.toFixed(2)))}`} tone={calendarStats.monthlyPnl > 0 ? "good" : calendarStats.monthlyPnl < 0 ? "bad" : "neutral"} />
           <CalendarMetric label="Win Rate" value={`${calendarStats.monthlyWinRate.toFixed(0)}%`} tone="blue" />
@@ -3358,7 +3360,8 @@ function OldCalendar({
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
-        <div className="rounded-2xl border border-slate-700/70 bg-[#07111f] p-4 shadow-[0_18px_60px_rgba(0,0,0,0.28)]">
+        <div className="rounded-2xl border border-slate-700/70 bg-[#07111f] p-3 sm:p-4 shadow-[0_18px_60px_rgba(0,0,0,0.28)] overflow-x-auto overscroll-x-contain">
+          <div className="min-w-[760px] sm:min-w-0">
           <div className="grid grid-cols-7 text-xs font-bold uppercase tracking-wider text-slate-300">
             {["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map((d) => <div key={d} className="p-2 text-center">{d}</div>)}
           </div>
@@ -3380,7 +3383,7 @@ function OldCalendar({
                   key={i}
                   onClick={() => setSelectedKey(k)}
                   className={[
-                    "min-h-[118px] rounded-xl border border-slate-800 p-3 text-left transition duration-200 hover:-translate-y-0.5 hover:border-[#F6C945]/55",
+                    "min-h-[112px] sm:min-h-[118px] rounded-xl border border-slate-800 p-3 text-left transition duration-200 hover:-translate-y-0.5 hover:border-[#F6C945]/55",
                     heatClass(dayPnl, hasActivity),
                     inMonth ? "opacity-100" : "opacity-35",
                     isToday ? "ring-2 ring-[#F6C945]/80 shadow-[0_0_26px_rgba(246,201,69,0.20)]" : "",
@@ -3398,8 +3401,8 @@ function OldCalendar({
                   </div>
 
                   {hasActivity ? (
-                    <div className="mt-5 space-y-1.5">
-                      <div className={`text-lg font-extrabold ${pnlTone(dayPnl)}`}>{dayPnl >= 0 ? "+" : ""}{currency(Number(dayPnl.toFixed(2)))}</div>
+                    <div className="mt-4 space-y-1.5">
+                      <div className={`text-base sm:text-lg font-extrabold ${pnlTone(dayPnl)}`}>{dayPnl >= 0 ? "+" : ""}{currency(Number(dayPnl.toFixed(2)))}</div>
                       <div className="flex items-center justify-between text-[11px] text-slate-300">
                         <span>{day?.trades || 0} trades</span>
                         <span>{winRate.toFixed(0)}% WR</span>
@@ -3415,6 +3418,7 @@ function OldCalendar({
                 </button>
               );
             })}
+          </div>
           </div>
         </div>
 
