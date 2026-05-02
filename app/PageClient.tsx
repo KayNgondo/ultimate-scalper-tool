@@ -1238,9 +1238,9 @@ function PageInner() {
           <img
             src="/ust-logo.png"
             alt="Ultimate Scalper Tool"
-            className="h-8 w-auto shrink-0 select-none sm:h-9"
+            className="h-7 w-auto shrink-0 select-none sm:h-9"
           />
-          <h1 className="max-w-[15rem] text-2xl font-extrabold leading-tight tracking-tight sm:max-w-none md:text-3xl">
+          <h1 className="max-w-[14rem] text-xl font-extrabold leading-tight tracking-tight sm:max-w-none sm:text-2xl md:text-3xl">
             Ultimate Scalper Tool – Strategy Console
           </h1>
 
@@ -1359,19 +1359,19 @@ function PageInner() {
             <Button type="button" variant="outline" onClick={() => setActiveTab('watchlist')} className="shrink-0 rounded-xl">Watchlist</Button>
           </div>
           <TabsList className="grid h-auto grid-cols-5 gap-2 bg-transparent p-0">
-            <TabsTrigger value="analytics" className="flex flex-col gap-1 rounded-2xl border border-slate-700/80 px-2 py-3 text-[10px] data-[state=active]:bg-slate-800">
+            <TabsTrigger value="analytics" className="flex flex-col gap-1 rounded-2xl border border-slate-700/80 px-2 py-2 text-[10px] data-[state=active]:bg-slate-800">
               <BarChart3 className="h-4 w-4" /> Analytics
             </TabsTrigger>
-            <TabsTrigger value="risk-deriv" className="flex flex-col gap-1 rounded-2xl border border-slate-700/80 px-2 py-3 text-[10px] data-[state=active]:bg-slate-800">
+            <TabsTrigger value="risk-deriv" className="flex flex-col gap-1 rounded-2xl border border-slate-700/80 px-2 py-2 text-[10px] data-[state=active]:bg-slate-800">
               <ShieldCheck className="h-4 w-4" /> Risk D
             </TabsTrigger>
-            <TabsTrigger value="risk-fx" className="flex flex-col gap-1 rounded-2xl border border-slate-700/80 px-2 py-3 text-[10px] data-[state=active]:bg-slate-800">
+            <TabsTrigger value="risk-fx" className="flex flex-col gap-1 rounded-2xl border border-slate-700/80 px-2 py-2 text-[10px] data-[state=active]:bg-slate-800">
               <Scale className="h-4 w-4" /> Risk FX
             </TabsTrigger>
-            <TabsTrigger value="risk-majors" className="flex flex-col gap-1 rounded-2xl border border-slate-700/80 px-2 py-3 text-[10px] data-[state=active]:bg-slate-800">
+            <TabsTrigger value="risk-majors" className="flex flex-col gap-1 rounded-2xl border border-slate-700/80 px-2 py-2 text-[10px] data-[state=active]:bg-slate-800">
               <Target className="h-4 w-4" /> XAU+
             </TabsTrigger>
-            <TabsTrigger value="checklist" className="flex flex-col gap-1 rounded-2xl border border-slate-700/80 px-2 py-3 text-[10px] data-[state=active]:bg-slate-800">
+            <TabsTrigger value="checklist" className="flex flex-col gap-1 rounded-2xl border border-slate-700/80 px-2 py-2 text-[10px] data-[state=active]:bg-slate-800">
               <MoreHorizontal className="h-4 w-4" /> More
             </TabsTrigger>
           </TabsList>
@@ -1382,8 +1382,8 @@ function PageInner() {
           <div className="rounded-2xl border border-slate-800/80 bg-[radial-gradient(circle_at_top_left,rgba(212,175,55,0.13),transparent_28%),linear-gradient(135deg,#07111f_0%,#0b1220_55%,#101827_100%)] p-3 shadow-2xl shadow-black/25 dark:border-slate-700/70 md:p-5">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.35em] text-[#F6C945]">Trading Command Centre</p>
-                <h2 className="mt-1 text-2xl font-extrabold leading-tight tracking-tight text-white md:text-3xl">Dashboard Overview</h2>
+                <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-[#F6C945] sm:text-xs sm:tracking-[0.35em]">Trading Command Centre</p>
+                <h2 className="mt-1 text-xl font-extrabold leading-tight tracking-tight text-white sm:text-2xl md:text-3xl">Dashboard Overview</h2>
               </div>
               <div className={`inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-bold shadow-lg ${locked && lockOnHit ? "border-rose-500/50 bg-rose-500/10 text-rose-300 shadow-rose-950/30" : "border-emerald-400/50 bg-emerald-500/10 text-emerald-300 shadow-emerald-950/30"}`}>
                 <Activity className="h-4 w-4" />
@@ -1391,7 +1391,7 @@ function PageInner() {
               </div>
             </div>
 
-            <div className="grid gap-4 lg:grid-cols-4">
+            <div className="grid grid-cols-2 gap-2 md:gap-4 lg:grid-cols-4">
               <DashCard title="Equity" value={currency(equity)} hint={`Start: ${currency(startBalance)}`} tone={equity >= startBalance ? "positive" : "negative"} featured icon="wallet" spark="up" />
               <DashCard
                 title="PNL (this session)"
@@ -2181,7 +2181,7 @@ function SparkLine({ kind = "flat", tone = "positive" }: { kind?: "up" | "flat";
   const stroke = tone === "positive" ? "#22c55e" : tone === "negative" ? "#f43f5e" : tone === "blue" ? "#3b82f6" : "#F6C945";
   const points = kind === "up" ? "0,44 18,42 34,36 50,24 68,30 86,30 104,20 122,27 140,24 158,18 176,29 194,28 212,10 230,14 248,19 266,11 284,2" : "0,28 22,28 44,25 66,30 88,27 110,29 132,27 154,28 176,28 198,26 220,30 242,24 264,31 284,23";
   return (
-    <svg viewBox="0 0 284 48" className="mt-4 h-12 w-full opacity-90">
+    <svg viewBox="0 0 284 48" className="mt-3 h-8 w-full opacity-90 sm:mt-4 sm:h-12">
       <polyline points={points} fill="none" stroke={stroke} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
       <line x1="0" y1="44" x2="284" y2="44" stroke={stroke} strokeOpacity="0.18" />
     </svg>
@@ -2209,18 +2209,18 @@ function DashCard({
 }) {
   return (
     <Card className={`group overflow-hidden border shadow-xl transition-all duration-200 hover:-translate-y-0.5 hover:shadow-2xl ${toneClasses(tone)}`}>
-      <CardContent className={featured ? "relative min-h-[150px] p-5" : "relative min-h-[105px] p-4"}>
+      <CardContent className={featured ? "relative min-h-[140px] p-3 sm:min-h-[150px] sm:p-5" : "relative min-h-[105px] p-3 sm:p-4"}>
         {icon && (
-          <div className={`absolute right-4 top-4 grid h-11 w-11 place-items-center rounded-full border bg-white/5 ${toneText(tone)} border-current/30`}>
-            <DashIconView icon={icon} className="h-5 w-5" />
+          <div className={`absolute right-3 top-3 grid h-9 w-9 place-items-center rounded-full border bg-white/5 sm:right-4 sm:top-4 sm:h-11 sm:w-11 ${toneText(tone)} border-current/30`}>
+            <DashIconView icon={icon} className="h-4 w-4 sm:h-5 sm:w-5" />
           </div>
         )}
-        <div className="pr-12 text-sm font-bold text-slate-200">{title}</div>
-        <div className={`${featured ? "text-3xl" : "text-2xl"} mt-2 font-black tracking-tight ${toneText(tone)}`}>{value}</div>
-        {hint && <div className="mt-1 text-sm text-slate-400">{hint}</div>}
+        <div className="pr-10 text-xs font-bold text-slate-200 sm:pr-12 sm:text-sm">{title}</div>
+        <div className={`${featured ? "text-2xl sm:text-3xl" : "text-xl sm:text-2xl"} mt-2 font-black tracking-tight ${toneText(tone)}`}>{value}</div>
+        {hint && <div className="mt-1 text-xs leading-snug text-slate-400 sm:text-sm">{hint}</div>}
         {spark && <SparkLine kind={spark} tone={tone} />}
         {typeof progress === "number" && (
-          <div className="mt-5 h-3 overflow-hidden rounded-full bg-slate-800">
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-800 sm:mt-5 sm:h-3">
             <div className="h-full rounded-full bg-gradient-to-r from-[#F6C945] to-amber-400" style={{ width: `${Math.max(0, Math.min(100, progress))}%` }} />
           </div>
         )}
@@ -2862,8 +2862,8 @@ function JournalGrouped({
       <div className="rounded-2xl border border-slate-800/80 bg-[radial-gradient(circle_at_top_left,rgba(34,197,94,0.14),transparent_28%),linear-gradient(135deg,#07111f_0%,#0b1220_55%,#101827_100%)] p-4 text-slate-100 shadow-2xl shadow-black/25 md:p-5">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.35em] text-[#F6C945]">Trade Intelligence Centre</p>
-            <h3 className="mt-1 text-2xl font-extrabold leading-tight tracking-tight text-white md:text-3xl">Journal Overview</h3>
+            <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-[#F6C945] sm:text-xs sm:tracking-[0.35em]">Trade Intelligence Centre</p>
+            <h3 className="mt-1 text-xl font-extrabold leading-tight tracking-tight text-white sm:text-2xl md:text-3xl">Journal Overview</h3>
             <p className="mt-1 text-sm text-slate-400">Review execution quality, market performance, and every logged trade.</p>
           </div>
           <div className={`inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-bold shadow-lg ${qualityTone}`}>
