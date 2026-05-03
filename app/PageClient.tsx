@@ -1416,7 +1416,7 @@ function PageInner() {
             </div>
           </div>
 
-          {/* Mobile: one dashboard button, bundled shortcuts, feature cards */}
+          {/* Mobile: one dashboard button, bundled shortcuts, feature cards — light-mode icon contrast fixed */}
           <div className="space-y-3 md:hidden">
             <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
               <Button type="button" onClick={() => setActiveTab('dashboard')} className="shrink-0 rounded-xl bg-[#D4AF37] px-5 py-2 font-bold text-black shadow-lg shadow-[#D4AF37]/20 hover:bg-[#c9a42f]">
@@ -1425,36 +1425,36 @@ function PageInner() {
             </div>
 
             <TabsList className="grid h-auto grid-cols-5 gap-2 bg-transparent p-0">
-              <TabsTrigger value="analytics" className="flex min-h-[74px] flex-col items-center justify-center gap-1 rounded-2xl border border-slate-700/80 bg-slate-950/40 px-1 py-2 text-center text-[10px] leading-tight data-[state=active]:border-[#D4AF37] data-[state=active]:bg-slate-800">
-                <span className="grid h-9 w-9 place-items-center rounded-full border border-slate-700 bg-slate-950"><BarChart3 className="h-4 w-4" /></span><span>Analytics</span>
+              <TabsTrigger value="analytics" className="flex min-h-[74px] flex-col items-center justify-center gap-1 rounded-2xl border border-slate-400 bg-white px-1 py-2 text-center text-[10px] font-bold leading-tight text-slate-950 shadow-sm data-[state=active]:border-[#D4AF37] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:border-slate-700/80 dark:bg-slate-950/40 dark:text-slate-100 dark:data-[state=active]:bg-slate-800">
+                <span className="grid h-9 w-9 place-items-center rounded-full border border-slate-400 bg-[#0B1220] text-[#F6C945] shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:text-[#F6C945]"><BarChart3 className="h-4 w-4" /></span><span>Analytics</span>
               </TabsTrigger>
-              <TabsTrigger value="risk-deriv" className="flex min-h-[74px] flex-col items-center justify-center gap-1 rounded-2xl border border-slate-700/80 bg-slate-950/40 px-1 py-2 text-center text-[10px] leading-tight data-[state=active]:border-[#D4AF37] data-[state=active]:bg-slate-800">
-                <span className="grid h-9 w-9 place-items-center rounded-full border border-slate-700 bg-slate-950"><ShieldCheck className="h-4 w-4" /></span><span>Risk<br />Deriv</span>
+              <TabsTrigger value="risk-deriv" className="flex min-h-[74px] flex-col items-center justify-center gap-1 rounded-2xl border border-slate-400 bg-white px-1 py-2 text-center text-[10px] font-bold leading-tight text-slate-950 shadow-sm data-[state=active]:border-[#D4AF37] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:border-slate-700/80 dark:bg-slate-950/40 dark:text-slate-100 dark:data-[state=active]:bg-slate-800">
+                <span className="grid h-9 w-9 place-items-center rounded-full border border-slate-400 bg-[#0B1220] text-[#F6C945] shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:text-[#F6C945]"><ShieldCheck className="h-4 w-4" /></span><span>Risk<br />Deriv</span>
               </TabsTrigger>
-              <TabsTrigger value="risk-fx" className="flex min-h-[74px] flex-col items-center justify-center gap-1 rounded-2xl border border-slate-700/80 bg-slate-950/40 px-1 py-2 text-center text-[10px] leading-tight data-[state=active]:border-[#D4AF37] data-[state=active]:bg-slate-800">
-                <span className="grid h-9 w-9 place-items-center rounded-full border border-slate-700 bg-slate-950"><Scale className="h-4 w-4" /></span><span>Risk<br />FX</span>
+              <TabsTrigger value="risk-fx" className="flex min-h-[74px] flex-col items-center justify-center gap-1 rounded-2xl border border-slate-400 bg-white px-1 py-2 text-center text-[10px] font-bold leading-tight text-slate-950 shadow-sm data-[state=active]:border-[#D4AF37] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:border-slate-700/80 dark:bg-slate-950/40 dark:text-slate-100 dark:data-[state=active]:bg-slate-800">
+                <span className="grid h-9 w-9 place-items-center rounded-full border border-slate-400 bg-[#0B1220] text-[#F6C945] shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:text-[#F6C945]"><Scale className="h-4 w-4" /></span><span>Risk<br />FX</span>
               </TabsTrigger>
-              <TabsTrigger value="risk-majors" className="flex min-h-[74px] flex-col items-center justify-center gap-1 rounded-2xl border border-slate-700/80 bg-slate-950/40 px-1 py-2 text-center text-[10px] leading-tight data-[state=active]:border-[#D4AF37] data-[state=active]:bg-slate-800">
-                <span className="grid h-9 w-9 place-items-center rounded-full border border-slate-700 bg-slate-950"><Target className="h-4 w-4" /></span><span>XAU+</span>
+              <TabsTrigger value="risk-majors" className="flex min-h-[74px] flex-col items-center justify-center gap-1 rounded-2xl border border-slate-400 bg-white px-1 py-2 text-center text-[10px] font-bold leading-tight text-slate-950 shadow-sm data-[state=active]:border-[#D4AF37] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:border-slate-700/80 dark:bg-slate-950/40 dark:text-slate-100 dark:data-[state=active]:bg-slate-800">
+                <span className="grid h-9 w-9 place-items-center rounded-full border border-slate-400 bg-[#0B1220] text-[#F6C945] shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:text-[#F6C945]"><Target className="h-4 w-4" /></span><span>XAU+</span>
               </TabsTrigger>
-              <TabsTrigger value="checklist" className="flex min-h-[74px] flex-col items-center justify-center gap-1 rounded-2xl border border-slate-700/80 bg-slate-950/40 px-1 py-2 text-center text-[10px] leading-tight data-[state=active]:border-[#D4AF37] data-[state=active]:bg-slate-800">
-                <span className="grid h-9 w-9 place-items-center rounded-full border border-slate-700 bg-slate-950"><MoreHorizontal className="h-4 w-4" /></span><span>More</span>
+              <TabsTrigger value="checklist" className="flex min-h-[74px] flex-col items-center justify-center gap-1 rounded-2xl border border-slate-400 bg-white px-1 py-2 text-center text-[10px] font-bold leading-tight text-slate-950 shadow-sm data-[state=active]:border-[#D4AF37] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:border-slate-700/80 dark:bg-slate-950/40 dark:text-slate-100 dark:data-[state=active]:bg-slate-800">
+                <span className="grid h-9 w-9 place-items-center rounded-full border border-slate-400 bg-[#0B1220] text-[#F6C945] shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:text-[#F6C945]"><MoreHorizontal className="h-4 w-4" /></span><span>More</span>
               </TabsTrigger>
             </TabsList>
 
             <div className="grid grid-cols-3 gap-2">
-              <button type="button" onClick={() => setActiveTab('asetups')} className="rounded-xl border border-slate-700/80 bg-gradient-to-br from-slate-950/90 to-slate-900/60 p-3 text-left">
-                <Target className="mb-2 h-7 w-7 text-purple-300" />
+              <button type="button" onClick={() => setActiveTab('asetups')} className="rounded-xl border border-slate-600 bg-gradient-to-br from-slate-900 to-slate-700 p-3 text-left shadow-md dark:border-slate-700/80 dark:from-slate-950/90 dark:to-slate-900/60">
+                <Target className="mb-2 h-8 w-8 text-purple-200 drop-shadow" />
                 <div className="text-[10px] font-black uppercase text-white">A-Setups</div>
                 <div className="text-[10px] font-semibold text-sky-300">View setups →</div>
               </button>
-              <button type="button" onClick={() => setActiveTab('checklist')} className="rounded-xl border border-slate-700/80 bg-gradient-to-br from-slate-950/90 to-slate-900/60 p-3 text-left">
-                <ClipboardCheck className="mb-2 h-7 w-7 text-sky-300" />
+              <button type="button" onClick={() => setActiveTab('checklist')} className="rounded-xl border border-slate-600 bg-gradient-to-br from-slate-900 to-slate-700 p-3 text-left shadow-md dark:border-slate-700/80 dark:from-slate-950/90 dark:to-slate-900/60">
+                <ClipboardCheck className="mb-2 h-8 w-8 text-sky-200 drop-shadow" />
                 <div className="text-[10px] font-black uppercase text-white">Checklist</div>
                 <div className="text-[10px] font-semibold text-sky-300">Open checklist →</div>
               </button>
-              <a href="/leaderboard" className="rounded-xl border border-slate-700/80 bg-gradient-to-br from-slate-950/90 to-slate-900/60 p-3 text-left">
-                <BarChart3 className="mb-2 h-7 w-7 text-[#F6C945]" />
+              <a href="/leaderboard" className="rounded-xl border border-slate-600 bg-gradient-to-br from-slate-900 to-slate-700 p-3 text-left shadow-md dark:border-slate-700/80 dark:from-slate-950/90 dark:to-slate-900/60">
+                <BarChart3 className="mb-2 h-8 w-8 text-[#F6C945] drop-shadow" />
                 <div className="text-[10px] font-black uppercase text-white">Leaders</div>
                 <div className="text-[10px] font-semibold text-sky-300">View board →</div>
               </a>
