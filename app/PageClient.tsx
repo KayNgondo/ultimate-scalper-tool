@@ -530,6 +530,18 @@ function PageInner() {
   const { push } = useToast();
   const [activeTab, setActiveTab] = useState<string>("dashboard");
 
+  // Default UST to dark mode on first visit. Users can still switch theme afterwards.
+  useEffect(() => {
+    try {
+      const savedTheme = localStorage.getItem("theme");
+      if (!savedTheme) {
+        localStorage.setItem("theme", "dark");
+        document.documentElement.classList.add("dark");
+        document.documentElement.style.colorScheme = "dark";
+      }
+    } catch {}
+  }, []);
+
   /* Core state */
   const [startBalance, setStartBalance] = useLocalStorage<number>("ust-start-balance", 0);
   const [riskPct, setRiskPct] = useLocalStorage<number>("ust-risk-pct", 2.5);
@@ -1184,12 +1196,12 @@ function PageInner() {
   const [badge, setBadge] = useState<{ name: string; imagePath: string } | null>(null);
   useEffect(() => {
     const s = badgeTradeCount;
-    if (s >= 30) setBadge({ name: "Legendary • 30 Sessions Untouchable", imagePath: "/badges/legendary.png" });
-    else if (s >= 25) setBadge({ name: "Elite • 25 Sessions Mastered", imagePath: "/badges/elite.png" });
-    else if (s >= 20) setBadge({ name: "Diamond • 20 Sessions Mastered", imagePath: "/badges/diamond.png" });
-    else if (s >= 15) setBadge({ name: "Platinum • 15 Sessions Dominated", imagePath: "/badges/platinum.png" });
-    else if (s >= 10) setBadge({ name: "Gold • 10 Sessions Conquered", imagePath: "/badges/gold.png" });
-    else if (s >= 5) setBadge({ name: "Silver • 5 Sessions Survived", imagePath: "/badges/silver.png" });
+    if (s >= 30) setBadge({ name: "Legendary • 30 Trades Untouchable", imagePath: "/badges/legendary.png" });
+    else if (s >= 25) setBadge({ name: "Elite • 25 Trades Mastered", imagePath: "/badges/elite.png" });
+    else if (s >= 20) setBadge({ name: "Diamond • 20 Trades Mastered", imagePath: "/badges/diamond.png" });
+    else if (s >= 15) setBadge({ name: "Platinum • 15 Trades Dominated", imagePath: "/badges/platinum.png" });
+    else if (s >= 10) setBadge({ name: "Gold • 10 Trades Conquered", imagePath: "/badges/gold.png" });
+    else if (s >= 5) setBadge({ name: "Silver • 5 Trades Survived", imagePath: "/badges/silver.png" });
     else setBadge(null);
   }, [badgeTradeCount]);
 
@@ -2403,12 +2415,12 @@ function BadgeShowcase({
   tradeCount: number;
 }) {
   const tiers = [
-    { key: "Silver", name: "Silver • 5 Sessions Survived", at: 5, img: "/badges/silver.png" },
-    { key: "Gold", name: "Gold • 10 Sessions Conquered", at: 10, img: "/badges/gold.png" },
-    { key: "Platinum", name: "Platinum • 15 Sessions Dominated", at: 15, img: "/badges/platinum.png" },
-    { key: "Diamond", name: "Diamond • 20 Sessions Mastered", at: 20, img: "/badges/diamond.png" },
-    { key: "Elite", name: "Elite • 25 Sessions Mastered", at: 25, img: "/badges/elite.png" },
-    { key: "Legendary", name: "Legendary • 30 Sessions Untouchable", at: 30, img: "/badges/legendary.png" },
+    { key: "Silver", name: "Silver • 5 Trades Survived", at: 5, img: "/badges/silver.png" },
+    { key: "Gold", name: "Gold • 10 Trades Conquered", at: 10, img: "/badges/gold.png" },
+    { key: "Platinum", name: "Platinum • 15 Trades Dominated", at: 15, img: "/badges/platinum.png" },
+    { key: "Diamond", name: "Diamond • 20 Trades Mastered", at: 20, img: "/badges/diamond.png" },
+    { key: "Elite", name: "Elite • 25 Trades Mastered", at: 25, img: "/badges/elite.png" },
+    { key: "Legendary", name: "Legendary • 30 Trades Untouchable", at: 30, img: "/badges/legendary.png" },
   ];
   const current = badge ?? (tradeCount >= 5 ? { name: tiers[0].name, imagePath: tiers[0].img } : null);
   const nextTier = tiers.find((t) => tradeCount < t.at);
@@ -3621,22 +3633,22 @@ function GoalProgress({
   const reached = target > 0 && progress >= target;
 
   return (
-    <div className="rounded-lg border bg-white p-3">
+    <div className="rounded-lg border border-slate-700/80 bg-slate-950/70 p-3 text-slate-100 shadow-inner shadow-black/20 dark:border-slate-700/80 dark:bg-slate-950/70">
       <div className="flex items-end justify-between">
-        <div className="text-sm font-medium">{label}</div>
-        <div className="text-xs text-slate-600 dark:text-slate-300">{target ? `${pct.toFixed(0)}%` : "—"}</div>
+        <div className="text-sm font-bold text-slate-100">{label}</div>
+        <div className="text-xs font-semibold text-slate-300">{target ? `${pct.toFixed(0)}%` : "—"}</div>
       </div>
 
-      <div className="w-full h-2 rounded-full bg-slate-50 dark:bg-slate-800 mt-2 overflow-hidden">
-        <div className={`h-2 transition-all ${reached ? "bg-emerald-600" : "bg-indigo-500"}`} style={{ width: `${pct}%` }} />
+      <div className="w-full h-2 rounded-full bg-slate-800 mt-2 overflow-hidden">
+        <div className={`h-2 transition-all ${reached ? "bg-emerald-500" : "bg-indigo-500"}`} style={{ width: `${pct}%` }} />
       </div>
 
-      <div className="mt-2 text-xs text-slate-600 dark:text-slate-300 flex items-center justify-between">
-        <span>Progress: <strong>{currency(Number(progress.toFixed(2)))}</strong></span>
-        <span>Target: <strong>{currency(Number((target || 0).toFixed(2)))}</strong></span>
+      <div className="mt-2 text-xs text-slate-300 flex items-center justify-between gap-3">
+        <span>Progress: <strong className="text-slate-100">{currency(Number(progress.toFixed(2)))}</strong></span>
+        <span>Target: <strong className="text-slate-100">{currency(Number((target || 0).toFixed(2)))}</strong></span>
       </div>
 
-      {reached && <div className="mt-1 text-[11px] text-emerald-700">🎯 Goal reached for this period — nice work!</div>}
+      {reached && <div className="mt-1 text-[11px] font-semibold text-emerald-300">🎯 Goal reached for this period — nice work!</div>}
     </div>
   );
 }
