@@ -1267,35 +1267,63 @@ function PageInner() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-4 px-3 pb-24 pt-4 sm:px-4 sm:py-6">
-      {/* Header */}
-      <div className="rounded-2xl border border-slate-800/80 bg-slate-950/40 p-3 shadow-xl shadow-black/20 md:border-0 md:bg-transparent md:p-0 md:shadow-none">
+      {/* Header — Pro Mode */}
+      <div className="rounded-3xl border border-slate-800/80 bg-slate-950/70 p-3 shadow-xl shadow-black/25 backdrop-blur md:border-0 md:bg-transparent md:p-0 md:shadow-none">
       <div className="flex flex-col items-stretch justify-between gap-3 md:flex-row md:items-center">
-        {/* LEFT: logo + title + status */}
-        <div className="flex min-w-0 items-center gap-3">
-          <img
-            src="/ust-logo.png"
-            alt="Ultimate Scalper Tool"
-            className="h-7 w-auto shrink-0 select-none sm:h-9"
-          />
-          <h1 className="max-w-[14rem] text-xl font-extrabold leading-tight tracking-tight sm:max-w-none sm:text-2xl md:text-3xl">
-            Ultimate Scalper Tool – Strategy Console
-          </h1>
-
-          <span
-            className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full border ${
-              locked && lockOnHit
-                ? "bg-rose-50 text-rose-700 border-rose-200"
-                : "bg-emerald-50 text-emerald-700 border-emerald-200"
-            }`}
-            title={locked && lockOnHit ? "Trading locked for today (max loss hit)" : "Active"}
-          >
-            <span
-              className={`h-2 w-2 rounded-full ${
-                locked && lockOnHit ? "bg-rose-500" : "bg-emerald-500"
-              }`}
+        {/* LEFT: logo + responsive title + live status */}
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-center gap-3">
+            <img
+              src="/ust-logo.png"
+              alt="Ultimate Scalper Tool"
+              className="h-8 w-auto shrink-0 select-none sm:h-9"
             />
-            {locked && lockOnHit ? "Locked" : "Active"}
-          </span>
+
+            <div className="min-w-0 flex-1">
+              <div className="flex min-w-0 items-start justify-between gap-2 sm:items-center sm:justify-start">
+                <h1 className="min-w-0 font-extrabold leading-tight tracking-tight text-slate-50 md:text-slate-950 md:dark:text-slate-50">
+                  <span className="hidden sm:inline text-2xl md:text-3xl">
+                    Ultimate Scalper Tool – Strategy Console
+                  </span>
+                  <span className="block truncate text-[1.35rem] sm:hidden">
+                    UST Strategy Console
+                  </span>
+                </h1>
+
+                <span
+                  className={`shrink-0 inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs font-semibold ${
+                    locked && lockOnHit
+                      ? "border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/15 dark:text-rose-300"
+                      : "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/15 dark:text-emerald-300"
+                  }`}
+                  title={locked && lockOnHit ? "Trading locked for today (max loss hit)" : "Active"}
+                >
+                  <span
+                    className={`h-2 w-2 rounded-full ${
+                      locked && lockOnHit ? "bg-rose-500" : "bg-emerald-500"
+                    }`}
+                  />
+                  {locked && lockOnHit ? "Locked" : "Active"}
+                </span>
+              </div>
+
+              {/* Pro Mode live strip */}
+              <div className="mt-2 grid grid-cols-3 gap-2 sm:flex sm:flex-wrap sm:items-center">
+                <div className="rounded-xl border border-slate-700/70 bg-slate-900/70 px-2 py-1.5 text-center sm:min-w-[7rem] sm:text-left">
+                  <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Equity</div>
+                  <div className="truncate text-xs font-extrabold text-emerald-300 sm:text-sm">{currency(equity)}</div>
+                </div>
+                <div className="rounded-xl border border-slate-700/70 bg-slate-900/70 px-2 py-1.5 text-center sm:min-w-[7rem] sm:text-left">
+                  <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Session</div>
+                  <div className={`truncate text-xs font-extrabold sm:text-sm ${pnl > 0 ? "text-emerald-300" : pnl < 0 ? "text-rose-300" : "text-blue-300"}`}>{currency(pnl)}</div>
+                </div>
+                <div className="rounded-xl border border-slate-700/70 bg-slate-900/70 px-2 py-1.5 text-center sm:min-w-[7rem] sm:text-left">
+                  <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Discipline</div>
+                  <div className="truncate text-xs font-extrabold text-[#F6C945] sm:text-sm">{disciplineScore}/100</div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* RIGHT: theme toggle + actions */}
