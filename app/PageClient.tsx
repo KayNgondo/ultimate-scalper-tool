@@ -682,7 +682,7 @@ function PageInner() {
       const latest = data?.[0] ?? null;
       setWatchlistLatest(latest);
       setWatchlistHistory(data ?? []);
-      setWatchlistScreenshotUrls((latest as any)?.image_urls ?? []);
+      setWatchlistScreenshotUrls([]);
       // keep local selected files separate
       if (latest?.content) setWatchlistDraft(latest.content);
     } catch (e: any) {
@@ -748,13 +748,11 @@ function PageInner() {
     setWatchlistError(null);
 
     try {
-      // Upload any selected screenshots (optional)
+      // Clean Watchlist Mode: screenshots are intentionally not saved here.
+      // Chart screenshots belong in A-Setups or Trade Journal, not the daily watchlist.
       setWatchlistUploadError(null);
-      setWatchlistUploading(true);
-      const uploaded = watchlistImages.length
-        ? await Promise.all(watchlistImages.map((f) => uploadWatchlistScreenshot(f)))
-        : [];
-      const allUrls = [...(watchlistScreenshotUrls || []), ...uploaded];
+      setWatchlistUploading(false);
+      const allUrls: string[] = [];
 
       // Try saving watchlist; handle older DB schemas (missing columns) gracefully.
       const baseText = watchlistDraft.trim();
@@ -913,7 +911,7 @@ function PageInner() {
 
       // Clear local selections after successful publish
       setWatchlistImages([]);
-      setWatchlistScreenshotUrls(allUrls);
+      setWatchlistScreenshotUrls([]);
       // Keep the text so you can keep editing/updating today's watchlist.
       setWatchlistDraft(baseText);
       setWatchlistError(null);
@@ -2034,7 +2032,7 @@ function PageInner() {
                   </span>
                 </div>
 
-                <WatchlistTradePlan content={getWatchlistContent(watchlistLatest) || ""} images={watchlistScreenshotUrls || []} />
+                <WatchlistTradePlan content={getWatchlistContent(watchlistLatest) || ""} />
 
                 {watchlistHistory?.length ? (
                   <div className="space-y-2">
@@ -2082,51 +2080,11 @@ function PageInner() {
                   className="min-h-[220px] w-full rounded-md border bg-background/30 p-3 text-sm outline-none focus:ring-2 focus:ring-primary/40"
                 />
 
-                <div className="rounded-md border bg-background/20 p-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-sm font-medium">Screenshots (optional)</p>
-                    {watchlistUploading ? (
-                      <p className="text-xs text-muted-foreground">Uploading…</p>
-                    ) : null}
-                  </div>
-
+                <div className="rounded-md border border-yellow-500/20 bg-yellow-500/5 p-3">
+                  <p className="text-sm font-medium text-yellow-300">Clean Watchlist Mode</p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Add chart screenshots for your watchlist/monitor list. Only the admin can upload; everyone can view.
+                    Screenshots have been removed from Watchlist to keep the daily plan clean. Use A-Setups or Trade Journal for chart screenshots.
                   </p>
-
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <input
-                      type="file"
-                      multiple
-                      accept="image/*"
-                      onChange={(e) => {
-                        setWatchlistUploadError(null);
-                        const files = Array.from(e.target.files || []);
-                        setWatchlistImages(files);
-                      }}
-                    />
-                    {watchlistImages.length ? (
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        onClick={() => setWatchlistImages([])}
-                      >
-                        Clear selected
-                      </Button>
-                    ) : null}
-                  </div>
-
-                  {watchlistUploadError ? (
-                    <p className="mt-2 text-xs text-red-400">{watchlistUploadError}</p>
-                  ) : null}
-
-                  {watchlistImages.length ? (
-                    <ul className="mt-2 list-disc pl-5 text-xs text-muted-foreground">
-                      {watchlistImages.map((f) => (
-                        <li key={f.name}>{f.name}</li>
-                      ))}
-                    </ul>
-                  ) : null}
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
@@ -3190,55 +3148,122 @@ function SmartCoachPanel({
   );
 }
 
-function WatchlistTradePlan({ content, images }: { content: string; images: string[] }) {
-  const lines = content.split(/\n+/).map((x) => x.trim()).filter(Boolean);
-  const assetLines = lines.filter((l) => /(volatility|v\d+|gold|xau|silver|btc|nas|us30|boom|crash)/i.test(l)).slice(0, 6);
-  const plans = assetLines.length ? assetLines : lines.slice(0, 4);
+function WatchlistTradePlan({ content }: { content: string }) {
+  const cleanContent = (content || "").trim();
+  const lines = cleanContent.split(/\n+/).map((x) => x.trim()).filter(Boolean);
 
-  const getBias = (line: string) => /sell|short/i.test(line) ? "SELL Bias" : /buy|long/i.test(line) ? "BUY Bias" : "Monitor";
-  const getStatus = (line: string) => /ready|trigger|entry|break/i.test(line) ? "🟢 Ready" : /wait|forming|watch/i.test(line) ? "🟡 Forming" : "🔵 Planned";
+  const assetRegex = /(volatility\s*\d+|v\d+|gold|xauusd|xau|silver|xagusd|btc|btcusd|nas|nas100|us30|boom|crash|eurusd|gbpusd|usdjp[y]?)/i;
+  const assetLines = lines.filter((l) => assetRegex.test(l)).slice(0, 8);
+  const plans = assetLines.length ? assetLines : lines.slice(0, 5);
+
+  const getCleanTitle = (line: string) => line.replace(/^[-•*\d.)\s]+/, "").replace(/^[📌🎯🧠⚠️✅🔴🟡🟢]+\s*/, "");
+  const getBias = (text: string) => /sell|short|bearish|down/i.test(text) ? "SELL" : /buy|long|bullish|up/i.test(text) ? "BUY" : "MONITOR";
+  const getStatus = (text: string) => {
+    if (/ready|trigger|confirmed|all conditions|valid|execute/i.test(text)) return { label: "READY", icon: "🟢", tone: "text-emerald-300 border-emerald-500/30 bg-emerald-500/10" };
+    if (/forming|wait|watch|monitor|pending|setup/i.test(text)) return { label: "FORMING", icon: "🟡", tone: "text-yellow-300 border-yellow-500/30 bg-yellow-500/10" };
+    return { label: "WAIT", icon: "🔴", tone: "text-rose-300 border-rose-500/30 bg-rose-500/10" };
+  };
+  const getConfidence = (text: string) => {
+    let score = 45;
+    if (/ready|confirmed|all conditions|valid/i.test(text)) score += 30;
+    if (/entry|break|above|below|ema|liquidity|structure|ssl/i.test(text)) score += 15;
+    if (/wait|forming|monitor|pending/i.test(text)) score -= 5;
+    if (/sell|buy|short|long/i.test(text)) score += 10;
+    return Math.max(25, Math.min(95, score));
+  };
+  const getCoachNote = (text: string) => {
+    const status = getStatus(text).label;
+    if (status === "READY") return "Only execute if risk is within plan and checklist is complete.";
+    if (status === "FORMING") return "Wait for confirmation. No early entry.";
+    return "Do not force a trade. Mark levels and stay patient.";
+  };
+
+  const readyCount = plans.filter((p) => getStatus(p).label === "READY").length;
+  const formingCount = plans.filter((p) => getStatus(p).label === "FORMING").length;
+  const avgConfidence = plans.length ? Math.round(plans.reduce((a, p) => a + getConfidence(p), 0) / plans.length) : 0;
+  const primaryAction = readyCount > 0 ? "Trade only the READY setup after checklist confirmation." : formingCount > 0 ? "Wait. Setups are forming but not ready yet." : "Stand aside until the market gives clarity.";
 
   return (
     <div className="space-y-4">
       <div className="rounded-2xl border border-yellow-500/20 bg-[radial-gradient(circle_at_top_left,rgba(246,201,69,0.12),transparent_30%),#07111f] p-4">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h3 className="text-lg font-black text-white">📌 Today&apos;s Trade Plan</h3>
-            <p className="text-xs text-slate-400">Watchlist converted into clear execution cards.</p>
+            <h3 className="text-lg font-black text-white">📌 Live Watchlist Logic</h3>
+            <p className="text-xs text-slate-400">Converted into clean trade-plan cards. Screenshots are disabled here to avoid old broken image leftovers.</p>
           </div>
-          <span className="rounded-full bg-yellow-500/15 px-3 py-1 text-xs font-black text-yellow-300">UST PLAN</span>
+          <span className="rounded-full bg-yellow-500/15 px-3 py-1 text-xs font-black text-yellow-300">UST DECISION ENGINE</span>
         </div>
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {plans.map((line, idx) => (
-            <div key={`${line}-${idx}`} className="rounded-xl border border-slate-700 bg-slate-950/40 p-3">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-black text-white">{line.replace(/^[-•*\d.\s]+/, "")}</div>
-                  <div className={`mt-1 text-xs font-bold ${getBias(line) === "SELL Bias" ? "text-rose-300" : getBias(line) === "BUY Bias" ? "text-emerald-300" : "text-sky-300"}`}>{getBias(line)}</div>
+
+        <div className="mb-4 grid gap-3 md:grid-cols-4">
+          <div className="rounded-xl border border-slate-700 bg-slate-950/50 p-3">
+            <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">Markets</p>
+            <p className="mt-1 text-2xl font-black text-white">{plans.length}</p>
+          </div>
+          <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3">
+            <p className="text-[11px] uppercase tracking-[0.16em] text-emerald-300/80">Ready</p>
+            <p className="mt-1 text-2xl font-black text-emerald-300">{readyCount}</p>
+          </div>
+          <div className="rounded-xl border border-yellow-500/20 bg-yellow-500/10 p-3">
+            <p className="text-[11px] uppercase tracking-[0.16em] text-yellow-300/80">Forming</p>
+            <p className="mt-1 text-2xl font-black text-yellow-300">{formingCount}</p>
+          </div>
+          <div className="rounded-xl border border-sky-500/20 bg-sky-500/10 p-3">
+            <p className="text-[11px] uppercase tracking-[0.16em] text-sky-300/80">Confidence</p>
+            <p className="mt-1 text-2xl font-black text-sky-300">{avgConfidence}%</p>
+          </div>
+        </div>
+
+        <div className="mb-4 rounded-xl border border-sky-400/20 bg-sky-500/10 p-3 text-sm text-sky-100">
+          <span className="font-black">Coach Action:</span> {primaryAction}
+        </div>
+
+        {plans.length ? (
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {plans.map((line, idx) => {
+              const bias = getBias(line);
+              const status = getStatus(line);
+              const confidence = getConfidence(line);
+              return (
+                <div key={`${line}-${idx}`} className="rounded-xl border border-slate-700 bg-slate-950/50 p-3 shadow-lg shadow-black/20">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-black text-white">{getCleanTitle(line)}</div>
+                      <div className={`mt-1 text-xs font-bold ${bias === "SELL" ? "text-rose-300" : bias === "BUY" ? "text-emerald-300" : "text-sky-300"}`}>{bias} Bias</div>
+                    </div>
+                    <span className={`shrink-0 rounded-full border px-2 py-1 text-[11px] font-black ${status.tone}`}>{status.icon} {status.label}</span>
+                  </div>
+
+                  <div className="mt-3">
+                    <div className="mb-1 flex items-center justify-between text-[11px] text-slate-400">
+                      <span>Setup Confidence</span>
+                      <span className="font-black text-white">{confidence}%</span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-slate-800">
+                      <div className="h-full rounded-full bg-yellow-400" style={{ width: `${confidence}%` }} />
+                    </div>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-[11px] text-slate-400">
+                    <div className="rounded bg-slate-900/80 p-2">Entry<br/><span className="text-slate-200">Confirm</span></div>
+                    <div className="rounded bg-slate-900/80 p-2">SL<br/><span className="text-rose-300">Structure</span></div>
+                    <div className="rounded bg-slate-900/80 p-2">TP<br/><span className="text-emerald-300">Liquidity</span></div>
+                  </div>
+
+                  <div className="mt-3 rounded-lg border border-slate-700/80 bg-slate-900/40 p-2 text-xs text-slate-300">
+                    {getCoachNote(line)}
+                  </div>
                 </div>
-                <span className="shrink-0 rounded-full border border-slate-700 px-2 py-1 text-[11px] text-slate-200">{getStatus(line)}</span>
-              </div>
-              <div className="mt-3 grid grid-cols-3 gap-2 text-[11px] text-slate-400">
-                <div className="rounded bg-slate-900/70 p-2">Entry<br/><span className="text-slate-200">Confirm</span></div>
-                <div className="rounded bg-slate-900/70 p-2">SL<br/><span className="text-rose-300">Structure</span></div>
-                <div className="rounded bg-slate-900/70 p-2">TP<br/><span className="text-emerald-300">Liquidity</span></div>
-              </div>
-            </div>
-          ))}
-        </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="rounded-xl border border-slate-700 bg-slate-950/40 p-4 text-sm text-slate-400">No watchlist posted yet.</div>
+        )}
       </div>
 
       <div className="rounded-lg border bg-card/40 p-4">
-        {content ? <pre className="whitespace-pre-wrap break-words text-sm leading-relaxed">{content}</pre> : <p className="text-sm text-muted-foreground">No watchlist posted yet.</p>}
-        {images?.length ? (
-          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {images.map((url) => (
-              <a key={url} href={url} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-md border">
-                <img src={url} alt="Watchlist screenshot" className="h-auto w-full" loading="lazy" />
-              </a>
-            ))}
-          </div>
-        ) : null}
+        <div className="mb-2 text-xs font-black uppercase tracking-[0.18em] text-slate-500">Original Admin Plan</div>
+        {cleanContent ? <pre className="whitespace-pre-wrap break-words text-sm leading-relaxed">{cleanContent}</pre> : <p className="text-sm text-muted-foreground">No watchlist posted yet.</p>}
       </div>
     </div>
   );
