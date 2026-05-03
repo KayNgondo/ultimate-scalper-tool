@@ -1281,13 +1281,12 @@ function PageInner() {
 
             <div className="min-w-0 flex-1">
               <div className="flex min-w-0 items-start justify-between gap-2 sm:items-center sm:justify-start">
-                <h1 className="font-bold leading-tight tracking-tight text-white">
-                  <span className="hidden sm:inline text-2xl md:text-3xl">
+                <h1 className="font-extrabold leading-tight tracking-tight">
+                  <span className="hidden sm:inline text-2xl md:text-3xl bg-gradient-to-b from-yellow-200 via-yellow-400 to-amber-700 bg-clip-text text-transparent drop-shadow-[0_2px_2px_rgba(0,0,0,0.45)] [text-shadow:0_0_16px_rgba(212,175,55,0.25)]">
                     Ultimate Scalper Tool – Strategy Console
                   </span>
-                  <span className="sm:hidden text-lg">
-                    <span className="text-yellow-400">UST</span>{" "}
-                    <span className="text-white">Strategy Console</span>
+                  <span className="sm:hidden text-lg bg-gradient-to-b from-yellow-200 via-yellow-400 to-amber-700 bg-clip-text text-transparent drop-shadow-[0_2px_2px_rgba(0,0,0,0.45)] [text-shadow:0_0_14px_rgba(212,175,55,0.3)]">
+                    UST Strategy Console
                   </span>
                 </h1>
 
