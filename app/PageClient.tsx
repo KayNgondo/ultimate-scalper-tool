@@ -1267,7 +1267,7 @@ function PageInner() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-4 px-3 pb-24 pt-4 sm:px-4 sm:py-6">
-      {/* Header — Pro Mode */}
+      {/* Header */}
       <div className="rounded-3xl border border-slate-800/80 bg-slate-950/70 p-3 shadow-xl shadow-black/25 backdrop-blur md:border-0 md:bg-transparent md:p-0 md:shadow-none">
       <div className="flex flex-col items-stretch justify-between gap-3 md:flex-row md:items-center">
         {/* LEFT: logo + responsive title + live status */}
@@ -1281,15 +1281,15 @@ function PageInner() {
 
             <div className="min-w-0 flex-1">
               <div className="flex min-w-0 items-start justify-between gap-2 sm:items-center sm:justify-start">
-                <h1 className="font-bold leading-tight tracking-tight text-gray-900 dark:text-white">
-  <span className="hidden sm:inline text-2xl md:text-3xl">
-    Ultimate Scalper Tool – Strategy Console
-  </span>
-  <span className="sm:hidden text-lg">
-    <span className="text-yellow-500 dark:text-yellow-400">UST</span>{" "}
-    <span className="text-gray-900 dark:text-white">Strategy Console</span>
-  </span>
-</h1>
+                <h1 className="font-bold leading-tight tracking-tight text-white">
+                  <span className="hidden sm:inline text-2xl md:text-3xl">
+                    Ultimate Scalper Tool – Strategy Console
+                  </span>
+                  <span className="sm:hidden text-lg">
+                    <span className="text-yellow-400">UST</span>{" "}
+                    <span className="text-white">Strategy Console</span>
+                  </span>
+                </h1>
 
                 <span
                   className={`shrink-0 inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs font-semibold ${
@@ -1306,22 +1306,6 @@ function PageInner() {
                   />
                   {locked && lockOnHit ? "Locked" : "Active"}
                 </span>
-              </div>
-
-              {/* Pro Mode live strip */}
-              <div className="mt-2 grid grid-cols-3 gap-2 sm:flex sm:flex-wrap sm:items-center">
-                <div className="rounded-xl border border-slate-700/70 bg-slate-900/70 px-2 py-1.5 text-center sm:min-w-[7rem] sm:text-left">
-                  <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Equity</div>
-                  <div className="truncate text-xs font-extrabold text-emerald-300 sm:text-sm">{currency(equity)}</div>
-                </div>
-                <div className="rounded-xl border border-slate-700/70 bg-slate-900/70 px-2 py-1.5 text-center sm:min-w-[7rem] sm:text-left">
-                  <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Session</div>
-                  <div className={`truncate text-xs font-extrabold sm:text-sm ${pnl > 0 ? "text-emerald-300" : pnl < 0 ? "text-rose-300" : "text-blue-300"}`}>{currency(pnl)}</div>
-                </div>
-                <div className="rounded-xl border border-slate-700/70 bg-slate-900/70 px-2 py-1.5 text-center sm:min-w-[7rem] sm:text-left">
-                  <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Discipline</div>
-                  <div className="truncate text-xs font-extrabold text-[#F6C945] sm:text-sm">{disciplineScore}/100</div>
-                </div>
               </div>
             </div>
           </div>
@@ -1370,7 +1354,7 @@ function PageInner() {
               }
             }}
           >
-            <span className="hidden sm:inline">End Session / Start New</span><span className="sm:hidden">Update Leaderboard</span>
+            <span className="hidden sm:inline">Update Leaderboard</span><span className="sm:hidden">Update Leaderboard</span>
           </Button>
 
           {user && (
