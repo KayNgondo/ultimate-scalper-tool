@@ -1281,14 +1281,15 @@ function PageInner() {
 
             <div className="min-w-0 flex-1">
               <div className="flex min-w-0 items-start justify-between gap-2 sm:items-center sm:justify-start">
-                <h1 className="min-w-0 font-extrabold leading-tight tracking-tight text-slate-50 md:text-slate-950 md:dark:text-slate-50">
-                  <span className="hidden sm:inline text-2xl md:text-3xl">
-                    Ultimate Scalper Tool – Strategy Console
-                  </span>
-                  <span className="block truncate text-[1.35rem] sm:hidden">
-                    UST Strategy Console
-                  </span>
-                </h1>
+                <h1 className="font-bold leading-tight tracking-tight text-gray-900 dark:text-white">
+  <span className="hidden sm:inline text-2xl md:text-3xl">
+    Ultimate Scalper Tool – Strategy Console
+  </span>
+  <span className="sm:hidden text-lg">
+    <span className="text-yellow-500 dark:text-yellow-400">UST</span>{" "}
+    <span className="text-gray-900 dark:text-white">Strategy Console</span>
+  </span>
+</h1>
 
                 <span
                   className={`shrink-0 inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs font-semibold ${
@@ -1369,7 +1370,7 @@ function PageInner() {
               }
             }}
           >
-            <span className="hidden sm:inline">End Session / Start New</span><span className="sm:hidden">End / New</span>
+            <span className="hidden sm:inline">End Session / Start New</span><span className="sm:hidden">Update Leaderboard</span>
           </Button>
 
           {user && (
