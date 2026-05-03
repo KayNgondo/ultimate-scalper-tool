@@ -1186,12 +1186,12 @@ function PageInner() {
   const [badge, setBadge] = useState<{ name: string; imagePath: string } | null>(null);
   useEffect(() => {
     const s = badgeTradeCount;
-    if (s >= 30) setBadge({ name: "Legendary • 30 Trades Smashed Untouchable", imagePath: "/badges/legendary.png" });
-    else if (s >= 25) setBadge({ name: "Elite • 25 Trades Mastered", imagePath: "/badges/elite.png" });
-    else if (s >= 20) setBadge({ name: "Diamond • 20 Trades Mastered", imagePath: "/badges/diamond.png" });
-    else if (s >= 15) setBadge({ name: "Platinum • 15 Trades Dominated", imagePath: "/badges/platinum.png" });
-    else if (s >= 10) setBadge({ name: "Gold • 10 Trades Conquered", imagePath: "/badges/gold.png" });
-    else if (s >= 5) setBadge({ name: "Silver • 5 Trades Survived", imagePath: "/badges/silver.png" });
+    if (s >= 30) setBadge({ name: "Legendary • 30 Sessions Untouchable", imagePath: "/badges/legendary.png" });
+    else if (s >= 25) setBadge({ name: "Elite • 25 Sessions Mastered", imagePath: "/badges/elite.png" });
+    else if (s >= 20) setBadge({ name: "Diamond • 20 Sessions Mastered", imagePath: "/badges/diamond.png" });
+    else if (s >= 15) setBadge({ name: "Platinum • 15 Sessions Dominated", imagePath: "/badges/platinum.png" });
+    else if (s >= 10) setBadge({ name: "Gold • 10 Sessions Conquered", imagePath: "/badges/gold.png" });
+    else if (s >= 5) setBadge({ name: "Silver • 5 Sessions Survived", imagePath: "/badges/silver.png" });
     else setBadge(null);
   }, [badgeTradeCount]);
 
@@ -1491,6 +1491,26 @@ function PageInner() {
               />
               <DashCard title="Win rate" value={`${fmt(winRate)}%`} hint={`${wins}W / ${losses}L / ${bes}BE`} tone={winRate >= 50 ? "purple" : closed > 0 ? "warning" : "purple"} featured icon="pie" />
               <DashCard title="Discipline" value={`${disciplineScore}/100`} hint={currentRuleBadges.length ? `${currentRuleBadges.length} rules active` : "Checklist pending"} tone={disciplineScore >= 80 ? "positive" : disciplineScore >= 60 ? "gold" : "negative"} featured icon="shield" progress={disciplineScore} />
+            </div>
+
+            <div className="mt-4">
+              <SmartCoachPanel
+                locked={locked}
+                lockOnHit={lockOnHit}
+                closed={closed}
+                wins={wins}
+                losses={losses}
+                bes={bes}
+                winRate={winRate}
+                disciplineScore={disciplineScore}
+                pnl={pnl}
+                maxLoss={maxLoss}
+                riskPct={riskPct}
+                recommendedRiskPct={recommendedRiskPct}
+                ruleBadges={currentRuleBadges}
+                sessionTarget={sessionTarget}
+                setupsToday={setupsToday}
+              />
             </div>
           </div>
 
@@ -2014,39 +2034,7 @@ function PageInner() {
                   </span>
                 </div>
 
-                <div className="rounded-lg border bg-card/40 p-4">
-                  {getWatchlistContent(watchlistLatest) ? (
-                    <pre className="whitespace-pre-wrap break-words text-sm leading-relaxed">
-                      {watchlistLatest.content}
-                    </pre>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      No watchlist posted yet.
-                    </p>
-                  )}
-
-                  {watchlistScreenshotUrls?.length ? (
-                    <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      {watchlistScreenshotUrls.map((url) => (
-                        <a
-                          key={url}
-                          href={url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="block overflow-hidden rounded-md border"
-                        >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={url}
-                            alt="Watchlist screenshot"
-                            className="h-auto w-full"
-                            loading="lazy"
-                          />
-                        </a>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
+                <WatchlistTradePlan content={getWatchlistContent(watchlistLatest) || ""} images={watchlistScreenshotUrls || []} />
 
                 {watchlistHistory?.length ? (
                   <div className="space-y-2">
@@ -3100,6 +3088,162 @@ function AnalyticsPanel({ trades }: { trades: TradeRow[] }) {
   );
 }
 
+
+
+/* =========================================================================
+   Smart Coach + SaaS polish helpers
+============================================================================ */
+function SmartCoachPanel({
+  locked,
+  lockOnHit,
+  closed,
+  wins,
+  losses,
+  bes,
+  winRate,
+  disciplineScore,
+  pnl,
+  maxLoss,
+  riskPct,
+  recommendedRiskPct,
+  ruleBadges,
+  sessionTarget,
+  setupsToday,
+}: {
+  locked: boolean;
+  lockOnHit: boolean;
+  closed: number;
+  wins: number;
+  losses: number;
+  bes: number;
+  winRate: number;
+  disciplineScore: number;
+  pnl: number;
+  maxLoss: number;
+  riskPct: number;
+  recommendedRiskPct: number;
+  ruleBadges: string[];
+  sessionTarget: string;
+  setupsToday: string;
+}) {
+  const isLocked = locked && lockOnHit;
+  const riskControlled = !recommendedRiskPct || riskPct <= recommendedRiskPct * 1.1;
+  const remainingLoss = maxLoss > 0 ? Math.max(0, Math.abs(maxLoss) + pnl) : null;
+
+  const primary = isLocked
+    ? "🚫 Session locked — protect the account and review mistakes."
+    : closed >= 5
+      ? "⚠️ Overtrading zone — only take A+ setups from here."
+      : disciplineScore >= 80
+        ? "✅ Discipline is strong — keep following the plan."
+        : "⚠️ Discipline needs attention — slow down and confirm the setup.";
+
+  const suggestions = [
+    sessionTarget.trim() ? "✅ Session target defined" : "🟡 Set a clear session target before the next trade",
+    setupsToday.trim() ? "✅ Trading plan confirmed" : "🟡 Choose the exact A-Setup you are allowed to trade",
+    riskControlled ? "✅ Risk is within the recommended zone" : "🔴 Risk is above the recommended level",
+    losses >= 2 ? "🔴 Two losses recorded — reduce size or stop for review" : "✅ Loss control still healthy",
+  ];
+
+  return (
+    <Card className="overflow-hidden border-yellow-500/25 bg-[radial-gradient(circle_at_top_right,rgba(246,201,69,0.16),transparent_30%),linear-gradient(135deg,#07111f,#0b1220)] shadow-2xl shadow-black/25">
+      <CardHeader className="flex flex-row items-start justify-between gap-3 pb-3">
+        <div>
+          <CardTitle className="flex items-center gap-2 text-white">🧠 Smart Coach</CardTitle>
+          <CardDescription className="text-slate-400">Real-time discipline and execution guidance</CardDescription>
+        </div>
+        <span className={`rounded-full border px-3 py-1 text-xs font-black ${isLocked ? "border-rose-400/40 bg-rose-500/10 text-rose-300" : "border-emerald-400/40 bg-emerald-500/10 text-emerald-300"}`}>
+          {isLocked ? "LOCKED" : "ACTIVE"}
+        </span>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="rounded-xl border border-yellow-500/25 bg-yellow-500/10 p-3 text-sm font-semibold text-yellow-200">
+          {primary}
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          <div className="rounded-lg border border-slate-700 bg-slate-950/40 p-3 text-slate-300">Trades<br/><span className="text-lg font-black text-yellow-300">{closed}</span></div>
+          <div className="rounded-lg border border-slate-700 bg-slate-950/40 p-3 text-slate-300">Win Rate<br/><span className="text-lg font-black text-emerald-300">{fmt(winRate)}%</span></div>
+          <div className="rounded-lg border border-slate-700 bg-slate-950/40 p-3 text-slate-300">W/L/BE<br/><span className="text-lg font-black text-sky-300">{wins}/{losses}/{bes}</span></div>
+          <div className="rounded-lg border border-slate-700 bg-slate-950/40 p-3 text-slate-300">Discipline<br/><span className="text-lg font-black text-yellow-300">{disciplineScore}/100</span></div>
+        </div>
+
+        <div className="space-y-2">
+          <div className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Coach Signals</div>
+          {suggestions.map((x) => (
+            <div key={x} className="rounded-lg border border-slate-700/80 bg-slate-950/30 p-2 text-xs text-slate-200">{x}</div>
+          ))}
+        </div>
+
+        <div className="rounded-xl border border-sky-400/20 bg-sky-500/10 p-3 text-xs text-sky-200">
+          <span className="font-black">Next action:</span> {isLocked ? "End session and write a review." : closed === 0 ? "Wait for the first clean A-Setup." : "Continue only if the setup score is 80%+."}
+          {remainingLoss !== null ? <div className="mt-1 text-slate-300">Loss room before lock: {currency(remainingLoss)}</div> : null}
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {ruleBadges.slice(0, 4).map((b) => (
+            <span key={b} className="rounded-full border border-yellow-500/20 bg-yellow-500/10 px-2 py-1 text-[11px] font-bold text-yellow-200">{b}</span>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function WatchlistTradePlan({ content, images }: { content: string; images: string[] }) {
+  const lines = content.split(/\n+/).map((x) => x.trim()).filter(Boolean);
+  const assetLines = lines.filter((l) => /(volatility|v\d+|gold|xau|silver|btc|nas|us30|boom|crash)/i.test(l)).slice(0, 6);
+  const plans = assetLines.length ? assetLines : lines.slice(0, 4);
+
+  const getBias = (line: string) => /sell|short/i.test(line) ? "SELL Bias" : /buy|long/i.test(line) ? "BUY Bias" : "Monitor";
+  const getStatus = (line: string) => /ready|trigger|entry|break/i.test(line) ? "🟢 Ready" : /wait|forming|watch/i.test(line) ? "🟡 Forming" : "🔵 Planned";
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-yellow-500/20 bg-[radial-gradient(circle_at_top_left,rgba(246,201,69,0.12),transparent_30%),#07111f] p-4">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h3 className="text-lg font-black text-white">📌 Today&apos;s Trade Plan</h3>
+            <p className="text-xs text-slate-400">Watchlist converted into clear execution cards.</p>
+          </div>
+          <span className="rounded-full bg-yellow-500/15 px-3 py-1 text-xs font-black text-yellow-300">UST PLAN</span>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {plans.map((line, idx) => (
+            <div key={`${line}-${idx}`} className="rounded-xl border border-slate-700 bg-slate-950/40 p-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-black text-white">{line.replace(/^[-•*\d.\s]+/, "")}</div>
+                  <div className={`mt-1 text-xs font-bold ${getBias(line) === "SELL Bias" ? "text-rose-300" : getBias(line) === "BUY Bias" ? "text-emerald-300" : "text-sky-300"}`}>{getBias(line)}</div>
+                </div>
+                <span className="shrink-0 rounded-full border border-slate-700 px-2 py-1 text-[11px] text-slate-200">{getStatus(line)}</span>
+              </div>
+              <div className="mt-3 grid grid-cols-3 gap-2 text-[11px] text-slate-400">
+                <div className="rounded bg-slate-900/70 p-2">Entry<br/><span className="text-slate-200">Confirm</span></div>
+                <div className="rounded bg-slate-900/70 p-2">SL<br/><span className="text-rose-300">Structure</span></div>
+                <div className="rounded bg-slate-900/70 p-2">TP<br/><span className="text-emerald-300">Liquidity</span></div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="rounded-lg border bg-card/40 p-4">
+        {content ? <pre className="whitespace-pre-wrap break-words text-sm leading-relaxed">{content}</pre> : <p className="text-sm text-muted-foreground">No watchlist posted yet.</p>}
+        {images?.length ? (
+          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {images.map((url) => (
+              <a key={url} href={url} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-md border">
+                <img src={url} alt="Watchlist screenshot" className="h-auto w-full" loading="lazy" />
+              </a>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 /* =========================================================================
    A-Setups Gallery
 ============================================================================ */
@@ -3119,51 +3263,122 @@ function ASetupsGallery() {
     setFile(null);
   }
 
+  function conditionsFromNotes(text?: string) {
+    return String(text || "")
+      .split(/\n|,|;/)
+      .map((x) => x.trim())
+      .filter(Boolean)
+      .slice(0, 8);
+  }
+
+  function setupScore(text?: string) {
+    const conditions = conditionsFromNotes(text);
+    if (!conditions.length) return 55;
+    return Math.min(95, 55 + conditions.length * 8);
+  }
+
+  function setupStatus(score: number) {
+    if (score >= 80) return { label: "🟢 READY", cls: "border-emerald-400/40 bg-emerald-500/10 text-emerald-300" };
+    if (score >= 65) return { label: "🟡 FORMING", cls: "border-yellow-400/40 bg-yellow-500/10 text-yellow-300" };
+    return { label: "🔵 STUDY", cls: "border-sky-400/40 bg-sky-500/10 text-sky-300" };
+  }
+
   return (
-    <div className="grid gap-4">
-      <Card>
-        <CardContent className="p-4 grid md:grid-cols-12 gap-3">
+    <div className="grid gap-5">
+      <Card className="overflow-hidden border-yellow-500/20 bg-[radial-gradient(circle_at_top_left,rgba(246,201,69,0.12),transparent_28%),#07111f]">
+        <CardHeader>
+          <CardTitle className="text-white">🎯 A-Setup Execution Library</CardTitle>
+          <CardDescription className="text-slate-400">
+            Turn screenshots into repeatable execution cards with conditions, strength score and action status.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 md:grid-cols-12">
           <div className="md:col-span-3">
-            <Label>Title</Label>
+            <Label>Setup Name</Label>
             <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ultimate Trend Buy A-Setup" />
           </div>
           <div className="md:col-span-5">
-            <Label>Notes / Checklist</Label>
-            <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Price above EMA315, SSL above EMA315, …" />
+            <Label>Execution Checklist</Label>
+            <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Price above EMA315, SSL above EMA315, Pullback complete" />
           </div>
           <div className="md:col-span-2">
-            <Label>Image</Label>
-            <input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} />
+            <Label>Chart Image</Label>
+            <input className="mt-2 text-sm" type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} />
           </div>
           <div className="md:col-span-2 self-end">
-            <Button disabled={!file} onClick={addItem}>Upload</Button>
+            <Button className="w-full bg-yellow-500 text-black hover:bg-yellow-400" disabled={!file} onClick={addItem}>Add Setup</Button>
           </div>
         </CardContent>
       </Card>
 
+      <div className="grid gap-3 md:grid-cols-3">
+        <Card className="border-emerald-500/20 bg-emerald-500/5"><CardContent className="p-4"><div className="text-xs text-slate-400">Execution Rule</div><div className="text-lg font-black text-emerald-300">80%+ only</div></CardContent></Card>
+        <Card className="border-yellow-500/20 bg-yellow-500/5"><CardContent className="p-4"><div className="text-xs text-slate-400">Library Size</div><div className="text-lg font-black text-yellow-300">{items.length} setups</div></CardContent></Card>
+        <Card className="border-sky-500/20 bg-sky-500/5"><CardContent className="p-4"><div className="text-xs text-slate-400">Purpose</div><div className="text-lg font-black text-sky-300">Trade less, better</div></CardContent></Card>
+      </div>
+
       {!items.length && (
         <Card>
           <CardContent className="p-6 text-sm text-slate-600 dark:text-slate-300">
-            Upload screenshots for your A-Setups once. Review them at the start of every session.
+            Upload screenshots for your A-Setups once. UST will display them as execution cards so traders know exactly what is allowed.
           </CardContent>
         </Card>
       )}
 
-      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {items.map((it) => (
-          <Card key={it.id}>
-            <CardContent className="p-3 space-y-2">
-              <div className="font-semibold">{it.title}</div>
-              <img src={it.dataUrl} alt={it.title} className="w-full rounded-md border object-contain" />
-              {it.notes && <div className="text-xs text-slate-600 dark:text-slate-300">{it.notes}</div>}
-              <div className="flex justify-end">
-                <Button variant="destructive" onClick={() => setItems(items.filter((x) => x.id !== it.id))}>
-                  Remove
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+      <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+        {items.map((it) => {
+          const conditions = conditionsFromNotes(it.notes);
+          const score = setupScore(it.notes);
+          const status = setupStatus(score);
+          return (
+            <Card key={it.id} className="overflow-hidden border-slate-800 bg-[#0B1220] shadow-xl shadow-black/20">
+              <CardContent className="p-0">
+                <div className="p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="truncate text-lg font-black text-white">{it.title}</div>
+                      <div className="text-xs text-slate-400">A-Setup execution card</div>
+                    </div>
+                    <span className={`shrink-0 rounded-full border px-2 py-1 text-[11px] font-black ${status.cls}`}>{status.label}</span>
+                  </div>
+
+                  <div>
+                    <div className="mb-1 flex items-center justify-between text-xs">
+                      <span className="font-bold text-slate-300">Setup Strength</span>
+                      <span className="font-black text-yellow-300">{score}%</span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-slate-800">
+                      <div className="h-full rounded-full bg-yellow-400" style={{ width: `${score}%` }} />
+                    </div>
+                  </div>
+                </div>
+
+                <img src={it.dataUrl} alt={it.title} className="w-full border-y border-slate-800 object-contain" />
+
+                <div className="p-4 space-y-3">
+                  <div className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">Checklist</div>
+                  {conditions.length ? (
+                    <ul className="space-y-1 text-xs text-slate-200">
+                      {conditions.map((c) => <li key={c}>✅ {c}</li>)}
+                    </ul>
+                  ) : (
+                    <p className="text-xs text-slate-400">Add conditions so this becomes a true execution rule.</p>
+                  )}
+
+                  <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-2 text-xs text-emerald-200">
+                    Execute only when live market matches this card and your Smart Coach remains active.
+                  </div>
+
+                  <div className="flex justify-end">
+                    <Button variant="destructive" onClick={() => setItems(items.filter((x) => x.id !== it.id))}>
+                      Remove
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
     </div>
   );
