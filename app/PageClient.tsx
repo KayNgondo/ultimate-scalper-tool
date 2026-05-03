@@ -2965,86 +2965,240 @@ function JournalStat({ label, value, hint, tone = "neutral" }: { label: string; 
    Analytics
 ============================================================================ */
 function AnalyticsPanel({ trades }: { trades: TradeRow[] }) {
-  const byStrategy = useMemo(() => {
-    const map: Record<string, number> = {};
-    trades.forEach((t) => {
-      const key = t.notes === "Ultimate M1 Range setup" ? "Ultimate M1 Range setup" : "Ultimate M1 Trend setup";
-      map[key] = (map[key] || 0) + (t.pnl || 0);
+  const analytics = useMemo(() => {
+    const tradeOnly = trades
+      .filter((t) => (t.kind ?? "trade") !== "withdrawal")
+      .slice()
+      .sort((a, b) => (a.ts || 0) - (b.ts || 0));
+
+    const closed = tradeOnly.length;
+    const wins = tradeOnly.filter((t) => (t.pnl || 0) > 0);
+    const losses = tradeOnly.filter((t) => (t.pnl || 0) < 0);
+    const be = tradeOnly.filter((t) => (t.pnl || 0) === 0);
+    const pnl = tradeOnly.reduce((sum, t) => sum + (t.pnl || 0), 0);
+    const grossWin = wins.reduce((sum, t) => sum + (t.pnl || 0), 0);
+    const grossLossAbs = Math.abs(losses.reduce((sum, t) => sum + (t.pnl || 0), 0));
+    const winRate = closed ? (wins.length / closed) * 100 : 0;
+    const avgWin = wins.length ? grossWin / wins.length : 0;
+    const avgLoss = losses.length ? grossLossAbs / losses.length : 0;
+    const profitFactor = grossLossAbs > 0 ? grossWin / grossLossAbs : grossWin > 0 ? grossWin : 0;
+    const expectancy = closed ? pnl / closed : 0;
+    const bestTrade = tradeOnly.length ? Math.max(...tradeOnly.map((t) => t.pnl || 0)) : 0;
+    const worstTrade = tradeOnly.length ? Math.min(...tradeOnly.map((t) => t.pnl || 0)) : 0;
+
+    const byMarketMap: Record<string, { name: string; pnl: number; trades: number; wins: number; losses: number }> = {};
+    const byStrategyMap: Record<string, { name: string; pnl: number; trades: number; wins: number; losses: number }> = {};
+
+    tradeOnly.forEach((t) => {
+      const market = t.symbol || "Unknown";
+      const strategy = t.notes?.toLowerCase().includes("range") ? "Ultimate M1 Range setup" : "Ultimate M1 Trend setup";
+      if (!byMarketMap[market]) byMarketMap[market] = { name: market, pnl: 0, trades: 0, wins: 0, losses: 0 };
+      if (!byStrategyMap[strategy]) byStrategyMap[strategy] = { name: strategy, pnl: 0, trades: 0, wins: 0, losses: 0 };
+      [byMarketMap[market], byStrategyMap[strategy]].forEach((bucket) => {
+        bucket.pnl += t.pnl || 0;
+        bucket.trades += 1;
+        if ((t.pnl || 0) > 0) bucket.wins += 1;
+        if ((t.pnl || 0) < 0) bucket.losses += 1;
+      });
     });
-    return Object.entries(map).map(([name, pnl]) => ({ name, pnl: Number(pnl.toFixed(2)) }));
+
+    const byMarket = Object.values(byMarketMap)
+      .map((x) => ({ ...x, pnl: Number(x.pnl.toFixed(2)), winRate: x.trades ? (x.wins / x.trades) * 100 : 0 }))
+      .sort((a, b) => b.pnl - a.pnl);
+    const byStrategy = Object.values(byStrategyMap)
+      .map((x) => ({ ...x, pnl: Number(x.pnl.toFixed(2)), winRate: x.trades ? (x.wins / x.trades) * 100 : 0 }))
+      .sort((a, b) => b.pnl - a.pnl);
+
+    let running = 0;
+    const equityCurve = tradeOnly.map((t, i) => {
+      running += t.pnl || 0;
+      return {
+        trade: i + 1,
+        pnl: Number(running.toFixed(2)),
+        result: Number((t.pnl || 0).toFixed(2)),
+        market: t.symbol || "Unknown",
+      };
+    });
+
+    const outcomeData = [
+      { name: "Wins", count: wins.length },
+      { name: "Losses", count: losses.length },
+      { name: "BE", count: be.length },
+    ];
+
+    return {
+      tradeOnly,
+      closed,
+      wins: wins.length,
+      losses: losses.length,
+      be: be.length,
+      pnl,
+      winRate,
+      avgWin,
+      avgLoss,
+      profitFactor,
+      expectancy,
+      bestTrade,
+      worstTrade,
+      byMarket,
+      byStrategy,
+      equityCurve,
+      outcomeData,
+      bestMarket: byMarket[0],
+      bestStrategy: byStrategy[0],
+    };
   }, [trades]);
 
-  const byMarket = useMemo(() => {
-    const map: Record<string, number> = {};
-    trades.forEach((t) => {
-      const key = t.symbol || "Unknown";
-      map[key] = (map[key] || 0) + (t.pnl || 0);
-    });
-    return Object.entries(map).map(([name, pnl]) => ({ name, pnl: Number(pnl.toFixed(2)) }));
-  }, [trades]);
+  const coachTone = analytics.pnl >= 0 ? "text-emerald-300 border-emerald-400/25 bg-emerald-500/10" : "text-rose-300 border-rose-400/25 bg-rose-500/10";
+  const coachMessage = analytics.closed === 0
+    ? "No closed trades yet. Once trades are logged, this page will identify your best market, best setup and behaviour pattern."
+    : analytics.profitFactor >= 1.5
+      ? "Performance is healthy. Keep focusing on the highest-confidence A-setups and avoid increasing lot size too early."
+      : analytics.winRate >= 50 && analytics.pnl < 0
+        ? "Win rate is acceptable, but losses are too large. Tighten stop discipline and reduce average loss."
+        : analytics.winRate < 45
+          ? "Accuracy is weak. Reduce trades and only execute setups that match the checklist."
+          : "Performance is stable but needs sharper filtering. Prioritise the best market and setup below.";
 
   return (
-    <div className="grid lg:grid-cols-2 gap-4">
-      <Card>
-        <CardContent className="p-5">
-          <h4 className="text-lg font-semibold mb-2">PnL by Strategy (All Time)</h4>
-          <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={byStrategy}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis />
-                <RTooltip />
-                <Legend />
-                <Bar dataKey="pnl" fill="#16a34a" />
-              </BarChart>
-            </ResponsiveContainer>
+    <div className="space-y-5">
+      <Card className="overflow-hidden border-slate-800/80 bg-gradient-to-br from-[#0b1220] via-[#0d1627] to-[#121827] text-slate-100 shadow-xl shadow-black/20">
+        <CardContent className="p-5 md:p-6">
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.35em] text-[#F6C945]">Performance Command Centre</p>
+              <h3 className="mt-1 text-2xl font-black text-white md:text-3xl">Analytics Overview</h3>
+              <p className="mt-1 text-sm text-slate-400">Know what is working, what is costing you, and where to focus next.</p>
+            </div>
+            <div className={`rounded-2xl border px-4 py-3 text-sm font-bold ${coachTone}`}>🧠 Coach: {analytics.pnl >= 0 ? "Controlled" : "Review Required"}</div>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <AnalyticsStat title="Net PnL" value={`${analytics.pnl >= 0 ? "+" : ""}${currency(Number(analytics.pnl.toFixed(2)))}`} hint={`${analytics.closed} closed trades`} tone={analytics.pnl >= 0 ? "positive" : "negative"} />
+            <AnalyticsStat title="Win Rate" value={`${fmt(analytics.winRate)}%`} hint={`${analytics.wins}W / ${analytics.losses}L / ${analytics.be}BE`} tone={analytics.winRate >= 55 ? "positive" : analytics.winRate >= 45 ? "gold" : "negative"} />
+            <AnalyticsStat title="Profit Factor" value={analytics.profitFactor ? fmt(analytics.profitFactor) : "0.00"} hint="Gross wins ÷ gross losses" tone={analytics.profitFactor >= 1.5 ? "positive" : analytics.profitFactor >= 1 ? "gold" : "negative"} />
+            <AnalyticsStat title="Expectancy" value={`${analytics.expectancy >= 0 ? "+" : ""}${currency(Number(analytics.expectancy.toFixed(2)))}`} hint="Average value per trade" tone={analytics.expectancy >= 0 ? "positive" : "negative"} />
           </div>
         </CardContent>
       </Card>
 
-      <Card>
-        <CardContent className="p-5">
-          <h4 className="text-lg font-semibold mb-2">PnL by Market (All Time)</h4>
-          <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={byMarket}
-                margin={{ top: 8, right: 12, bottom: 32, left: 0 }}
-                barCategoryGap={20}
-                barGap={2}
-              >
-                <CartesianGrid strokeDasharray="3 3" />
-                {/* Show ALL market names; angle a bit so they fit */}
-                <XAxis
-                  dataKey="name"
-                  interval={0}
-                  height={56}
-                  angle={-15}
-                  textAnchor="end"
-                  tickLine={false}
-                  axisLine={{ stroke: "#9aa7bd33" }}
-                  tick={{ fontSize: 12, fill: "currentColor" }}
-                />
-                <YAxis
-                  tickLine={false}
-                  axisLine={{ stroke: "#9aa7bd33" }}
-                  tick={{ fontSize: 12, fill: "currentColor" }}
-                />
-                <RTooltip
-                  formatter={(value: number) => [value, "pnl"]}
-                  labelFormatter={(label: string) => `Market: ${label}`}
-                />
-                <Legend />
-                <Bar dataKey="pnl" fill="#2563eb" radius={[4, 4, 0, 0]} maxBarSize={48} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="grid gap-4 xl:grid-cols-3">
+        <Card className="border-slate-800/80 bg-[#0b1220] text-slate-100 xl:col-span-2">
+          <CardContent className="p-5">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h4 className="text-lg font-black text-white">Equity Curve</h4>
+                <p className="text-xs text-slate-400">Cumulative PnL progression across closed trades.</p>
+              </div>
+              <span className="rounded-full border border-blue-400/20 bg-blue-500/10 px-3 py-1 text-xs font-bold text-blue-300">Live Journal Data</span>
+            </div>
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={analytics.equityCurve} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.55} />
+                  <XAxis dataKey="trade" tick={{ fill: "#94a3b8", fontSize: 12 }} tickLine={false} axisLine={{ stroke: "#334155" }} />
+                  <YAxis tick={{ fill: "#94a3b8", fontSize: 12 }} tickLine={false} axisLine={{ stroke: "#334155" }} />
+                  <RTooltip contentStyle={{ background: "#020617", border: "1px solid #334155", borderRadius: 12, color: "#fff" }} formatter={(value: number) => [currency(Number(value)), "Cumulative PnL"]} />
+                  <Line type="monotone" dataKey="pnl" stroke="#38bdf8" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 6 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-800/80 bg-gradient-to-br from-[#0b1220] to-[#111827] text-slate-100">
+          <CardContent className="p-5">
+            <h4 className="text-lg font-black text-white">Coach Diagnosis</h4>
+            <p className="mt-1 text-xs text-slate-400">Actionable readout from the journal.</p>
+            <div className="mt-4 rounded-2xl border border-[#F6C945]/20 bg-[#F6C945]/10 p-4 text-sm text-slate-200">{coachMessage}</div>
+            <div className="mt-4 space-y-3">
+              <InsightRow label="Best Market" value={analytics.bestMarket ? `${analytics.bestMarket.name} • ${currency(analytics.bestMarket.pnl)}` : "Waiting for data"} />
+              <InsightRow label="Best Setup" value={analytics.bestStrategy ? `${analytics.bestStrategy.name} • ${fmt(analytics.bestStrategy.winRate)}% WR` : "Waiting for data"} />
+              <InsightRow label="Best Trade" value={`${analytics.bestTrade >= 0 ? "+" : ""}${currency(Number(analytics.bestTrade.toFixed(2)))}`} />
+              <InsightRow label="Worst Trade" value={`${analytics.worstTrade >= 0 ? "+" : ""}${currency(Number(analytics.worstTrade.toFixed(2)))}`} />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <Card className="border-slate-800/80 bg-[#0b1220] text-slate-100">
+          <CardContent className="p-5">
+            <h4 className="text-lg font-black text-white">PnL by Market</h4>
+            <p className="text-xs text-slate-400">Shows which markets deserve more focus.</p>
+            <div className="mt-4 h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={analytics.byMarket} margin={{ top: 8, right: 12, bottom: 40, left: 0 }} barCategoryGap={18}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.55} />
+                  <XAxis dataKey="name" interval={0} height={58} angle={-18} textAnchor="end" tickLine={false} axisLine={{ stroke: "#334155" }} tick={{ fontSize: 12, fill: "#cbd5e1" }} />
+                  <YAxis tickLine={false} axisLine={{ stroke: "#334155" }} tick={{ fontSize: 12, fill: "#cbd5e1" }} />
+                  <RTooltip contentStyle={{ background: "#020617", border: "1px solid #334155", borderRadius: 12, color: "#fff" }} formatter={(value: number) => [currency(Number(value)), "PnL"]} />
+                  <Bar dataKey="pnl" fill="#3b82f6" radius={[8, 8, 0, 0]} maxBarSize={58} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-800/80 bg-[#0b1220] text-slate-100">
+          <CardContent className="p-5">
+            <h4 className="text-lg font-black text-white">Outcome Distribution</h4>
+            <p className="text-xs text-slate-400">Quick view of wins, losses and break-even trades.</p>
+            <div className="mt-4 h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={analytics.outcomeData} margin={{ top: 8, right: 12, bottom: 16, left: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.55} />
+                  <XAxis dataKey="name" tick={{ fill: "#cbd5e1", fontSize: 12 }} tickLine={false} axisLine={{ stroke: "#334155" }} />
+                  <YAxis allowDecimals={false} tick={{ fill: "#cbd5e1", fontSize: 12 }} tickLine={false} axisLine={{ stroke: "#334155" }} />
+                  <RTooltip contentStyle={{ background: "#020617", border: "1px solid #334155", borderRadius: 12, color: "#fff" }} />
+                  <Bar dataKey="count" fill="#F6C945" radius={[8, 8, 0, 0]} maxBarSize={64} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <PerformanceTable title="Strategy Performance" rows={analytics.byStrategy} empty="No setup data yet." />
+        <PerformanceTable title="Market Performance" rows={analytics.byMarket} empty="No market data yet." />
+      </div>
     </div>
   );
 }
+
+function AnalyticsStat({ title, value, hint, tone }: { title: string; value: string; hint: string; tone: "positive" | "negative" | "gold" }) {
+  const cls = tone === "positive" ? "border-emerald-400/25 bg-emerald-500/10 text-emerald-300" : tone === "negative" ? "border-rose-400/25 bg-rose-500/10 text-rose-300" : "border-[#F6C945]/25 bg-[#F6C945]/10 text-[#F6C945]";
+  return <div className={`rounded-2xl border p-4 ${cls}`}><p className="text-xs font-bold uppercase tracking-widest text-slate-400">{title}</p><p className="mt-2 text-3xl font-black">{value}</p><p className="mt-1 text-xs text-slate-400">{hint}</p></div>;
+}
+
+function InsightRow({ label, value }: { label: string; value: string }) {
+  return <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-2"><span className="text-xs font-bold uppercase tracking-widest text-slate-500">{label}</span><span className="text-right text-sm font-black text-white">{value}</span></div>;
+}
+
+function PerformanceTable({ title, rows, empty }: { title: string; rows: Array<{ name: string; pnl: number; trades: number; wins: number; losses: number; winRate: number }>; empty: string }) {
+  return (
+    <Card className="border-slate-800/80 bg-[#0b1220] text-slate-100">
+      <CardContent className="p-5">
+        <h4 className="text-lg font-black text-white">{title}</h4>
+        <div className="mt-4 overflow-hidden rounded-2xl border border-slate-800">
+          <div className="grid grid-cols-12 bg-slate-900/70 px-4 py-3 text-xs font-black uppercase tracking-wider text-slate-400">
+            <div className="col-span-5">Name</div><div className="col-span-2 text-right">PnL</div><div className="col-span-2 text-right">Trades</div><div className="col-span-3 text-right">Win Rate</div>
+          </div>
+          {rows.length ? rows.map((r) => (
+            <div key={r.name} className="grid grid-cols-12 border-t border-slate-800 px-4 py-3 text-sm">
+              <div className="col-span-5 font-bold text-white">{r.name}</div>
+              <div className={`col-span-2 text-right font-black ${r.pnl >= 0 ? "text-emerald-400" : "text-rose-400"}`}>{r.pnl >= 0 ? "+" : ""}{currency(r.pnl)}</div>
+              <div className="col-span-2 text-right text-slate-300">{r.trades}</div>
+              <div className="col-span-3 text-right font-bold text-blue-300">{fmt(r.winRate)}%</div>
+            </div>
+          )) : <div className="p-5 text-center text-sm text-slate-400">{empty}</div>}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 
 
 
