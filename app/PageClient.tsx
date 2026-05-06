@@ -3813,25 +3813,30 @@ function OldCalendar({
             const day = calendarStats.byDay.get(k);
             const dayPnl = day?.pnl || 0;
             const hasActivity = !!day && (day.trades > 0 || day.withdrawals > 0);
-            const cellTone = !hasActivity
+            const compactPnl = `${dayPnl >= 0 ? "+" : "-"}$${Math.abs(dayPnl).toFixed(0)}`;
+              const cellTone = !hasActivity
               ? "border-slate-800 bg-slate-950/35 text-slate-500"
               : dayPnl >= 0
-                ? "border-emerald-400/40 bg-emerald-500/15 text-emerald-200"
-                : "border-rose-400/40 bg-rose-500/15 text-rose-200";
+                ? "border-emerald-400/40 bg-emerald-500/15 text-emerald-200 shadow-[0_0_14px_rgba(52,211,153,0.12)]"
+                : "border-rose-400/40 bg-rose-500/15 text-rose-200 shadow-[0_0_14px_rgba(251,113,133,0.12)]";
             return (
               <button
                 type="button"
                 key={i}
                 onClick={() => setSelectedKey(k)}
-                className={`relative min-h-[54px] rounded-xl border p-1.5 text-left transition ${cellTone} ${inMonth ? "opacity-100" : "opacity-25"} ${isToday ? "ring-1 ring-[#F6C945]" : ""} ${selectedKey === k ? "ring-2 ring-[#F6C945]" : ""}`}
+                className={`relative min-h-[64px] rounded-xl border p-1.5 text-left transition ${cellTone} ${inMonth ? "opacity-100" : "opacity-25"} ${isToday ? "ring-1 ring-[#F6C945]" : ""} ${selectedKey === k ? "ring-2 ring-[#F6C945]" : ""}`}
               >
-                <div className="text-xs font-black">{d.getDate()}</div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black">{d.getDate()}</span>
+                  {hasActivity ? <span className={`h-1.5 w-1.5 rounded-full ${dayPnl >= 0 ? "bg-emerald-300" : "bg-rose-300"}`} /> : null}
+                </div>
                 {hasActivity ? (
-                  <>
-                    <div className="mt-1 truncate text-[10px] font-black">{dayPnl >= 0 ? "+" : "-"}{currency(Math.abs(Number(dayPnl.toFixed(0))))}</div>
-                    <div className="text-[9px] text-slate-300">{day?.trades || 0}T</div>
-                    <span className={`absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full ${dayPnl >= 0 ? "bg-emerald-300" : "bg-rose-300"}`} />
-                  </>
+                  <div className="mt-2">
+                    <div className={`whitespace-nowrap text-[11px] font-black leading-none tracking-tight ${dayPnl >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
+                      {compactPnl}
+                    </div>
+                    <div className="mt-1 text-[9px] font-bold leading-none text-slate-300">{day?.trades || 0} trades</div>
+                  </div>
                 ) : null}
               </button>
             );
