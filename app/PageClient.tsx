@@ -3671,6 +3671,17 @@ function OldCalendar({
     return out;
   }, [days]);
 
+  // Mobile share view: hide the final overflow row from the following month
+  // so screenshots look tighter and more premium.
+  const mobileDays = useMemo(() => {
+    const lastDayOfViewMonth = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0);
+    return days.filter((d) => {
+      const isNextMonthOverflow =
+        d.getMonth() !== viewDate.getMonth() && d.getTime() > lastDayOfViewMonth.getTime();
+      return !isNextMonthOverflow;
+    });
+  }, [days, viewDate]);
+
   const monthLabel = viewDate.toLocaleDateString(undefined, { month: "long", year: "numeric" });
   const todayKey = keyOf(new Date());
   const viewMonth = viewDate.getMonth();
@@ -3806,7 +3817,7 @@ function OldCalendar({
         </div>
 
         <div className="mt-2 grid grid-cols-7 gap-1.5">
-          {days.map((d, i) => {
+          {mobileDays.map((d, i) => {
             const k = keyOf(d);
             const inMonth = d.getMonth() === viewMonth;
             const isToday = k === todayKey;
