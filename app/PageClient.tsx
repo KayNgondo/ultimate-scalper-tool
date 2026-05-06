@@ -1091,7 +1091,7 @@ function PageInner() {
       setupsToday,
     ]
   );
-  // === EA tracking view: dashboard + coach use all journal trades, not sessions ===
+  // === Trading history view: dashboard + coach use all journal trades, not sessions ===
   const hasSessionActivity = useMemo(() => {
     return (tradeRows.length > 0) || (Math.abs(totalTradePnlAllTime) > 0.0000001);
   }, [tradeRows.length, totalTradePnlAllTime]);
@@ -1831,8 +1831,8 @@ function PageInner() {
           </Card>
 
           <MultiQuickLogger
-            initialRows={3}
-            maxRows={4}
+            initialRows={1}
+            maxRows={1}
             locked={locked && lockOnHit}
             onLogged={(rows) => {
               if (locked && lockOnHit) return;
@@ -3235,15 +3235,15 @@ function SmartCoachPanel({
   const lossRate = closed ? (losses / closed) * 100 : 0;
 
   const primary = isLocked
-    ? "🚫 Guardrail active — protect the account and review recent EA conditions."
+    ? "🚫 Guardrail active — protect the account and review recent trading conditions."
     : closed >= 10 && winRate < 50
       ? "⚠️ Win rate needs improvement — identify which market or setup is dragging performance."
       : closed >= 10 && winRate >= 60
-        ? "✅ EA performance is healthy — keep risk stable and avoid changing too much."
+        ? "✅ Trading performance is healthy — keep risk stable and avoid changing too much."
         : "🧠 Keep collecting clean trade data — the coach becomes stronger as journal history grows.";
 
   const suggestions = [
-    closed ? `📊 ${closed} trades tracked in the journal` : "🟡 Refresh trades to start building EA performance data",
+    closed ? `📊 ${closed} trades tracked in the journal` : "🟡 Refresh trades to start building performance data",
     winRate >= 55 ? "✅ Overall win rate is acceptable" : "🟡 Improve entries by filtering weaker setups/markets",
     netPositive ? "✅ Net realised PnL is positive" : "🟡 Net PnL is not positive yet — reduce risk while testing",
     lossRate >= 50 ? "🔴 Loss rate is high — review losing market conditions" : "✅ Loss rate is under control",
@@ -3255,7 +3255,7 @@ function SmartCoachPanel({
       <CardHeader className="flex flex-row items-start justify-between gap-3 pb-3">
         <div>
           <CardTitle className="flex items-center gap-2 text-white">🧠 Smart Coach</CardTitle>
-          <CardDescription className="text-slate-400">EA performance guidance based on all journal trades</CardDescription>
+          <CardDescription className="text-slate-400">Performance guidance based on all journal trades</CardDescription>
         </div>
         <span className={`rounded-full border px-3 py-1 text-xs font-black ${isLocked ? "border-rose-400/40 bg-rose-500/10 text-rose-300" : "border-emerald-400/40 bg-emerald-500/10 text-emerald-300"}`}>
           {isLocked ? "LOCKED" : "ACTIVE"}
@@ -3773,7 +3773,90 @@ function OldCalendar({
         </div>
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
+      {/* Mobile share-friendly calendar view */}
+      <div className="md:hidden rounded-3xl border border-[#D4AF37]/35 bg-[radial-gradient(circle_at_top_left,rgba(246,201,69,0.18),transparent_34%),linear-gradient(145deg,#07111f,#0b1220_55%,#111827)] p-4 shadow-[0_18px_55px_rgba(0,0,0,0.45)]">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.28em] text-[#F6C945]">UST Calendar</p>
+            <h3 className="text-2xl font-black text-white">{monthLabel}</h3>
+          </div>
+          <div className={`rounded-2xl border px-3 py-2 text-right ${calendarStats.monthlyPnl >= 0 ? "border-emerald-400/40 bg-emerald-500/10 text-emerald-300" : "border-rose-400/40 bg-rose-500/10 text-rose-300"}`}>
+            <div className="text-[10px] font-bold uppercase tracking-wider opacity-80">Month PnL</div>
+            <div className="text-lg font-black">{calendarStats.monthlyPnl >= 0 ? "+" : ""}{currency(Number(calendarStats.monthlyPnl.toFixed(2)))}</div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2">
+          <div className="rounded-2xl border border-slate-700 bg-slate-950/40 p-3 text-center">
+            <div className="text-[10px] font-bold uppercase text-slate-400">Trades</div>
+            <div className="mt-1 text-xl font-black text-white">{calendarStats.monthlyTrades}</div>
+          </div>
+          <div className="rounded-2xl border border-slate-700 bg-slate-950/40 p-3 text-center">
+            <div className="text-[10px] font-bold uppercase text-slate-400">Win Rate</div>
+            <div className="mt-1 text-xl font-black text-emerald-300">{calendarStats.monthlyWinRate.toFixed(0)}%</div>
+          </div>
+          <div className="rounded-2xl border border-slate-700 bg-slate-950/40 p-3 text-center">
+            <div className="text-[10px] font-bold uppercase text-slate-400">Active Days</div>
+            <div className="mt-1 text-xl font-black text-[#F6C945]">{calendarStats.activeDays}</div>
+          </div>
+        </div>
+
+        <div className="mt-4 grid grid-cols-7 gap-1.5 text-center text-[10px] font-black uppercase text-slate-400">
+          {["M","T","W","T","F","S","S"].map((d, idx) => <div key={`${d}-${idx}`}>{d}</div>)}
+        </div>
+
+        <div className="mt-2 grid grid-cols-7 gap-1.5">
+          {days.map((d, i) => {
+            const k = keyOf(d);
+            const inMonth = d.getMonth() === viewMonth;
+            const isToday = k === todayKey;
+            const day = calendarStats.byDay.get(k);
+            const dayPnl = day?.pnl || 0;
+            const hasActivity = !!day && (day.trades > 0 || day.withdrawals > 0);
+            const cellTone = !hasActivity
+              ? "border-slate-800 bg-slate-950/35 text-slate-500"
+              : dayPnl >= 0
+                ? "border-emerald-400/40 bg-emerald-500/15 text-emerald-200"
+                : "border-rose-400/40 bg-rose-500/15 text-rose-200";
+            return (
+              <button
+                type="button"
+                key={i}
+                onClick={() => setSelectedKey(k)}
+                className={`relative min-h-[54px] rounded-xl border p-1.5 text-left transition ${cellTone} ${inMonth ? "opacity-100" : "opacity-25"} ${isToday ? "ring-1 ring-[#F6C945]" : ""} ${selectedKey === k ? "ring-2 ring-[#F6C945]" : ""}`}
+              >
+                <div className="text-xs font-black">{d.getDate()}</div>
+                {hasActivity ? (
+                  <>
+                    <div className="mt-1 truncate text-[10px] font-black">{dayPnl >= 0 ? "+" : "-"}{currency(Math.abs(Number(dayPnl.toFixed(0))))}</div>
+                    <div className="text-[9px] text-slate-300">{day?.trades || 0}T</div>
+                    <span className={`absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full ${dayPnl >= 0 ? "bg-emerald-300" : "bg-rose-300"}`} />
+                  </>
+                ) : null}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="mt-4 rounded-2xl border border-slate-700 bg-slate-950/35 p-3">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-xs font-black uppercase tracking-widest text-slate-400">Best / Worst</span>
+            <span className="text-xs font-bold text-[#F6C945]">Powered by UST</span>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded-xl bg-emerald-500/10 p-3">
+              <div className="text-[10px] uppercase text-emerald-200/80">Best Day</div>
+              <div className="text-base font-black text-emerald-300">+{currency(Number(calendarStats.bestDay.toFixed(2)))}</div>
+            </div>
+            <div className="rounded-xl bg-rose-500/10 p-3">
+              <div className="text-[10px] uppercase text-rose-200/80">Worst Day</div>
+              <div className="text-base font-black text-rose-300">{currency(Number(calendarStats.worstDay.toFixed(2)))}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="hidden gap-5 md:grid xl:grid-cols-[1fr_360px]">
         <div className="rounded-2xl border border-slate-700/70 bg-[#07111f] p-3 sm:p-4 shadow-[0_18px_60px_rgba(0,0,0,0.28)] overflow-x-auto overscroll-x-contain">
           <div className="min-w-[760px] sm:min-w-0">
           <div className="grid grid-cols-7 text-xs font-bold uppercase tracking-wider text-slate-300">
@@ -3945,7 +4028,7 @@ function DashboardSyncButton({ addTradesBulkFn }: { addTradesBulkFn: (rows: Trad
           await runImport();
           toast?.push({
             title: "Trades refreshed",
-            desc: "Latest closed EA trades were checked and added to the journal.",
+            desc: "Latest closed trades were checked and added to the journal.",
           });
         } finally {
           setSyncing(false);
