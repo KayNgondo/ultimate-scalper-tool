@@ -1764,17 +1764,13 @@ function PageInner() {
               </CardContent>
             </Card>
           )}
-          <Card className="border-[#D4AF37]/25 bg-gradient-to-br from-[#0b1220] to-[#111827] text-slate-100">
-            <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
-              <div>
-                <h3 className="font-extrabold">Trade History</h3>
-                <p className="text-sm text-slate-400">Refresh to pull the latest closed EA trades into the journal.</p>
-              </div>
-              <DashboardSyncButton addTradesBulkFn={addTradesBulk} />
-            </CardContent>
-          </Card>
+          {/* Auto-Import from Google Sheets */}
+          <div className="border rounded-xl p-4 mb-4">
+            <h3 className="font-semibold mb-2">Auto-Import Closed Trades (Google Sheets)</h3>
+            <AutoImportPanel addTradesBulkFn={addTradesBulk} />
+          </div>
 
-          {/* Record Withdrawal (does not count as trading loss) */}
+{/* Record Withdrawal (does not count as trading loss) */}
           <Card className="border-[#D4AF37]/40 mb-4">
             <CardContent className="p-4 space-y-3">
               <div className="flex items-center justify-between">
@@ -2894,7 +2890,7 @@ function JournalGrouped({
   const buckets: Bucket[] = [];
   function titleFor(ts: number, idx: number) {
     const d = new Date(ts);
-    return `Session ${idx + 1} (${d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", year: "numeric" })})`;
+    return `Trade Batch ${idx + 1} (${d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", year: "numeric" })})`;
   }
   if (sessionsSorted.length) {
     for (let i = 0; i < sessionsSorted.length; i++) {
@@ -2912,37 +2908,13 @@ function JournalGrouped({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border border-slate-800/80 bg-[radial-gradient(circle_at_top_left,rgba(34,197,94,0.14),transparent_28%),linear-gradient(135deg,#07111f_0%,#0b1220_55%,#101827_100%)] p-4 text-slate-100 shadow-2xl shadow-black/25 md:p-5">
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-[#F6C945] sm:text-xs sm:tracking-[0.35em]">Trade Intelligence Centre</p>
-            <h3 className="mt-1 text-xl font-extrabold leading-tight tracking-tight text-white sm:text-2xl md:text-3xl">Journal Overview</h3>
-            <p className="mt-1 text-sm text-slate-400">Review execution quality, market performance, and every logged trade.</p>
-          </div>
-          <div className={`inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-bold shadow-lg ${qualityTone}`}>
-            <ShieldCheck className="h-4 w-4" />{qualityLabel}
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-2 xl:grid-cols-6">
-          <div className="col-span-2 rounded-xl border border-emerald-400/25 bg-emerald-500/10 p-4 shadow-lg shadow-emerald-950/20 xl:col-span-2">
-            <p className="text-sm font-bold text-slate-300">Net Trade PnL</p>
-            <div className={`mt-2 text-4xl font-black ${totalPnl >= 0 ? "text-emerald-400" : "text-rose-400"}`}>{totalPnl >= 0 ? "+" : ""}{currency(Number(totalPnl.toFixed(2)))}</div>
-            <p className="mt-1 text-sm text-slate-400">Growth: {formatPct(totalPnl, startBalance) || "0.00%"}</p>
-          </div>
-          <JournalStat label="Trades" value={`${tradeOnly.length}`} hint={`${wins}W / ${losses}L / ${be}BE`} tone="blue" />
-          <JournalStat label="Win Rate" value={`${fmt(winRate)}%`} hint="Closed trades" tone={winRate >= 50 ? "positive" : "warning"} />
-          <JournalStat label="Avg PnL" value={currency(Number(avgPnl.toFixed(2)))} hint="Per trade" tone={avgPnl >= 0 ? "positive" : "negative"} />
-          <JournalStat label="Withdrawn" value={`-${currency(Number(totalWithdrawn.toFixed(2)))}`} hint="All time" tone={totalWithdrawn > 0 ? "gold" : "neutral"} />
-        </div>
-      </div>
-
       <div className="grid gap-4 xl:grid-cols-3">
         <Card className="border-slate-800/80 bg-gradient-to-br from-[#0b1220] to-[#111827] text-slate-100 shadow-xl shadow-black/20 xl:col-span-2">
           <CardContent className="p-4 md:p-5">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <div className="grid h-9 w-9 place-items-center rounded-lg border border-[#F6C945]/35 bg-[#F6C945]/10 text-[#F6C945]"><BarChart3 className="h-4 w-4" /></div>
-                <div><h4 className="text-base font-extrabold uppercase tracking-wide text-white">Trade Log</h4><p className="text-xs text-slate-400">Grouped by session with smart filters.</p></div>
+                <div><h4 className="text-base font-extrabold uppercase tracking-wide text-white">Trade Log</h4><p className="text-xs text-slate-400">Clean history of imported and manual trades.</p></div>
               </div>
               <Button variant="outline" onClick={() => exportCsv(trades)} className="border-[#F6C945]/50 bg-[#F6C945]/10 text-[#F6C945] hover:bg-[#F6C945] hover:text-black">Export CSV</Button>
             </div>
