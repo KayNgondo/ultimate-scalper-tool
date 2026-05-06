@@ -35,7 +35,7 @@ import {
   CommandItem,
   CommandGroup,
 } from "@/components/ui/command";
-import { ChevronsUpDown, Check, Wallet, TrendingUp, TrendingDown, BarChart3, CalendarDays, Target, ShieldCheck, Activity, Info, PieChart, Star, Scale, Home, MoreHorizontal, Settings, BookOpen, ClipboardCheck } from "lucide-react";
+import { ChevronsUpDown, Check, Wallet, TrendingUp, TrendingDown, BarChart3, CalendarDays, Target, ShieldCheck, Activity, Info, PieChart, Star, Scale, Home, MoreHorizontal, Settings, BookOpen, ClipboardCheck, RefreshCw, Calculator } from "lucide-react";
 
 /* ========== recharts ========== */
 import {
@@ -1061,8 +1061,8 @@ function PageInner() {
       computeDisciplineScore({
         startBalance,
         equity,
-        pnl,
-        tradesCount: sessionTrades.length,
+        pnl: totalTradePnlAllTime,
+        tradesCount: tradeRows.length,
         maxLoss,
         lockOnHit,
         locked,
@@ -1077,8 +1077,8 @@ function PageInner() {
     [
       startBalance,
       equity,
-      pnl,
-      sessionTrades.length,
+      totalTradePnlAllTime,
+      tradeRows.length,
       maxLoss,
       lockOnHit,
       locked,
@@ -1091,14 +1091,14 @@ function PageInner() {
       setupsToday,
     ]
   );
-  // === Session activity guard: require at least one trade OR equity change (pnl != 0) before ending a session ===
+  // === EA tracking view: dashboard + coach use all journal trades, not sessions ===
   const hasSessionActivity = useMemo(() => {
-    return (sessionTrades.length > 0) || (Math.abs(pnl) > 0.0000001);
-  }, [sessionTrades, pnl]);
-  const closed = sessionTrades.length;
-  const wins = sessionTrades.filter((t) => (t.pnl || 0) > 0).length;
-  const losses = sessionTrades.filter((t) => (t.pnl || 0) < 0).length;
-  const bes = sessionTrades.filter((t) => (t.pnl || 0) === 0).length;
+    return (tradeRows.length > 0) || (Math.abs(totalTradePnlAllTime) > 0.0000001);
+  }, [tradeRows.length, totalTradePnlAllTime]);
+  const closed = tradeRows.length;
+  const wins = tradeRows.filter((t) => (t.pnl || 0) > 0).length;
+  const losses = tradeRows.filter((t) => (t.pnl || 0) < 0).length;
+  const bes = tradeRows.filter((t) => (t.pnl || 0) === 0).length;
   const winRate = closed ? (wins / closed) * 100 : 0;
   
   // session % base = startBalance + pnl from trades BEFORE sessionId
@@ -1344,8 +1344,8 @@ function PageInner() {
                 await recordSessionToLeaderboard(user.id, Number(pnl || 0), startedAtISO, endedAtISO);
                 newSessionId();
                 push({
-                  title: "Session saved",
-                  desc: `Leaderboard updated • Discipline ${summary.disciplineScore}/100`,
+                  title: "Leaderboard synced",
+                  desc: `Board synced • Discipline ${summary.disciplineScore}/100`,
                 });
               } catch (e) {
                 console.error(e);
@@ -1353,7 +1353,7 @@ function PageInner() {
               }
             }}
           >
-            <span className="hidden sm:inline">Update Leaderboard</span><span className="sm:hidden">Update Leaderboard</span>
+            <span className="hidden sm:inline">Sync Board</span><span className="sm:hidden">Sync Board</span>
           </Button>
 
           {user && (
@@ -1362,7 +1362,7 @@ function PageInner() {
               onClick={async () => {
                 try {
                   await supabase.auth.signOut();
-                  push({ title: "Signed out", desc: "See you next session." });
+                  push({ title: "Signed out", desc: "See you soon." });
                 } catch (e) {
                   console.error(e);
                   push({ title: "Sign out failed", desc: "Please try again." });
@@ -1390,13 +1390,7 @@ function PageInner() {
                 <BarChart3 className="mr-2 h-4 w-4" /> Analytics
               </TabsTrigger>
               <TabsTrigger value="risk-deriv" className="rounded-xl border border-slate-700/80 px-4 py-2 text-sm font-semibold data-[state=active]:border-[#D4AF37] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black">
-                <ShieldCheck className="mr-2 h-4 w-4" /> Risk &amp; Sizing (Deriv)
-              </TabsTrigger>
-              <TabsTrigger value="risk-fx" className="rounded-xl border border-slate-700/80 px-4 py-2 text-sm font-semibold data-[state=active]:border-[#D4AF37] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black">
-                <Scale className="mr-2 h-4 w-4" /> Risk &amp; Sizing (FX)
-              </TabsTrigger>
-              <TabsTrigger value="risk-majors" className="rounded-xl border border-slate-700/80 px-4 py-2 text-sm font-semibold data-[state=active]:border-[#D4AF37] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black">
-                <PieChart className="mr-2 h-4 w-4" /> Risk &amp; Sizing (XAU/NAS/US30/BTC)
+                <Calculator className="mr-2 h-4 w-4" /> Risk Calculator
               </TabsTrigger>
               <TabsTrigger value="journal" className="rounded-xl border border-slate-700/80 px-4 py-2 text-sm font-semibold data-[state=active]:border-[#D4AF37] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black">
                 <BookOpen className="mr-2 h-4 w-4" /> Trade Journal
@@ -1453,13 +1447,7 @@ function PageInner() {
                 <span className="grid h-9 w-9 place-items-center rounded-full border border-slate-400 bg-[#0B1220] text-[#F6C945] shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:text-[#F6C945]"><BarChart3 className="h-4 w-4" /></span><span>Analytics</span>
               </TabsTrigger>
               <TabsTrigger value="risk-deriv" className="flex min-h-[74px] flex-col items-center justify-center gap-1 rounded-2xl border border-slate-400 bg-white px-1 py-2 text-center text-[10px] font-bold leading-tight text-slate-950 shadow-sm data-[state=active]:border-[#D4AF37] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:border-slate-700/80 dark:bg-slate-950/40 dark:text-slate-100 dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black">
-                <span className="grid h-9 w-9 place-items-center rounded-full border border-slate-400 bg-[#0B1220] text-[#F6C945] shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:text-[#F6C945]"><ShieldCheck className="h-4 w-4" /></span><span>Risk<br />Deriv</span>
-              </TabsTrigger>
-              <TabsTrigger value="risk-fx" className="flex min-h-[74px] flex-col items-center justify-center gap-1 rounded-2xl border border-slate-400 bg-white px-1 py-2 text-center text-[10px] font-bold leading-tight text-slate-950 shadow-sm data-[state=active]:border-[#D4AF37] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:border-slate-700/80 dark:bg-slate-950/40 dark:text-slate-100 dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black">
-                <span className="grid h-9 w-9 place-items-center rounded-full border border-slate-400 bg-[#0B1220] text-[#F6C945] shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:text-[#F6C945]"><Scale className="h-4 w-4" /></span><span>Risk<br />FX</span>
-              </TabsTrigger>
-              <TabsTrigger value="risk-majors" className="flex min-h-[74px] flex-col items-center justify-center gap-1 rounded-2xl border border-slate-400 bg-white px-1 py-2 text-center text-[10px] font-bold leading-tight text-slate-950 shadow-sm data-[state=active]:border-[#D4AF37] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:border-slate-700/80 dark:bg-slate-950/40 dark:text-slate-100 dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black">
-                <span className="grid h-9 w-9 place-items-center rounded-full border border-slate-400 bg-[#0B1220] text-[#F6C945] shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:text-[#F6C945]"><Target className="h-4 w-4" /></span><span>XAU+</span>
+                <span className="grid h-9 w-9 place-items-center rounded-full border border-slate-400 bg-[#0B1220] text-[#F6C945] shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:text-[#F6C945]"><Calculator className="h-4 w-4" /></span><span>Risk<br />Calc</span>
               </TabsTrigger>
               <TabsTrigger value="checklist" className="flex min-h-[74px] flex-col items-center justify-center gap-1 rounded-2xl border border-slate-400 bg-white px-1 py-2 text-center text-[10px] font-bold leading-tight text-slate-950 shadow-sm data-[state=active]:border-[#D4AF37] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:border-slate-700/80 dark:bg-slate-950/40 dark:text-slate-100 dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black">
                 <span className="grid h-9 w-9 place-items-center rounded-full border border-slate-400 bg-[#0B1220] text-[#F6C945] shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:text-[#F6C945]"><MoreHorizontal className="h-4 w-4" /></span><span>More</span>
@@ -1494,24 +1482,27 @@ function PageInner() {
                 <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-[#F6C945] sm:text-xs sm:tracking-[0.35em]">Trading Command Centre</p>
                 <h2 className="mt-1 text-xl font-extrabold leading-tight tracking-tight text-white sm:text-2xl md:text-3xl">Dashboard Overview</h2>
               </div>
-              <div className={`inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-bold shadow-lg ${locked && lockOnHit ? "border-rose-500/50 bg-rose-500/10 text-rose-300 shadow-rose-950/30" : "border-emerald-400/50 bg-emerald-500/10 text-emerald-300 shadow-emerald-950/30"}`}>
-                <Activity className="h-4 w-4" />
-                {locked && lockOnHit ? "Trading Locked" : "Trading Active"}
+              <div className="flex flex-wrap items-center gap-2">
+                <DashboardSyncButton addTradesBulkFn={addTradesBulk} />
+                <div className={`inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-bold shadow-lg ${locked && lockOnHit ? "border-rose-500/50 bg-rose-500/10 text-rose-300 shadow-rose-950/30" : "border-emerald-400/50 bg-emerald-500/10 text-emerald-300 shadow-emerald-950/30"}`}>
+                  <Activity className="h-4 w-4" />
+                  {locked && lockOnHit ? "Trading Locked" : "Trading Active"}
+                </div>
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-2 md:gap-4 lg:grid-cols-4">
               <DashCard title="Equity" value={currency(equity)} hint={`Start: ${currency(startBalance)}`} tone={equity >= startBalance ? "positive" : "negative"} featured icon="wallet" spark="up" />
               <DashCard
-                title="PNL (this session)"
-                value={currency(pnl)}
-                hint={`Closed trades: ${closed}${sessionPct ? ` • ${sessionPct}` : ""}`}
-                tone={pnl > 0 ? "positive" : pnl < 0 ? "negative" : "blue"}
+                title="Realised PnL"
+                value={currency(totalTradePnlAllTime)}
+                hint={`All journal trades: ${closed}`}
+                tone={totalTradePnlAllTime > 0 ? "positive" : totalTradePnlAllTime < 0 ? "negative" : "blue"}
                 featured
                 icon="trend"
                 spark="flat"
               />
-              <DashCard title="Win rate" value={`${fmt(winRate)}%`} hint={`${wins}W / ${losses}L / ${bes}BE`} tone={winRate >= 50 ? "purple" : closed > 0 ? "warning" : "purple"} featured icon="pie" />
+              <DashCard title="Overall Win Rate" value={`${fmt(winRate)}%`} hint={`${wins}W / ${losses}L / ${bes}BE`} tone={winRate >= 50 ? "purple" : closed > 0 ? "warning" : "purple"} featured icon="pie" />
               <DashCard title="Discipline" value={`${disciplineScore}/100`} hint={currentRuleBadges.length ? `${currentRuleBadges.length} rules active` : "Checklist pending"} tone={disciplineScore >= 80 ? "positive" : disciplineScore >= 60 ? "gold" : "negative"} featured icon="shield" progress={disciplineScore} />
             </div>
 
@@ -1525,7 +1516,7 @@ function PageInner() {
                 bes={bes}
                 winRate={winRate}
                 disciplineScore={disciplineScore}
-                pnl={pnl}
+                pnl={totalTradePnlAllTime}
                 maxLoss={maxLoss}
                 riskPct={riskPct}
                 recommendedRiskPct={recommendedRiskPct}
@@ -1707,6 +1698,7 @@ function PageInner() {
 
         {/* RISK & SIZING — DERIV */}
         <TabsContent value="risk-deriv" className="space-y-4">
+          <RiskCalculatorSelector active={activeTab} setActive={setActiveTab} />
           <CapitalAndRiskSummary equity={equity} riskAmount={riskAmount} riskPct={riskPct} />
 
           <Card>
@@ -1728,6 +1720,7 @@ function PageInner() {
 
         {/* RISK & SIZING — FX (5 pairs) */}
         <TabsContent value="risk-fx" className="space-y-4">
+          <RiskCalculatorSelector active={activeTab} setActive={setActiveTab} />
           <CapitalAndRiskSummary equity={equity} riskAmount={riskAmount} riskPct={riskPct} />
 
           <RiskSizerUniversalPanel
@@ -1746,6 +1739,7 @@ function PageInner() {
 
         {/* RISK & SIZING — XAU/NAS/US30/BTC */}
         <TabsContent value="risk-majors" className="space-y-4">
+          <RiskCalculatorSelector active={activeTab} setActive={setActiveTab} />
           <CapitalAndRiskSummary equity={equity} riskAmount={riskAmount} riskPct={riskPct} />
 
           <RiskSizerUniversalPanel
@@ -1770,14 +1764,15 @@ function PageInner() {
               </CardContent>
             </Card>
           )}
-
-          {/* Auto-Import from Google Sheets */}
-          <div className="border rounded-xl p-4 mb-4">
-            <h3 className="font-semibold mb-2">Auto-Import Closed Trades (Google Sheets)</h3>
-            {/* FIX: pass addTradesBulk as a prop so it's in scope */}
-            <AutoImportPanel addTradesBulkFn={addTradesBulk} />
-          </div>
-
+          <Card className="border-[#D4AF37]/25 bg-gradient-to-br from-[#0b1220] to-[#111827] text-slate-100">
+            <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+              <div>
+                <h3 className="font-extrabold">Trade History</h3>
+                <p className="text-sm text-slate-400">Refresh to pull the latest closed EA trades into the journal.</p>
+              </div>
+              <DashboardSyncButton addTradesBulkFn={addTradesBulk} />
+            </CardContent>
+          </Card>
 
           {/* Record Withdrawal (does not count as trading loss) */}
           <Card className="border-[#D4AF37]/40 mb-4">
@@ -1870,7 +1865,7 @@ function PageInner() {
             <CardContent className="p-5 space-y-4">
               <h4 className="text-lg font-semibold">🧭 Checklist — Review & Targets</h4>
               <p className="text-sm text-slate-600 dark:text-slate-300">
-                Use this tab to confirm your plan and set your Start Capital + Risk % before starting a session.
+                Use this tab to confirm your plan and set your Start Capital + Risk % before trading.
                 Copy the summary and paste to Telegram/Slack if you like.
               </p>
 
@@ -1897,7 +1892,7 @@ function PageInner() {
                     <textarea className="w-full border rounded-md p-2 h-20" value={mentalReady} onChange={(e)=>setMentalReady(e.target.value)} />
                   </div>
                   <div>
-                    <Label>3️⃣ Target for the Session</Label>
+                    <Label>3️⃣ Trading Target</Label>
                     <textarea className="w-full border rounded-md p-2 h-20" value={sessionTarget} onChange={(e)=>setSessionTarget(e.target.value)} />
                   </div>
                   <div>
@@ -1933,7 +1928,7 @@ function PageInner() {
                   <div className="flex flex-wrap gap-2">
                     <Button onClick={()=>{
                       const txt = [
-                        "🧭 Session Checklist",
+                        "🧭 Trading Checklist",
                         `Why: ${whyTrade || "-"}`,
                         `Ready: ${mentalReady || "-"}`,
                         `Target: ${sessionTarget || "-"}`,
@@ -1952,8 +1947,8 @@ function PageInner() {
 
                     <Button variant="outline" onClick={()=>{
                       const id = newSessionId();
-                      push({ title: "Session started", desc: `Session ID: ${id}` });
-                    }}>Start Session</Button>
+                      push({ title: "Checklist reset", desc: `Session ID: ${id}` });
+                    }}>Reset Checklist</Button>
                   </div>
 
                   <div className="rounded-md border p-3 bg-slate-50">
@@ -3264,21 +3259,23 @@ function SmartCoachPanel({
 }) {
   const isLocked = locked && lockOnHit;
   const riskControlled = !recommendedRiskPct || riskPct <= recommendedRiskPct * 1.1;
-  const remainingLoss = maxLoss > 0 ? Math.max(0, Math.abs(maxLoss) + pnl) : null;
+  const netPositive = pnl > 0;
+  const lossRate = closed ? (losses / closed) * 100 : 0;
 
   const primary = isLocked
-    ? "🚫 Session locked — protect the account and review mistakes."
-    : closed >= 5
-      ? "⚠️ Overtrading zone — only take A+ setups from here."
-      : disciplineScore >= 80
-        ? "✅ Discipline is strong — keep following the plan."
-        : "⚠️ Discipline needs attention — slow down and confirm the setup.";
+    ? "🚫 Guardrail active — protect the account and review recent EA conditions."
+    : closed >= 10 && winRate < 50
+      ? "⚠️ Win rate needs improvement — identify which market or setup is dragging performance."
+      : closed >= 10 && winRate >= 60
+        ? "✅ EA performance is healthy — keep risk stable and avoid changing too much."
+        : "🧠 Keep collecting clean trade data — the coach becomes stronger as journal history grows.";
 
   const suggestions = [
-    sessionTarget.trim() ? "✅ Session target defined" : "🟡 Set a clear session target before the next trade",
-    setupsToday.trim() ? "✅ Trading plan confirmed" : "🟡 Choose the exact A-Setup you are allowed to trade",
+    closed ? `📊 ${closed} trades tracked in the journal` : "🟡 Refresh trades to start building EA performance data",
+    winRate >= 55 ? "✅ Overall win rate is acceptable" : "🟡 Improve entries by filtering weaker setups/markets",
+    netPositive ? "✅ Net realised PnL is positive" : "🟡 Net PnL is not positive yet — reduce risk while testing",
+    lossRate >= 50 ? "🔴 Loss rate is high — review losing market conditions" : "✅ Loss rate is under control",
     riskControlled ? "✅ Risk is within the recommended zone" : "🔴 Risk is above the recommended level",
-    losses >= 2 ? "🔴 Two losses recorded — reduce size or stop for review" : "✅ Loss control still healthy",
   ];
 
   return (
@@ -3286,7 +3283,7 @@ function SmartCoachPanel({
       <CardHeader className="flex flex-row items-start justify-between gap-3 pb-3">
         <div>
           <CardTitle className="flex items-center gap-2 text-white">🧠 Smart Coach</CardTitle>
-          <CardDescription className="text-slate-400">Real-time discipline and execution guidance</CardDescription>
+          <CardDescription className="text-slate-400">EA performance guidance based on all journal trades</CardDescription>
         </div>
         <span className={`rounded-full border px-3 py-1 text-xs font-black ${isLocked ? "border-rose-400/40 bg-rose-500/10 text-rose-300" : "border-emerald-400/40 bg-emerald-500/10 text-emerald-300"}`}>
           {isLocked ? "LOCKED" : "ACTIVE"}
@@ -3298,10 +3295,10 @@ function SmartCoachPanel({
         </div>
 
         <div className="grid grid-cols-2 gap-2 text-xs">
-          <div className="rounded-lg border border-slate-700 bg-slate-950/40 p-3 text-slate-300">Trades<br/><span className="text-lg font-black text-yellow-300">{closed}</span></div>
-          <div className="rounded-lg border border-slate-700 bg-slate-950/40 p-3 text-slate-300">Win Rate<br/><span className="text-lg font-black text-emerald-300">{fmt(winRate)}%</span></div>
+          <div className="rounded-lg border border-slate-700 bg-slate-950/40 p-3 text-slate-300">Trades Tracked<br/><span className="text-lg font-black text-yellow-300">{closed}</span></div>
+          <div className="rounded-lg border border-slate-700 bg-slate-950/40 p-3 text-slate-300">Overall Win Rate<br/><span className="text-lg font-black text-emerald-300">{fmt(winRate)}%</span></div>
           <div className="rounded-lg border border-slate-700 bg-slate-950/40 p-3 text-slate-300">W/L/BE<br/><span className="text-lg font-black text-sky-300">{wins}/{losses}/{bes}</span></div>
-          <div className="rounded-lg border border-slate-700 bg-slate-950/40 p-3 text-slate-300">Discipline<br/><span className="text-lg font-black text-yellow-300">{disciplineScore}/100</span></div>
+          <div className="rounded-lg border border-slate-700 bg-slate-950/40 p-3 text-slate-300">Net PnL<br/><span className={`text-lg font-black ${pnl >= 0 ? "text-emerald-300" : "text-rose-300"}`}>{currency(pnl)}</span></div>
         </div>
 
         <div className="space-y-2">
@@ -3312,8 +3309,7 @@ function SmartCoachPanel({
         </div>
 
         <div className="rounded-xl border border-sky-400/20 bg-sky-500/10 p-3 text-xs text-sky-200">
-          <span className="font-black">Next action:</span> {isLocked ? "End session and write a review." : closed === 0 ? "Wait for the first clean A-Setup." : "Continue only if the setup score is 80%+."}
-          {remainingLoss !== null ? <div className="mt-1 text-slate-300">Loss room before lock: {currency(remainingLoss)}</div> : null}
+          <span className="font-black">Next action:</span> {closed < 10 ? "Keep importing trades until there is enough sample size." : winRate < 50 ? "Open Analytics and cut the weakest market/setup." : "Scale only after win rate and PnL remain stable."}
         </div>
 
         <div className="flex flex-wrap gap-2">
@@ -3959,6 +3955,85 @@ function CalendarMetric({ label, value, tone }: { label: string; value: string; 
     </div>
   );
 }
+
+
+function DashboardSyncButton({ addTradesBulkFn }: { addTradesBulkFn: (rows: TradeRow[]) => void }) {
+  const { runImport, lastSync } = useSheetsImporter(addTradesBulkFn);
+  const [syncing, setSyncing] = React.useState(false);
+  const toast = useToast();
+
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      disabled={syncing}
+      onClick={async () => {
+        setSyncing(true);
+        try {
+          await runImport();
+          toast?.push({
+            title: "Trades refreshed",
+            desc: "Latest closed EA trades were checked and added to the journal.",
+          });
+        } finally {
+          setSyncing(false);
+        }
+      }}
+      className="rounded-lg border-[#D4AF37]/40 bg-[#D4AF37]/10 px-3 py-2 text-xs font-bold text-[#F6C945] hover:bg-[#D4AF37]/20"
+    >
+      <RefreshCw className={`mr-2 h-4 w-4 ${syncing ? "animate-spin" : ""}`} />
+      {syncing ? "Refreshing" : "Refresh Trades"}
+    </Button>
+  );
+}
+
+function RiskCalculatorSelector({
+  active,
+  setActive,
+}: {
+  active: string;
+  setActive: (v: string) => void;
+}) {
+  const options = [
+    { value: "risk-deriv", label: "Deriv Calculator", desc: "Synthetic indices" },
+    { value: "risk-fx", label: "FX Calculator", desc: "Currency pairs" },
+    { value: "risk-majors", label: "XAU / NAS Calculator", desc: "Gold, indices & BTC" },
+  ];
+
+  return (
+    <Card className="border-[#D4AF37]/30 bg-gradient-to-br from-[#0b1220] to-[#111827] text-slate-100">
+      <CardContent className="p-4">
+        <div className="mb-3 flex items-center gap-3">
+          <div className="grid h-9 w-9 place-items-center rounded-xl border border-[#D4AF37]/40 bg-[#D4AF37]/10 text-[#F6C945]">
+            <Calculator className="h-5 w-5" />
+          </div>
+          <div>
+            <h3 className="text-lg font-extrabold text-white">Risk Calculator</h3>
+            <p className="text-xs text-slate-400">Choose the calculator that matches the market you are trading.</p>
+          </div>
+        </div>
+        <div className="grid gap-2 md:grid-cols-3">
+          {options.map((o) => (
+            <button
+              key={o.value}
+              type="button"
+              onClick={() => setActive(o.value)}
+              className={`rounded-xl border p-3 text-left transition ${
+                active === o.value
+                  ? "border-[#D4AF37] bg-[#D4AF37] text-black shadow-lg shadow-[#D4AF37]/20"
+                  : "border-slate-700 bg-slate-950/50 text-slate-100 hover:border-[#D4AF37]/60"
+              }`}
+            >
+              <div className="text-sm font-black">{o.label}</div>
+              <div className={`text-xs ${active === o.value ? "text-black/70" : "text-slate-400"}`}>{o.desc}</div>
+            </button>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 
 /* =========================================================================
    Auto-Import panel (FIXED to receive the bulk adder via props)
