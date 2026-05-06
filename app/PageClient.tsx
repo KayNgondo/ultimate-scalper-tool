@@ -132,7 +132,14 @@ function normalizeToTradeRows(items: SheetItem[]): TradeRow[] {
     const commission = Number(it.commission || 0);
     const swap = Number(it.swap || 0);
     const pnl = Number((profit - commission - swap).toFixed(2));
-    const extId = String(it.deal_ticket || it.order_ticket || "");
+    const extId = [
+      it.deal_ticket || it.order_ticket || "",
+      it.symbol || "Unknown",
+      it.timestamp || "",
+      Number(it.profit || 0).toFixed(2),
+      Number(it.commission || 0).toFixed(2),
+      Number(it.swap || 0).toFixed(2),
+    ].join("|");
 
     rows.push({
       id: `${ts}-${extId || Math.random().toString(36).slice(2,6)}`,
@@ -149,40 +156,117 @@ function normalizeToTradeRows(items: SheetItem[]): TradeRow[] {
   return rows;
 }
 
+function tradeUniqueKey(t: Partial<TradeRow>) {
+  const ext = String(t.extId || "").trim();
+  if (ext) return `ext:${ext}`;
+
+  const ts = Number(t.ts || 0);
+  const roundedTs = ts ? Math.floor(ts / 1000) : 0;
+  const symbol = String(t.symbol || "Unknown").trim().toUpperCase();
+  const pnl = Number(t.pnl || 0).toFixed(2);
+  const notes = String(t.notes || "").replace(/\s+/g, " ").trim().toUpperCase();
+
+  return `fallback:${roundedTs}|${symbol}|${pnl}|${notes}`;
+}
+
+function dedupeTrades(rows: TradeRow[]) {
+  const seen = new Set<string>();
+  const unique: TradeRow[] = [];
+  let removed = 0;
+
+  for (const row of rows) {
+    const key = tradeUniqueKey(row);
+    if (seen.has(key)) {
+      removed++;
+      continue;
+    }
+    seen.add(key);
+    unique.push(row);
+  }
+
+  return { unique, removed };
+}
+
 function useSheetsImporter(addTradesBulk: (rows: TradeRow[]) => void) {
   const [enabled, setEnabled] = useLS<boolean>("ust:autoEnabled", true);
   const [account, setAccount] = useLS<string>("ust:autoAccount", DEFAULT_ACCOUNT || "");
   const [since, setSince] = useLS<string>("ust:autoSince", "");
   const [lastSync, setLastSync] = useLS<number>("ust:lastSync", 0);
   const [seen, setSeen] = useLS<string[]>("ust:seenExtIds", []);
+  const [lastImported, setLastImported] = useLS<number>("ust:lastImportedCount", 0);
+  const [lastBlocked, setLastBlocked] = useLS<number>("ust:lastDuplicateBlocked", 0);
+  const [lastError, setLastError] = useLS<string>("ust:lastSyncError", "");
 
   const runImport = React.useCallback(async () => {
-    if (!enabled || !SHEETS_URL || !SHEETS_TOKEN || !account) return;
+    if (!enabled || !SHEETS_URL || !SHEETS_TOKEN || !account) {
+      setLastError("Sync is disabled or missing configuration.");
+      return { imported: 0, blocked: 0, ok: false };
+    }
+
     try {
       const url = buildSheetsUrl(account, since);
-                  if (!url) return;
-if (!url) return;
-const r = await fetch(url, { cache: "no-store" });
-      const data = await r.json();
-      if (!data?.ok) return;
-      const items: SheetItem[] = data.items || [];
-      const rows = normalizeToTradeRows(items)
-        .filter(r => !r.extId || !seen.includes(r.extId));
-      if (rows.length) {
-        addTradesBulk(rows);
-        const nextSeen = [
-          ...seen,
-          ...rows.filter(r => !!r.extId).map(r => r.extId as string),
-        ];
-        // keep memory bounded
-        setSeen(Array.from(new Set(nextSeen)).slice(-6000));
+      if (!url) {
+        setLastError("Could not build import URL.");
+        return { imported: 0, blocked: 0, ok: false };
       }
+
+      const r = await fetch(url, { cache: "no-store" });
+      const data = await r.json();
+
+      if (!data?.ok) {
+        const msg = data?.error || "Import source returned an error.";
+        setLastError(String(msg));
+        return { imported: 0, blocked: 0, ok: false };
+      }
+
+      const items: SheetItem[] = data.items || [];
+      const rows = normalizeToTradeRows(items);
+
+      const existingRaw = localStorage.getItem("ust-trades");
+      const existing: TradeRow[] = existingRaw ? JSON.parse(existingRaw) : [];
+      const existingKeys = new Set(existing.map(tradeUniqueKey));
+      const seenKeys = new Set(seen);
+
+      const freshRows: TradeRow[] = [];
+      let blocked = 0;
+
+      for (const row of rows) {
+        const key = tradeUniqueKey(row);
+        if (existingKeys.has(key) || seenKeys.has(key)) {
+          blocked++;
+          continue;
+        }
+        existingKeys.add(key);
+        seenKeys.add(key);
+        freshRows.push(row);
+      }
+
+      const deduped = dedupeTrades(freshRows);
+      blocked += deduped.removed;
+
+      if (deduped.unique.length) {
+        addTradesBulk(deduped.unique);
+      }
+
+      const nextSeen = [
+        ...seen,
+        ...rows.map(tradeUniqueKey),
+      ];
+
+      setSeen(Array.from(new Set(nextSeen)).slice(-8000));
+      setLastImported(deduped.unique.length);
+      setLastBlocked(blocked);
       setLastSync(Date.now());
-    } catch (e) {
-      // swallow; we don’t want to interrupt the app
+      setLastError("");
+
+      return { imported: deduped.unique.length, blocked, ok: true };
+    } catch (e: any) {
+      const msg = e?.message || "Auto-import failed.";
+      setLastError(String(msg));
       console.warn("Auto-import failed:", e);
+      return { imported: 0, blocked: 0, ok: false };
     }
-  }, [enabled, account, since, seen, addTradesBulk, setSeen, setLastSync]);
+  }, [enabled, account, since, seen, addTradesBulk, setSeen, setLastSync, setLastImported, setLastBlocked, setLastError]);
 
   // poll every 20s
   React.useEffect(() => {
@@ -191,7 +275,19 @@ const r = await fetch(url, { cache: "no-store" });
     return () => clearInterval(t);
   }, [runImport]);
 
-  return { enabled, setEnabled, account, setAccount, since, setSince, lastSync, runImport };
+  return {
+    enabled,
+    setEnabled,
+    account,
+    setAccount,
+    since,
+    setSince,
+    lastSync,
+    runImport,
+    lastImported,
+    lastBlocked,
+    lastError,
+  };
 }
 
 /* =========================================================================
@@ -1240,14 +1336,53 @@ function PageInner() {
 
   function addTradesBulk(rows: TradeRow[]) {
     if (!rows.length) return;
-    setTrades(prev => [
-      ...rows.map(r => ({
-        ...r,
-        kind: (r.kind ?? "trade") as "trade" | "withdrawal",
-        source: r.source ?? "auto",
-      })),
-      ...prev,
-    ]);
+
+    setTrades(prev => {
+      const existingKeys = new Set(prev.map(tradeUniqueKey));
+      const accepted: TradeRow[] = [];
+      let blocked = 0;
+
+      for (const r of rows) {
+        const row = {
+          ...r,
+          kind: (r.kind ?? "trade") as "trade" | "withdrawal",
+          source: r.source ?? "auto",
+        };
+        const key = tradeUniqueKey(row);
+        if (existingKeys.has(key)) {
+          blocked++;
+          continue;
+        }
+        existingKeys.add(key);
+        accepted.push(row);
+      }
+
+      if (blocked > 0) {
+        try {
+          localStorage.setItem("ust:lastDuplicateBlocked", JSON.stringify(blocked));
+        } catch {}
+      }
+
+      return accepted.length ? [...accepted, ...prev] : prev;
+    });
+  }
+
+  function removeDuplicateTrades() {
+    const result = dedupeTrades(trades);
+    if (result.removed > 0) {
+      setTrades(result.unique);
+    }
+
+    try {
+      localStorage.setItem("ust:lastDuplicateBlocked", JSON.stringify(result.removed));
+    } catch {}
+
+    push({
+      title: result.removed ? "Duplicates removed" : "No duplicates found",
+      desc: result.removed
+        ? `${result.removed} duplicate trade${result.removed === 1 ? "" : "s"} removed from the journal.`
+        : "Your journal is already clean.",
+    });
   }
 
   function deleteTrade(id: string) {
@@ -1767,7 +1902,7 @@ function PageInner() {
           {/* Auto-Import from Google Sheets */}
           <div className="border rounded-xl p-4 mb-4">
             <h3 className="font-semibold mb-2">Auto-Import Closed Trades (Google Sheets)</h3>
-            <AutoImportPanel addTradesBulkFn={addTradesBulk} />
+            <AutoImportPanel addTradesBulkFn={addTradesBulk} onRemoveDuplicates={removeDuplicateTrades} />
           </div>
 
 {/* Record Withdrawal (does not count as trading loss) */}
@@ -4041,10 +4176,12 @@ function DashboardSyncButton({ addTradesBulkFn }: { addTradesBulkFn: (rows: Trad
       onClick={async () => {
         setSyncing(true);
         try {
-          await runImport();
+          const result = await runImport();
           toast?.push({
-            title: "Trades refreshed",
-            desc: "Latest closed trades were checked and added to the journal.",
+            title: result?.ok ? "Trades refreshed" : "Sync needs attention",
+            desc: result?.ok
+              ? `Imported ${result.imported} new • Blocked ${result.blocked} duplicate${result.blocked === 1 ? "" : "s"}`
+              : "Please check the Sync Control Panel in the Journal.",
           });
         } finally {
           setSyncing(false);
@@ -4109,19 +4246,38 @@ function RiskCalculatorSelector({
 /* =========================================================================
    Auto-Import panel (FIXED to receive the bulk adder via props)
 ============================================================================ */
-function AutoImportPanel({ addTradesBulkFn }: { addTradesBulkFn: (rows: TradeRow[]) => void }) {
-  const { enabled, setEnabled, account, setAccount, since, setSince, lastSync, runImport } =
-    useSheetsImporter(addTradesBulkFn);
+function AutoImportPanel({
+  addTradesBulkFn,
+  onRemoveDuplicates,
+}: {
+  addTradesBulkFn: (rows: TradeRow[]) => void;
+  onRemoveDuplicates?: () => void;
+}) {
+  const {
+    enabled,
+    setEnabled,
+    account,
+    setAccount,
+    since,
+    setSince,
+    lastSync,
+    runImport,
+    lastImported,
+    lastBlocked,
+    lastError,
+  } = useSheetsImporter(addTradesBulkFn);
 
   // Manual backfill/import range. This allows old trades to be pulled even after auto-sync has moved forward.
   const [manualFrom, setManualFrom] = React.useState<string>(since || "");
   const [manualTo, setManualTo] = React.useState<string>("");
   const [manualImporting, setManualImporting] = React.useState(false);
+  const [manualResult, setManualResult] = React.useState<{ imported: number; blocked: number } | null>(null);
 
   async function runManualImport() {
     if (!SHEETS_URL || !SHEETS_TOKEN || !account) return;
 
     setManualImporting(true);
+    setManualResult(null);
 
     try {
       const url = buildSheetsUrl(account, manualFrom);
@@ -4143,19 +4299,33 @@ function AutoImportPanel({ addTradesBulkFn }: { addTradesBulkFn: (rows: TradeRow
       // This lets you import older dates without creating duplicates.
       const existingRaw = localStorage.getItem("ust-trades");
       const existing: TradeRow[] = existingRaw ? JSON.parse(existingRaw) : [];
-      const existingKeys = new Set(
-        existing.map((t) => t.extId || `${t.ts}-${t.symbol}-${t.pnl}`)
-      );
+      const existingKeys = new Set(existing.map(tradeUniqueKey));
 
-      const freshRows = rows.filter(
-        (t) => !existingKeys.has(t.extId || `${t.ts}-${t.symbol}-${t.pnl}`)
-      );
+      const freshRows: TradeRow[] = [];
+      let blocked = 0;
 
-      if (freshRows.length) {
-        addTradesBulkFn(freshRows);
+      for (const row of rows) {
+        const key = tradeUniqueKey(row);
+        if (existingKeys.has(key)) {
+          blocked++;
+          continue;
+        }
+        existingKeys.add(key);
+        freshRows.push(row);
+      }
+
+      const deduped = dedupeTrades(freshRows);
+      blocked += deduped.removed;
+
+      if (deduped.unique.length) {
+        addTradesBulkFn(deduped.unique);
       }
 
       localStorage.setItem("ust:lastSync", JSON.stringify(Date.now()));
+      localStorage.setItem("ust:lastImportedCount", JSON.stringify(deduped.unique.length));
+      localStorage.setItem("ust:lastDuplicateBlocked", JSON.stringify(blocked));
+
+      setManualResult({ imported: deduped.unique.length, blocked });
     } catch (e) {
       console.warn("Manual import failed:", e);
     } finally {
@@ -4163,8 +4333,69 @@ function AutoImportPanel({ addTradesBulkFn }: { addTradesBulkFn: (rows: TradeRow
     }
   }
 
+  const syncHealthy = enabled && !lastError;
+
   return (
     <div className="space-y-4">
+      <div className="rounded-xl border border-slate-700 bg-slate-950/40 p-4 text-slate-100">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="text-sm font-black uppercase tracking-wide text-[#F6C945]">Sync Control Panel</div>
+            <div className="text-xs text-slate-400">Monitor imports, block duplicates, and clean the journal if needed.</div>
+          </div>
+          <span className={`rounded-full border px-3 py-1 text-xs font-black ${
+            syncHealthy
+              ? "border-emerald-400/40 bg-emerald-500/10 text-emerald-300"
+              : "border-rose-400/40 bg-rose-500/10 text-rose-300"
+          }`}>
+            {syncHealthy ? "Healthy" : "Needs Attention"}
+          </span>
+        </div>
+
+        <div className="grid gap-2 sm:grid-cols-4">
+          <div className="rounded-lg border border-slate-700 bg-slate-900/70 p-3">
+            <div className="text-[10px] font-bold uppercase text-slate-400">Last Sync</div>
+            <div className="mt-1 text-sm font-black text-white">{lastSync ? new Date(lastSync).toLocaleString() : "—"}</div>
+          </div>
+          <div className="rounded-lg border border-slate-700 bg-slate-900/70 p-3">
+            <div className="text-[10px] font-bold uppercase text-slate-400">Imported</div>
+            <div className="mt-1 text-xl font-black text-emerald-300">{lastImported}</div>
+          </div>
+          <div className="rounded-lg border border-slate-700 bg-slate-900/70 p-3">
+            <div className="text-[10px] font-bold uppercase text-slate-400">Duplicates Blocked</div>
+            <div className="mt-1 text-xl font-black text-[#F6C945]">{lastBlocked}</div>
+          </div>
+          <div className="rounded-lg border border-slate-700 bg-slate-900/70 p-3">
+            <div className="text-[10px] font-bold uppercase text-slate-400">Auto Sync</div>
+            <div className="mt-1 text-sm font-black text-white">{enabled ? "ON" : "OFF"}</div>
+          </div>
+        </div>
+
+        {lastError ? (
+          <div className="mt-3 rounded-lg border border-rose-400/30 bg-rose-500/10 p-3 text-xs text-rose-200">
+            {lastError}
+          </div>
+        ) : null}
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button
+            type="button"
+            onClick={runImport}
+            className="bg-[#D4AF37] text-black hover:bg-yellow-400"
+          >
+            Force Refresh
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onRemoveDuplicates}
+            className="border-slate-600 text-slate-100 hover:bg-slate-800"
+          >
+            Remove Duplicate Trades
+          </Button>
+        </div>
+      </div>
+
       <div className="grid md:grid-cols-12 gap-3 items-end">
         <div className="md:col-span-2">
           <label className="block text-xs mb-1">Enabled</label>
@@ -4246,6 +4477,12 @@ function AutoImportPanel({ addTradesBulkFn }: { addTradesBulkFn: (rows: TradeRow
             Use this for missed/older trades.
           </div>
         </div>
+
+        {manualResult ? (
+          <div className="mt-3 rounded-lg border border-slate-700 bg-slate-950/40 p-2 text-xs text-slate-200">
+            Imported {manualResult.imported} new trade{manualResult.imported === 1 ? "" : "s"} • Blocked {manualResult.blocked} duplicate{manualResult.blocked === 1 ? "" : "s"}
+          </div>
+        ) : null}
       </div>
     </div>
   );
