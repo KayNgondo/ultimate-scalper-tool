@@ -248,11 +248,29 @@ function computeBattleStatsFromSheet(items: SheetItem[], base: BattleMarketRow, 
     }).length;
   const discipline = Math.max(0, Math.min(100, Math.round(100 - manualInterruptions * 5 - maxDd * 1.5)));
 
+  const targetTrades = Number(base.targetTrades || 100);
+  const accountBlown = startingCapital > 0 && equity <= 0;
+  const completedChallenge = trades >= targetTrades;
+
   let status: BattleMarketRow["status"] = "Stable";
-  if (trades >= Number(base.targetTrades || 100) && profit > 0 && maxDd <= 15 && winRate >= 50) status = "Certified";
-  else if (maxDd >= 25 || (startingCapital > 0 && profit <= -startingCapital * 0.2)) status = "Failed Challenge";
-  else if (profit < 0) status = "Recovery Mode";
-  else if (maxDd >= 10 || (trades >= 10 && winRate < 45)) status = "Under Pressure";
+
+  // UST Market Challenge logic:
+  // Failed only when the market has truly broken the survival rules.
+  // A market can be profitable and still fail if DD/discipline is unacceptable.
+  if (
+    maxDd > 60 ||
+    discipline < 50 ||
+    accountBlown ||
+    (completedChallenge && profit < 0)
+  ) {
+    status = "Failed Challenge";
+  } else if (completedChallenge && profit > 0 && maxDd <= 60 && discipline >= 50) {
+    status = "Certified";
+  } else if (maxDd >= 40 || profit < 0) {
+    status = "Recovery Mode";
+  } else if (maxDd >= 25 || discipline < 80 || (trades >= 10 && winRate < 45)) {
+    status = "Under Pressure";
+  }
 
   return {
     ...base,
