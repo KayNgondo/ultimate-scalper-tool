@@ -241,12 +241,14 @@ function computeBattleStatsFromSheet(items: SheetItem[], base: BattleMarketRow, 
   const riskUnit = startingCapital > 0 ? startingCapital * 0.01 : 0;
   const avgR = riskUnit > 0 && trades ? Number(((profit / trades) / riskUnit).toFixed(2)) : 0;
   const bestRunnerR = riskUnit > 0 && closed.length ? Number((Math.max(...closed.map((t) => Number(t.pnl || 0))) / riskUnit).toFixed(2)) : 0;
-  const manualInterruptions = scopedItems.filter((it) => (it.action || "").toUpperCase() === "ORDER_CLOSE")
-    .filter((it) => {
-      const c = String(it.comment || "").toUpperCase();
-      return c && !c.includes("UST") && !c.includes("EA");
-    }).length;
-  const discipline = Math.max(0, Math.min(100, Math.round(100 - manualInterruptions * 5 - maxDd * 1.5)));
+  // Manual-vs-auto detection is not reliable from the Google Sheet feed, so it is no longer used
+  // for Battle Board scoring. We keep this field at 0 only for backwards compatibility with
+  // existing saved rows / database columns.
+  const manualInterruptions = 0;
+
+  // Battle health is now based on drawdown only, not assumed manual intervention.
+  // This prevents profitable markets from being failed because of ORDER_CLOSE records.
+  const discipline = Math.max(0, Math.min(100, Math.round(100 - maxDd)));
 
   const targetTrades = Number(base.targetTrades || 100);
   const accountBlown = startingCapital > 0 && equity <= 0;
@@ -256,19 +258,19 @@ function computeBattleStatsFromSheet(items: SheetItem[], base: BattleMarketRow, 
 
   // UST Market Challenge logic:
   // Failed only when the market has truly broken the survival rules.
-  // A market can be profitable and still fail if DD/discipline is unacceptable.
+  // Manual-vs-auto detection has been removed from the logic because the sheet feed
+  // cannot reliably identify whether a close was manual or automated.
   if (
     maxDd > 60 ||
-    discipline < 50 ||
     accountBlown ||
     (completedChallenge && profit < 0)
   ) {
     status = "Failed Challenge";
-  } else if (completedChallenge && profit > 0 && maxDd <= 60 && discipline >= 50) {
+  } else if (completedChallenge && profit > 0 && maxDd <= 60) {
     status = "Certified";
   } else if (maxDd >= 40 || profit < 0) {
     status = "Recovery Mode";
-  } else if (maxDd >= 25 || discipline < 80 || (trades >= 10 && winRate < 45)) {
+  } else if (maxDd >= 25 || (trades >= 10 && winRate < 45)) {
     status = "Under Pressure";
   }
 
@@ -1925,7 +1927,7 @@ function PageInner() {
           <div className="grid gap-4 lg:grid-cols-4">
             {battleRankedRows.map((m, idx) => {
               const progress = Math.min(100, Math.round((Number(m.trades || 0) / Math.max(1, Number(m.targetTrades || 100))) * 100));
-              const survival = Math.max(0, Math.min(100, Math.round((m.discipline || 0) - Math.max(0, m.maxDd || 0) - (m.manualInterruptions || 0) * 3 + (m.profit > 0 ? 8 : 0))));
+              const survival = Math.max(0, Math.min(100, Math.round((m.discipline || 0) - Math.max(0, m.maxDd || 0) + (m.profit > 0 ? 8 : 0))));
               return (
                 <div key={m.id} className="rounded-3xl border border-slate-700/80 bg-gradient-to-b from-slate-950 to-slate-900 p-4 shadow-xl shadow-black/20">
                   <div className="flex items-start justify-between gap-3">
@@ -1970,11 +1972,11 @@ function PageInner() {
             <div className="overflow-x-auto">
               <table className="w-full min-w-[920px] text-left text-sm">
                 <thead className="bg-slate-900/80 text-xs uppercase tracking-wide text-slate-400">
-                  <tr><th className="px-3 py-3">Market</th><th className="px-3 py-3">Trades</th><th className="px-3 py-3">Profit</th><th className="px-3 py-3">Win %</th><th className="px-3 py-3">Avg R</th><th className="px-3 py-3">PF</th><th className="px-3 py-3">DD %</th><th className="px-3 py-3">Discipline</th><th className="px-3 py-3">Manual</th><th className="px-3 py-3">Status</th></tr>
+                  <tr><th className="px-3 py-3">Market</th><th className="px-3 py-3">Trades</th><th className="px-3 py-3">Profit</th><th className="px-3 py-3">Win %</th><th className="px-3 py-3">Avg R</th><th className="px-3 py-3">PF</th><th className="px-3 py-3">DD %</th><th className="px-3 py-3">Health</th><th className="px-3 py-3">Status</th></tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800">
                   {battleRankedRows.map((m) => (
-                    <tr key={m.id} className="text-slate-200"><td className="px-3 py-3 font-bold text-white">{m.market}</td><td className="px-3 py-3">{m.trades}/{m.targetTrades}</td><td className={`px-3 py-3 font-bold ${m.profit >= 0 ? "text-emerald-300" : "text-rose-300"}`}>{currency(m.profit)}</td><td className="px-3 py-3">{fmt(m.winRate)}%</td><td className="px-3 py-3">{fmt(m.avgR)}R</td><td className="px-3 py-3">{fmt(m.profitFactor)}</td><td className="px-3 py-3 text-amber-300">{fmt(m.maxDd)}%</td><td className="px-3 py-3">{m.discipline}/100</td><td className="px-3 py-3">{m.manualInterruptions}</td><td className="px-3 py-3"><span className={`rounded-full border px-2 py-1 text-xs font-bold ${BATTLE_STATUS_STYLES[m.status] || BATTLE_STATUS_STYLES.Stable}`}>{m.status}</span></td></tr>
+                    <tr key={m.id} className="text-slate-200"><td className="px-3 py-3 font-bold text-white">{m.market}</td><td className="px-3 py-3">{m.trades}/{m.targetTrades}</td><td className={`px-3 py-3 font-bold ${m.profit >= 0 ? "text-emerald-300" : "text-rose-300"}`}>{currency(m.profit)}</td><td className="px-3 py-3">{fmt(m.winRate)}%</td><td className="px-3 py-3">{fmt(m.avgR)}R</td><td className="px-3 py-3">{fmt(m.profitFactor)}</td><td className="px-3 py-3 text-amber-300">{fmt(m.maxDd)}%</td><td className="px-3 py-3">{m.discipline}/100</td><td className="px-3 py-3"><span className={`rounded-full border px-2 py-1 text-xs font-bold ${BATTLE_STATUS_STYLES[m.status] || BATTLE_STATUS_STYLES.Stable}`}>{m.status}</span></td></tr>
                   ))}
                 </tbody>
               </table>
@@ -1999,7 +2001,7 @@ function PageInner() {
               </div>
 
               <div className="mb-4 rounded-2xl border border-sky-400/20 bg-sky-500/10 p-3 text-xs leading-5 text-sky-100">
-                Auto-derived stats: trades completed, profit for selected period, win rate, drawdown, profit factor, average R estimate, best runner estimate, manual interruptions, discipline score and market status. R estimates use 1% of starting capital as the risk unit. Private account names/numbers are used only for fetching data and are not shown on the public board.
+                Auto-derived stats: trades completed, profit for selected period, win rate, drawdown, profit factor, average R estimate, best runner estimate, market health score and market status. R estimates use 1% of starting capital as the risk unit. Private account names/numbers are used only for fetching data and are not shown on the public board.
               </div>
 
 
