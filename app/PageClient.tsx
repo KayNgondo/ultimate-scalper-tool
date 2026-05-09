@@ -2216,12 +2216,12 @@ function PageInner() {
             </div>
           )}
 
-          <div className="grid gap-4 lg:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {battleRankedRows.map((m, idx) => {
               const progress = Math.min(100, Math.round((Number(m.trades || 0) / Math.max(1, Number(m.targetTrades || 100))) * 100));
               const survival = Math.max(0, Math.min(100, Math.round((m.discipline || 0) - Math.max(0, m.maxDd || 0) + (m.profit > 0 ? 8 : 0))));
               return (
-                <div key={m.id} className="rounded-3xl border border-slate-700/80 bg-gradient-to-b from-slate-950 to-slate-900 p-4 shadow-xl shadow-black/20">
+                <div key={m.id} className="rounded-3xl border border-slate-700/80 bg-gradient-to-b from-slate-950 to-slate-900 p-3 shadow-xl shadow-black/20 md:p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="text-xs font-black uppercase tracking-[0.22em] text-[#F6C945]">Rank #{idx + 1}</div>
@@ -2236,7 +2236,7 @@ function PageInner() {
                   </div>
                   <div className="mt-1 flex justify-between text-xs text-slate-400"><span>{m.trades}/{m.targetTrades} trades</span><span>{progress}%</span></div>
 
-                  <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
+                  <div className="mt-4 grid grid-cols-2 gap-2 text-xs sm:text-sm">
                     <div className="rounded-2xl border border-slate-800 bg-black/25 p-3"><div className="text-xs text-slate-400">Profit</div><div className={`font-black ${m.profit >= 0 ? "text-emerald-300" : "text-rose-300"}`}>{currency(m.profit)}</div></div>
                     <div className="rounded-2xl border border-slate-800 bg-black/25 p-3"><div className="text-xs text-slate-400">Win Rate</div><div className="font-black text-white">{fmt(m.winRate)}%</div></div>
                     <div className="rounded-2xl border border-slate-800 bg-black/25 p-3"><div className="text-xs text-slate-400">Max DD</div><div className="font-black text-amber-300">{fmt(m.maxDd)}%</div></div>
@@ -2266,7 +2266,26 @@ function PageInner() {
                 {isAdmin && <Button type="button" onClick={() => void publishBattleBoard()} disabled={battleSaving}>{battleSaving ? "Publishing..." : "Publish Battle Board"}</Button>}
               </div>
             </div>
-            <div className="overflow-x-auto">
+            <div className="grid gap-3 md:hidden">
+              {battleRankedRows.map((m) => (
+                <div key={m.id} className="rounded-2xl border border-slate-800 bg-black/25 p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="text-base font-black text-white">{m.market}</div>
+                      <div className="text-xs text-slate-400">{m.trades}/{m.targetTrades} trades • Health {m.discipline}/100</div>
+                    </div>
+                    <span className={`rounded-full border px-2 py-1 text-[10px] font-bold ${BATTLE_STATUS_STYLES[m.status] || BATTLE_STATUS_STYLES.Stable}`}>{m.status}</span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                    <div className="rounded-xl bg-slate-900/70 p-2"><div className="text-slate-400">Profit</div><div className={`text-sm font-black ${m.profit >= 0 ? "text-emerald-300" : "text-rose-300"}`}>{currency(m.profit)}</div></div>
+                    <div className="rounded-xl bg-slate-900/70 p-2"><div className="text-slate-400">Win %</div><div className="text-sm font-black text-white">{fmt(m.winRate)}%</div></div>
+                    <div className="rounded-xl bg-slate-900/70 p-2"><div className="text-slate-400">PF / Avg R</div><div className="text-sm font-black text-white">{fmt(m.profitFactor)} / {fmt(m.avgR)}R</div></div>
+                    <div className="rounded-xl bg-slate-900/70 p-2"><div className="text-slate-400">Drawdown</div><div className="text-sm font-black text-amber-300">{fmt(m.maxDd)}%</div></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="hidden overflow-x-auto md:block">
               <table className="w-full min-w-[920px] text-left text-sm">
                 <thead className="bg-slate-900/80 text-xs uppercase tracking-wide text-slate-400">
                   <tr><th className="px-3 py-3">Market</th><th className="px-3 py-3">Trades</th><th className="px-3 py-3">Profit</th><th className="px-3 py-3">Win %</th><th className="px-3 py-3">Avg R</th><th className="px-3 py-3">PF</th><th className="px-3 py-3">DD %</th><th className="px-3 py-3">Health</th><th className="px-3 py-3">Status</th></tr>
@@ -2280,7 +2299,7 @@ function PageInner() {
             </div>
           </div>
 
-          <div className="rounded-3xl border border-slate-800/90 bg-slate-950/80 p-4 shadow-xl shadow-black/20">
+          <div className="rounded-3xl border border-slate-800/90 bg-slate-950/80 p-3 shadow-xl shadow-black/20 md:p-4">
             <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
                 <h3 className="text-xl font-black text-white">Trade Explorer</h3>
@@ -2311,7 +2330,20 @@ function PageInner() {
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="rounded-2xl border border-slate-800 bg-black/20 p-3">
                 <div className="mb-2 text-sm font-black uppercase tracking-wide text-[#F6C945]">Setup Grade Analytics</div>
-                <div className="overflow-x-auto">
+                <div className="grid gap-2 md:hidden">
+                  {(battleGradeStats.length ? battleGradeStats : [{ label: "No data", trades: 0, profit: 0, winRate: 0, profitFactor: 0, avgR: 0 }]).map((g) => (
+                    <div key={g.label} className="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
+                      <div className="flex items-start justify-between gap-2"><div className="font-black text-white">{g.label}</div><div className={g.profit >= 0 ? "font-black text-emerald-300" : "font-black text-rose-300"}>{currency(g.profit)}</div></div>
+                      <div className="mt-2 grid grid-cols-4 gap-2 text-center text-xs">
+                        <div><div className="text-slate-500">Trades</div><div className="font-bold text-sky-100">{g.trades}</div></div>
+                        <div><div className="text-slate-500">Win</div><div className="font-bold text-sky-100">{fmt(g.winRate)}%</div></div>
+                        <div><div className="text-slate-500">PF</div><div className="font-bold text-sky-100">{fmt(g.profitFactor)}</div></div>
+                        <div><div className="text-slate-500">Avg R</div><div className="font-bold text-sky-100">{fmt(g.avgR)}R</div></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="hidden overflow-x-auto md:block">
                   <table className="w-full text-sm">
                     <thead className="bg-slate-900/80 text-xs uppercase text-slate-400">
                       <tr><th className="px-3 py-2 text-left">Grade</th><th className="px-3 py-2 text-left">Trades</th><th className="px-3 py-2 text-left">Profit</th><th className="px-3 py-2 text-left">Win %</th><th className="px-3 py-2 text-left">PF</th><th className="px-3 py-2 text-left">Avg R</th></tr>
@@ -2334,7 +2366,20 @@ function PageInner() {
 
               <div className="rounded-2xl border border-slate-800 bg-black/20 p-3">
                 <div className="mb-2 text-sm font-black uppercase tracking-wide text-[#F6C945]">Session Intelligence <span className="text-slate-400">(SAST)</span></div>
-                <div className="overflow-x-auto">
+                <div className="grid gap-2 md:hidden">
+                  {(battleSessionStats.length ? battleSessionStats : [{ label: "No data", trades: 0, profit: 0, winRate: 0, profitFactor: 0, avgR: 0 }]).map((g) => (
+                    <div key={g.label} className="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
+                      <div className="flex items-start justify-between gap-2"><div className="font-black text-white">{g.label}</div><div className={g.profit >= 0 ? "font-black text-emerald-300" : "font-black text-rose-300"}>{currency(g.profit)}</div></div>
+                      <div className="mt-2 grid grid-cols-4 gap-2 text-center text-xs">
+                        <div><div className="text-slate-500">Trades</div><div className="font-bold text-sky-100">{g.trades}</div></div>
+                        <div><div className="text-slate-500">Win</div><div className="font-bold text-sky-100">{fmt(g.winRate)}%</div></div>
+                        <div><div className="text-slate-500">PF</div><div className="font-bold text-sky-100">{fmt(g.profitFactor)}</div></div>
+                        <div><div className="text-slate-500">Avg R</div><div className="font-bold text-sky-100">{fmt(g.avgR)}R</div></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="hidden overflow-x-auto md:block">
                   <table className="w-full text-sm">
                     <thead className="bg-slate-900/80 text-xs uppercase text-slate-400">
                       <tr><th className="px-3 py-2 text-left">Session</th><th className="px-3 py-2 text-left">Trades</th><th className="px-3 py-2 text-left">Profit</th><th className="px-3 py-2 text-left">Win %</th><th className="px-3 py-2 text-left">PF</th><th className="px-3 py-2 text-left">Avg R</th></tr>
@@ -2362,7 +2407,23 @@ function PageInner() {
                 {battleExplorerLoading && <div className="text-xs text-slate-400">Loading trades...</div>}
               </div>
               <div className="max-h-[420px] overflow-auto">
-                <table className="w-full min-w-[860px] text-sm">
+                <div className="grid gap-2 md:hidden">
+                  {battleExplorerTrades.length ? battleExplorerTrades.slice(0, 60).map((t) => (
+                    <div key={t.id} className="rounded-xl border border-slate-800 bg-slate-900/60 p-3 text-xs">
+                      <div className="flex items-start justify-between gap-2">
+                        <div><div className="font-black text-white">{t.symbol} • {t.side}</div><div className="text-slate-400">{t.timestamp ? new Date(t.timestamp).toLocaleString() : "-"}</div></div>
+                        <div className={t.pnl >= 0 ? "text-right font-black text-emerald-300" : "text-right font-black text-rose-300"}>{currency(t.pnl)}<div>{fmt(t.r)}R</div></div>
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <span className="rounded-full bg-slate-800 px-2 py-1 text-sky-100">{t.session}</span>
+                        <span className="rounded-full bg-[#D4AF37]/15 px-2 py-1 font-bold text-[#F6C945]">{t.setupGrade}</span>
+                        <span className={t.result === "Win" ? "rounded-full bg-emerald-500/10 px-2 py-1 font-bold text-emerald-300" : t.result === "Loss" ? "rounded-full bg-rose-500/10 px-2 py-1 font-bold text-rose-300" : "rounded-full bg-slate-800 px-2 py-1 font-bold text-slate-300"}>{t.result}</span>
+                      </div>
+                      {t.comment && <div className="mt-2 line-clamp-2 text-slate-400">{t.comment}</div>}
+                    </div>
+                  )) : !battleExplorerLoading && <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 text-center text-sm text-slate-400">No closed trades loaded yet. Select a market above.</div>}
+                </div>
+                <table className="hidden w-full min-w-[860px] text-sm md:table">
                   <thead className="sticky top-0 bg-slate-900 text-xs uppercase text-slate-400">
                     <tr><th className="px-3 py-2 text-left">Time</th><th className="px-3 py-2 text-left">Session</th><th className="px-3 py-2 text-left">Grade</th><th className="px-3 py-2 text-left">Side</th><th className="px-3 py-2 text-left">Symbol</th><th className="px-3 py-2 text-left">Result</th><th className="px-3 py-2 text-left">Profit</th><th className="px-3 py-2 text-left">R</th><th className="px-3 py-2 text-left">Comment</th></tr>
                   </thead>
