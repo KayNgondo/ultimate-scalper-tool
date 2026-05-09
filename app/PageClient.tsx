@@ -106,6 +106,8 @@ type BattleMarketRow = {
   manualInterruptions: number;
   status: "Stable" | "Under Pressure" | "Recovery Mode" | "Failed Challenge" | "Certified";
   notes: string;
+  periodStart?: string;
+  periodEnd?: string;
 };
 
 const DEFAULT_BATTLE_ROWS: BattleMarketRow[] = [
@@ -204,8 +206,19 @@ function tradeUniqueKey(t: Partial<TradeRow>) {
   return `fallback:${roundedTs}|${symbol}|${pnl}|${notes}`;
 }
 
-function computeBattleStatsFromSheet(items: SheetItem[], base: BattleMarketRow): BattleMarketRow {
-  const closed = normalizeToTradeRows(items).sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0));
+function filterSheetItemsByPeriod(items: SheetItem[], start?: string, end?: string): SheetItem[] {
+  if (!start && !end) return items;
+  const startMs = start ? new Date(`${start}T00:00:00`).getTime() : Number.NEGATIVE_INFINITY;
+  const endMs = end ? new Date(`${end}T23:59:59.999`).getTime() : Number.POSITIVE_INFINITY;
+  return items.filter((it) => {
+    const ts = it.timestamp ? new Date(it.timestamp).getTime() : NaN;
+    return Number.isFinite(ts) && ts >= startMs && ts <= endMs;
+  });
+}
+
+function computeBattleStatsFromSheet(items: SheetItem[], base: BattleMarketRow, periodStart?: string, periodEnd?: string): BattleMarketRow {
+  const scopedItems = filterSheetItemsByPeriod(items, periodStart, periodEnd);
+  const closed = normalizeToTradeRows(scopedItems).sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0));
   const trades = closed.length;
   const profit = Number(closed.reduce((sum, t) => sum + Number(t.pnl || 0), 0).toFixed(2));
   const wins = closed.filter((t) => Number(t.pnl || 0) > 0).length;
@@ -228,7 +241,7 @@ function computeBattleStatsFromSheet(items: SheetItem[], base: BattleMarketRow):
   const riskUnit = startingCapital > 0 ? startingCapital * 0.01 : 0;
   const avgR = riskUnit > 0 && trades ? Number(((profit / trades) / riskUnit).toFixed(2)) : 0;
   const bestRunnerR = riskUnit > 0 && closed.length ? Number((Math.max(...closed.map((t) => Number(t.pnl || 0))) / riskUnit).toFixed(2)) : 0;
-  const manualInterruptions = items.filter((it) => (it.action || "").toUpperCase() === "ORDER_CLOSE")
+  const manualInterruptions = scopedItems.filter((it) => (it.action || "").toUpperCase() === "ORDER_CLOSE")
     .filter((it) => {
       const c = String(it.comment || "").toUpperCase();
       return c && !c.includes("UST") && !c.includes("EA");
@@ -253,6 +266,8 @@ function computeBattleStatsFromSheet(items: SheetItem[], base: BattleMarketRow):
     discipline,
     manualInterruptions,
     status,
+    periodStart,
+    periodEnd,
   };
 }
 
@@ -1142,6 +1157,8 @@ function PageInner() {
   const [battleSyncing, setBattleSyncing] = useState<string | null>(null);
   const [battleError, setBattleError] = useState<string | null>(null);
   const [battleUpdatedAt, setBattleUpdatedAt] = useState<string>("");
+  const [battlePeriodStart, setBattlePeriodStart] = useState<string>("");
+  const [battlePeriodEnd, setBattlePeriodEnd] = useState<string>("");
 
   const normalizeBattleRow = (row: any, fallback?: BattleMarketRow): BattleMarketRow => ({
     id: String(row?.id ?? fallback?.id ?? crypto.randomUUID()),
@@ -1160,6 +1177,8 @@ function PageInner() {
     manualInterruptions: Number(row?.manual_interruptions ?? row?.manualInterruptions ?? fallback?.manualInterruptions ?? 0),
     status: (row?.status ?? fallback?.status ?? "Stable") as BattleMarketRow["status"],
     notes: String(row?.notes ?? fallback?.notes ?? ""),
+    periodStart: String(row?.period_start ?? row?.periodStart ?? fallback?.periodStart ?? ""),
+    periodEnd: String(row?.period_end ?? row?.periodEnd ?? fallback?.periodEnd ?? ""),
   });
 
   const loadBattleBoard = useCallback(async () => {
@@ -1177,6 +1196,8 @@ function PageInner() {
         setBattleDraftRows(rows);
         const latest = data.map((r: any) => r.updated_at).filter(Boolean).sort().pop();
         if (latest) setBattleUpdatedAt(new Date(latest).toLocaleString());
+        const periodRow = data.find((r: any) => r.period_start || r.period_end);
+        if (periodRow) { setBattlePeriodStart(periodRow.period_start || ""); setBattlePeriodEnd(periodRow.period_end || ""); }
       } else {
         setBattleRows(DEFAULT_BATTLE_ROWS);
         setBattleDraftRows(DEFAULT_BATTLE_ROWS);
@@ -1212,11 +1233,13 @@ function PageInner() {
         manual_interruptions: Number(r.manualInterruptions || 0),
         status: r.status,
         notes: r.notes,
+        period_start: battlePeriodStart || null,
+        period_end: battlePeriodEnd || null,
         updated_at: new Date().toISOString(),
       }));
       let { error } = await supabase.from(BATTLE_TABLE).upsert(payload, { onConflict: "id" });
       if (error && String(error.message || "").toLowerCase().includes("starting_capital")) {
-        const fallbackPayload = payload.map(({ starting_capital, ...rest }) => rest);
+        const fallbackPayload = payload.map(({ starting_capital, period_start, period_end, ...rest }) => rest);
         const retry = await supabase.from(BATTLE_TABLE).upsert(fallbackPayload, { onConflict: "id" });
         error = retry.error;
       }
@@ -1230,7 +1253,7 @@ function PageInner() {
     } finally {
       setBattleSaving(false);
     }
-  }, [battleDraftRows, isAdmin, loadBattleBoard, push]);
+  }, [battleDraftRows, battlePeriodStart, battlePeriodEnd, isAdmin, loadBattleBoard, push]);
 
   useEffect(() => { void loadBattleBoard(); }, [loadBattleBoard]);
   const syncBattleMarket = useCallback(async (idx: number) => {
@@ -1240,13 +1263,13 @@ function PageInner() {
     setBattleSyncing(base.id);
     setBattleError(null);
     try {
-      const url = buildSheetsUrl(base.account);
+      const url = buildSheetsUrl(base.account, battlePeriodStart || undefined);
       if (!url) throw new Error("Google Sheet connection is missing. Check SHEETS_WEBAPP_URL and READ_TOKEN.");
       const res = await fetch(url, { cache: "no-store" });
       if (!res.ok) throw new Error(`Sheet import failed for ${base.account}.`);
       const json = await res.json();
       const items: SheetItem[] = Array.isArray(json) ? json : Array.isArray(json?.items) ? json.items : Array.isArray(json?.data) ? json.data : [];
-      const calculated = computeBattleStatsFromSheet(items, base);
+      const calculated = computeBattleStatsFromSheet(items, base, battlePeriodStart || undefined, battlePeriodEnd || undefined);
       setBattleDraftRows((prev) => prev.map((r, i) => i === idx ? calculated : r));
       push({ title: "Market stats calculated", desc: `${base.account} updated from Google Sheet closed trades.` });
     } catch (e: any) {
@@ -1254,7 +1277,7 @@ function PageInner() {
     } finally {
       setBattleSyncing(null);
     }
-  }, [battleDraftRows, isAdmin, push]);
+  }, [battleDraftRows, battlePeriodStart, battlePeriodEnd, isAdmin, push]);
 
   const syncAllBattleMarkets = useCallback(async () => {
     if (!isAdmin) return;
@@ -1857,16 +1880,17 @@ function PageInner() {
                   Four live markets. One race to 100 trades. The goal is not hype — it is survival, discipline, drawdown control and repeatable performance.
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold text-slate-300">
-                  <span className="rounded-full border border-slate-700 bg-slate-950/60 px-3 py-1">Kuda_Gold</span>
-                  <span className="rounded-full border border-slate-700 bg-slate-950/60 px-3 py-1">Kuda_Silver</span>
-                  <span className="rounded-full border border-slate-700 bg-slate-950/60 px-3 py-1">Kuda_Nasdaq</span>
-                  <span className="rounded-full border border-slate-700 bg-slate-950/60 px-3 py-1">Kuda_US30</span>
+                  <span className="rounded-full border border-slate-700 bg-slate-950/60 px-3 py-1">Gold</span>
+                  <span className="rounded-full border border-slate-700 bg-slate-950/60 px-3 py-1">Silver</span>
+                  <span className="rounded-full border border-slate-700 bg-slate-950/60 px-3 py-1">Nasdaq</span>
+                  <span className="rounded-full border border-slate-700 bg-slate-950/60 px-3 py-1">US30</span>
                 </div>
               </div>
               <div className="rounded-2xl border border-[#D4AF37]/30 bg-black/30 p-4 text-sm text-slate-300 md:min-w-[260px]">
                 <div className="font-black uppercase tracking-wide text-[#F6C945]">Weekly Published Board</div>
                 <div className="mt-2 text-xs leading-5">Only the admin account can publish updates. Everyone else can view the same board.</div>
-                <div className="mt-3 text-xs text-slate-400">Last update: {battleUpdatedAt || "Not published yet"}</div>
+                <div className="mt-3 text-xs text-slate-400">Period: {battlePeriodStart || "Start"} → {battlePeriodEnd || "Today"}</div>
+                <div className="mt-1 text-xs text-slate-400">Last update: {battleUpdatedAt || "Not published yet"}</div>
                 <Button type="button" variant="outline" className="mt-3 w-full" onClick={() => void loadBattleBoard()} disabled={battleLoading}>
                   <RefreshCw className="mr-2 h-4 w-4" /> Refresh Board
                 </Button>
@@ -1889,8 +1913,8 @@ function PageInner() {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="text-xs font-black uppercase tracking-[0.22em] text-[#F6C945]">Rank #{idx + 1}</div>
-                      <h3 className="mt-1 text-xl font-black text-white">{m.account}</h3>
-                      <p className="text-xs font-semibold text-slate-400">{m.market} • Road to {m.targetTrades}</p>
+                      <h3 className="mt-1 text-xl font-black text-white">{m.market}</h3>
+                      <p className="text-xs font-semibold text-slate-400">Road to {m.targetTrades} trades</p>
                     </div>
                     <span className={`rounded-full border px-2.5 py-1 text-[10px] font-black ${BATTLE_STATUS_STYLES[m.status] || BATTLE_STATUS_STYLES.Stable}`}>{m.status}</span>
                   </div>
@@ -1932,7 +1956,7 @@ function PageInner() {
                 </thead>
                 <tbody className="divide-y divide-slate-800">
                   {battleRankedRows.map((m) => (
-                    <tr key={m.id} className="text-slate-200"><td className="px-3 py-3 font-bold text-white">{m.account}</td><td className="px-3 py-3">{m.trades}/{m.targetTrades}</td><td className={`px-3 py-3 font-bold ${m.profit >= 0 ? "text-emerald-300" : "text-rose-300"}`}>{currency(m.profit)}</td><td className="px-3 py-3">{fmt(m.winRate)}%</td><td className="px-3 py-3">{fmt(m.avgR)}R</td><td className="px-3 py-3">{fmt(m.profitFactor)}</td><td className="px-3 py-3 text-amber-300">{fmt(m.maxDd)}%</td><td className="px-3 py-3">{m.discipline}/100</td><td className="px-3 py-3">{m.manualInterruptions}</td><td className="px-3 py-3"><span className={`rounded-full border px-2 py-1 text-xs font-bold ${BATTLE_STATUS_STYLES[m.status] || BATTLE_STATUS_STYLES.Stable}`}>{m.status}</span></td></tr>
+                    <tr key={m.id} className="text-slate-200"><td className="px-3 py-3 font-bold text-white">{m.market}</td><td className="px-3 py-3">{m.trades}/{m.targetTrades}</td><td className={`px-3 py-3 font-bold ${m.profit >= 0 ? "text-emerald-300" : "text-rose-300"}`}>{currency(m.profit)}</td><td className="px-3 py-3">{fmt(m.winRate)}%</td><td className="px-3 py-3">{fmt(m.avgR)}R</td><td className="px-3 py-3">{fmt(m.profitFactor)}</td><td className="px-3 py-3 text-amber-300">{fmt(m.maxDd)}%</td><td className="px-3 py-3">{m.discipline}/100</td><td className="px-3 py-3">{m.manualInterruptions}</td><td className="px-3 py-3"><span className={`rounded-full border px-2 py-1 text-xs font-bold ${BATTLE_STATUS_STYLES[m.status] || BATTLE_STATUS_STYLES.Stable}`}>{m.status}</span></td></tr>
                   ))}
                 </tbody>
               </table>
@@ -1944,7 +1968,7 @@ function PageInner() {
               <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div>
                   <h3 className="text-lg font-black text-white">Admin Auto Publisher</h3>
-                  <p className="text-sm text-slate-400">Enter only the market name, MT5 account name/number and starting capital. Click Calculate from Sheet, then Publish.</p>
+                  <p className="text-sm text-slate-400">Enter market display name, private MT5 account name/number, starting capital and the date range. Click Calculate from Sheet, then Publish.</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Button type="button" variant="outline" onClick={() => void syncAllBattleMarkets()} disabled={!!battleSyncing}>
@@ -1957,14 +1981,28 @@ function PageInner() {
               </div>
 
               <div className="mb-4 rounded-2xl border border-sky-400/20 bg-sky-500/10 p-3 text-xs leading-5 text-sky-100">
-                Auto-derived stats: trades completed, weekly/all imported profit, win rate, drawdown, profit factor, average R estimate, best runner estimate, manual interruptions, discipline score and market status. R estimates use 1% of starting capital as the risk unit.
+                Auto-derived stats: trades completed, profit for selected period, win rate, drawdown, profit factor, average R estimate, best runner estimate, manual interruptions, discipline score and market status. R estimates use 1% of starting capital as the risk unit. Private account names/numbers are used only for fetching data and are not shown on the public board.
+              </div>
+
+
+
+              <div className="mb-4 grid gap-3 rounded-2xl border border-[#D4AF37]/20 bg-black/20 p-3 md:grid-cols-2">
+                <div className="space-y-1">
+                  <Label className="text-xs text-slate-300">Battle Start Date</Label>
+                  <Input type="date" value={battlePeriodStart} onChange={(e) => setBattlePeriodStart(e.target.value)} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-slate-300">Battle End Date</Label>
+                  <Input type="date" value={battlePeriodEnd} onChange={(e) => setBattlePeriodEnd(e.target.value)} />
+                </div>
+                <div className="md:col-span-2 text-xs text-slate-400">Only trades closed inside this date range are used. Leave end date blank to calculate from start date until today.</div>
               </div>
 
               <div className="grid gap-4">
                 {battleDraftRows.map((m, i) => (
                   <div key={m.id} className="rounded-2xl border border-slate-800 bg-slate-900/50 p-4">
                     <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                      <div className="font-black text-[#F6C945]">{m.account || m.market}</div>
+                      <div className="font-black text-[#F6C945]">{m.market || "Market"}</div>
                       <Button type="button" size="sm" variant="outline" onClick={() => void syncBattleMarket(i)} disabled={!!battleSyncing}>
                         <RefreshCw className="mr-2 h-4 w-4" /> {battleSyncing === m.id ? "Calculating..." : "Calculate from Sheet"}
                       </Button>
@@ -1976,7 +2014,7 @@ function PageInner() {
                         <Input value={m.market} placeholder="Gold" onChange={(e) => setBattleDraftRows((prev) => prev.map((r, idx) => idx === i ? { ...r, market: e.target.value } : r))} />
                       </div>
                       <div className="space-y-1">
-                        <Label className="text-xs text-slate-300">Account Name / Number</Label>
+                        <Label className="text-xs text-slate-300">Private Account Name / Number</Label>
                         <Input value={m.account} placeholder="Kuda_Gold or 123456" onChange={(e) => setBattleDraftRows((prev) => prev.map((r, idx) => idx === i ? { ...r, account: e.target.value } : r))} />
                       </div>
                       <div className="space-y-1">
