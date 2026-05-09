@@ -127,6 +127,7 @@ const BATTLE_STATUS_STYLES: Record<BattleMarketRow["status"], string> = {
 
 type SheetItem = {
   timestamp?: string;
+  time?: string;
   account?: string;
   symbol?: string;
   action?: string; // ORDER_OPEN / ORDER_CLOSE
@@ -141,6 +142,9 @@ type SheetItem = {
   commission?: number | string;
   swap?: number | string;
   comment?: string;
+  setup_grade?: string;
+  grade?: string;
+  session?: string;
 };
 
 
@@ -214,6 +218,100 @@ function filterSheetItemsByPeriod(items: SheetItem[], start?: string, end?: stri
     const ts = it.timestamp ? new Date(it.timestamp).getTime() : NaN;
     return Number.isFinite(ts) && ts >= startMs && ts <= endMs;
   });
+}
+
+
+function getSastHour(timestamp?: string): number | null {
+  if (!timestamp) return null;
+  const d = new Date(timestamp);
+  if (Number.isNaN(d.getTime())) return null;
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Africa/Johannesburg",
+    hour: "2-digit",
+    hour12: false,
+  }).formatToParts(d);
+  const hour = Number(parts.find((p) => p.type === "hour")?.value ?? NaN);
+  return Number.isFinite(hour) ? hour : null;
+}
+
+function getSessionFromTimestamp(timestamp?: string): string {
+  const hour = getSastHour(timestamp);
+  if (hour === null) return "Unknown";
+  if (hour >= 0 && hour < 8) return "Asia";
+  if (hour >= 8 && hour < 15) return "London";
+  if (hour >= 15 && hour < 22) return "New York";
+  return "Late NY";
+}
+
+function extractSetupGrade(item: SheetItem): string {
+  const direct = String(item.setup_grade || item.grade || "").trim().toUpperCase();
+  if (["A+", "A", "B", "C", "D"].includes(direct)) return direct;
+  const comment = String(item.comment || "").toUpperCase();
+  const match = comment.match(/(?:GRADE|SETUP|UST)[_\s:-]*(A\+|A|B|C|D)\b|\b(A\+|A|B|C|D)[_\s-]*(?:SETUP|GRADE)\b/);
+  return match ? (match[1] || match[2] || "Unknown") : "Unknown";
+}
+
+type BattleExplorerTrade = {
+  id: string;
+  timestamp: string;
+  session: string;
+  setupGrade: string;
+  side: string;
+  symbol: string;
+  pnl: number;
+  r: number;
+  result: "Win" | "Loss" | "BE";
+  comment: string;
+};
+
+type BattleStatGroup = { label: string; trades: number; profit: number; winRate: number; profitFactor: number; avgR: number };
+
+function groupBattleTrades(trades: BattleExplorerTrade[], key: "setupGrade" | "session"): BattleStatGroup[] {
+  const map = new Map<string, BattleExplorerTrade[]>();
+  for (const t of trades) {
+    const label = String(t[key] || "Unknown");
+    map.set(label, [...(map.get(label) || []), t]);
+  }
+  return Array.from(map.entries()).map(([label, rows]) => {
+    const wins = rows.filter((r) => r.pnl > 0).length;
+    const grossProfit = rows.filter((r) => r.pnl > 0).reduce((sum, r) => sum + r.pnl, 0);
+    const grossLoss = Math.abs(rows.filter((r) => r.pnl < 0).reduce((sum, r) => sum + r.pnl, 0));
+    return {
+      label,
+      trades: rows.length,
+      profit: Number(rows.reduce((sum, r) => sum + r.pnl, 0).toFixed(2)),
+      winRate: rows.length ? Number(((wins / rows.length) * 100).toFixed(1)) : 0,
+      profitFactor: grossLoss > 0 ? Number((grossProfit / grossLoss).toFixed(2)) : grossProfit > 0 ? 99 : 0,
+      avgR: rows.length ? Number((rows.reduce((sum, r) => sum + r.r, 0) / rows.length).toFixed(2)) : 0,
+    };
+  }).sort((a, b) => b.profit - a.profit);
+}
+
+function buildBattleExplorerTrades(items: SheetItem[], base: BattleMarketRow, periodStart?: string, periodEnd?: string): BattleExplorerTrade[] {
+  const scopedItems = filterSheetItemsByPeriod(items, periodStart, periodEnd);
+  const riskUnit = Number(base.startingCapital || 0) > 0 ? Number(base.startingCapital || 0) * 0.01 : 0;
+  return scopedItems
+    .filter((it) => (it.action || "").toUpperCase() === "ORDER_CLOSE")
+    .map((it) => {
+      const profit = Number(it.profit || 0);
+      const commission = Number(it.commission || 0);
+      const swap = Number(it.swap || 0);
+      const pnl = Number((profit - commission - swap).toFixed(2));
+      const r = riskUnit > 0 ? Number((pnl / riskUnit).toFixed(2)) : 0;
+      return {
+        id: String(it.deal_ticket || it.order_ticket || `${it.timestamp}-${it.symbol}-${pnl}`),
+        timestamp: String(it.timestamp || it.time || ""),
+        session: String(it.session || getSessionFromTimestamp(it.timestamp || it.time)),
+        setupGrade: extractSetupGrade(it),
+        side: String(it.side || ""),
+        symbol: String(it.symbol || ""),
+        pnl,
+        r,
+        result: pnl > 0 ? "Win" : pnl < 0 ? "Loss" : "BE",
+        comment: String(it.comment || ""),
+      } as BattleExplorerTrade;
+    })
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 }
 
 function computeBattleStatsFromSheet(items: SheetItem[], base: BattleMarketRow, periodStart?: string, periodEnd?: string): BattleMarketRow {
@@ -1179,6 +1277,10 @@ function PageInner() {
   const [battleUpdatedAt, setBattleUpdatedAt] = useState<string>("");
   const [battlePeriodStart, setBattlePeriodStart] = useState<string>("");
   const [battlePeriodEnd, setBattlePeriodEnd] = useState<string>("");
+  const [battleExplorerMarketId, setBattleExplorerMarketId] = useState<string>(DEFAULT_BATTLE_ROWS[0]?.id || "");
+  const [battleExplorerTrades, setBattleExplorerTrades] = useState<BattleExplorerTrade[]>([]);
+  const [battleExplorerLoading, setBattleExplorerLoading] = useState(false);
+  const [battleExplorerError, setBattleExplorerError] = useState<string | null>(null);
 
   const normalizeBattleRow = (row: any, fallback?: BattleMarketRow): BattleMarketRow => ({
     id: String(row?.id ?? fallback?.id ?? crypto.randomUUID()),
@@ -1306,6 +1408,36 @@ function PageInner() {
     }
   }, [battleDraftRows.length, isAdmin, syncBattleMarket]);
 
+
+
+  const loadBattleTradeExplorer = useCallback(async (marketId?: string) => {
+    const selected = battleRows.find((r) => r.id === (marketId || battleExplorerMarketId)) || battleRows[0];
+    if (!selected?.account) return;
+    setBattleExplorerMarketId(selected.id);
+    setBattleExplorerLoading(true);
+    setBattleExplorerError(null);
+    try {
+      const url = buildSheetsUrl(selected.account, battlePeriodStart || selected.periodStart || undefined);
+      if (!url) throw new Error("Google Sheet connection is missing. Check SHEETS_WEBAPP_URL and READ_TOKEN.");
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) throw new Error(`Could not load trade explorer for ${selected.market}.`);
+      const json = await res.json();
+      const items: SheetItem[] = Array.isArray(json) ? json : Array.isArray(json?.items) ? json.items : Array.isArray(json?.data) ? json.data : [];
+      setBattleExplorerTrades(buildBattleExplorerTrades(items, selected, battlePeriodStart || selected.periodStart || undefined, battlePeriodEnd || selected.periodEnd || undefined));
+    } catch (e: any) {
+      setBattleExplorerError(e?.message || "Could not load Trade Explorer.");
+      setBattleExplorerTrades([]);
+    } finally {
+      setBattleExplorerLoading(false);
+    }
+  }, [battleRows, battleExplorerMarketId, battlePeriodStart, battlePeriodEnd]);
+
+  useEffect(() => {
+    if (battleRows.length && !battleExplorerTrades.length) void loadBattleTradeExplorer(battleRows[0].id);
+  }, [battleRows.length]);
+
+  const battleGradeStats = useMemo(() => groupBattleTrades(battleExplorerTrades, "setupGrade"), [battleExplorerTrades]);
+  const battleSessionStats = useMemo(() => groupBattleTrades(battleExplorerTrades, "session"), [battleExplorerTrades]);
 
   const battleRankedRows = useMemo(() => {
     return [...battleRows].sort((a, b) => {
@@ -1980,6 +2112,104 @@ function PageInner() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-slate-800/90 bg-slate-950/80 p-4 shadow-xl shadow-black/20">
+            <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <h3 className="text-xl font-black text-white">Trade Explorer</h3>
+                <p className="text-sm text-slate-400">Open the trades behind each market, then analyse setup grades and sessions.</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {battleRows.map((m) => (
+                  <Button key={m.id} type="button" size="sm" variant={battleExplorerMarketId === m.id ? "default" : "outline"} onClick={() => void loadBattleTradeExplorer(m.id)}>
+                    {m.market}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            {battleExplorerError && <div className="mb-3 rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-200">{battleExplorerError}</div>}
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="rounded-2xl border border-slate-800 bg-black/20 p-3">
+                <div className="mb-2 text-sm font-black uppercase tracking-wide text-[#F6C945]">Setup Grade Analytics</div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-900/80 text-xs uppercase text-slate-400">
+                      <tr><th className="px-3 py-2 text-left">Grade</th><th className="px-3 py-2 text-left">Trades</th><th className="px-3 py-2 text-left">Profit</th><th className="px-3 py-2 text-left">Win %</th><th className="px-3 py-2 text-left">PF</th><th className="px-3 py-2 text-left">Avg R</th></tr>
+                    </thead>
+                    <tbody>
+                      {(battleGradeStats.length ? battleGradeStats : [{ label: "No data", trades: 0, profit: 0, winRate: 0, profitFactor: 0, avgR: 0 }]).map((g) => (
+                        <tr key={g.label} className="border-t border-slate-800">
+                          <td className="px-3 py-2 font-black text-white">{g.label}</td>
+                          <td className="px-3 py-2 text-sky-100">{g.trades}</td>
+                          <td className={g.profit >= 0 ? "px-3 py-2 font-bold text-emerald-300" : "px-3 py-2 font-bold text-rose-300"}>{currency(g.profit)}</td>
+                          <td className="px-3 py-2 text-sky-100">{fmt(g.winRate)}%</td>
+                          <td className="px-3 py-2 text-sky-100">{fmt(g.profitFactor)}</td>
+                          <td className="px-3 py-2 text-sky-100">{fmt(g.avgR)}R</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-800 bg-black/20 p-3">
+                <div className="mb-2 text-sm font-black uppercase tracking-wide text-[#F6C945]">Session Intelligence <span className="text-slate-400">(SAST)</span></div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-900/80 text-xs uppercase text-slate-400">
+                      <tr><th className="px-3 py-2 text-left">Session</th><th className="px-3 py-2 text-left">Trades</th><th className="px-3 py-2 text-left">Profit</th><th className="px-3 py-2 text-left">Win %</th><th className="px-3 py-2 text-left">PF</th><th className="px-3 py-2 text-left">Avg R</th></tr>
+                    </thead>
+                    <tbody>
+                      {(battleSessionStats.length ? battleSessionStats : [{ label: "No data", trades: 0, profit: 0, winRate: 0, profitFactor: 0, avgR: 0 }]).map((g) => (
+                        <tr key={g.label} className="border-t border-slate-800">
+                          <td className="px-3 py-2 font-black text-white">{g.label}</td>
+                          <td className="px-3 py-2 text-sky-100">{g.trades}</td>
+                          <td className={g.profit >= 0 ? "px-3 py-2 font-bold text-emerald-300" : "px-3 py-2 font-bold text-rose-300"}>{currency(g.profit)}</td>
+                          <td className="px-3 py-2 text-sky-100">{fmt(g.winRate)}%</td>
+                          <td className="px-3 py-2 text-sky-100">{fmt(g.profitFactor)}</td>
+                          <td className="px-3 py-2 text-sky-100">{fmt(g.avgR)}R</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-slate-800 bg-black/20 p-3">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <div className="text-sm font-black uppercase tracking-wide text-[#F6C945]">Recent Closed Trades</div>
+                {battleExplorerLoading && <div className="text-xs text-slate-400">Loading trades...</div>}
+              </div>
+              <div className="max-h-[420px] overflow-auto">
+                <table className="w-full min-w-[860px] text-sm">
+                  <thead className="sticky top-0 bg-slate-900 text-xs uppercase text-slate-400">
+                    <tr><th className="px-3 py-2 text-left">Time</th><th className="px-3 py-2 text-left">Session</th><th className="px-3 py-2 text-left">Grade</th><th className="px-3 py-2 text-left">Side</th><th className="px-3 py-2 text-left">Symbol</th><th className="px-3 py-2 text-left">Result</th><th className="px-3 py-2 text-left">Profit</th><th className="px-3 py-2 text-left">R</th><th className="px-3 py-2 text-left">Comment</th></tr>
+                  </thead>
+                  <tbody>
+                    {(battleExplorerTrades.length ? battleExplorerTrades.slice(0, 150) : []).map((t) => (
+                      <tr key={t.id} className="border-t border-slate-800">
+                        <td className="px-3 py-2 text-slate-300">{t.timestamp ? new Date(t.timestamp).toLocaleString() : "-"}</td>
+                        <td className="px-3 py-2 text-sky-100">{t.session}</td>
+                        <td className="px-3 py-2 font-black text-[#F6C945]">{t.setupGrade}</td>
+                        <td className="px-3 py-2 text-sky-100">{t.side}</td>
+                        <td className="px-3 py-2 text-sky-100">{t.symbol}</td>
+                        <td className={t.result === "Win" ? "px-3 py-2 font-bold text-emerald-300" : t.result === "Loss" ? "px-3 py-2 font-bold text-rose-300" : "px-3 py-2 font-bold text-slate-300"}>{t.result}</td>
+                        <td className={t.pnl >= 0 ? "px-3 py-2 font-bold text-emerald-300" : "px-3 py-2 font-bold text-rose-300"}>{currency(t.pnl)}</td>
+                        <td className={t.r >= 0 ? "px-3 py-2 font-bold text-emerald-300" : "px-3 py-2 font-bold text-rose-300"}>{fmt(t.r)}R</td>
+                        <td className="max-w-[260px] truncate px-3 py-2 text-slate-400" title={t.comment}>{t.comment || "-"}</td>
+                      </tr>
+                    ))}
+                    {!battleExplorerTrades.length && !battleExplorerLoading && (
+                      <tr><td colSpan={9} className="px-3 py-6 text-center text-slate-400">No closed trades loaded yet. Select a market above.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
 
