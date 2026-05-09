@@ -1971,16 +1971,16 @@ function PageInner() {
             <img
               src="/ust-logo.png"
               alt="Ultimate Scalper Tool"
-              className="h-8 w-auto shrink-0 select-none"
+              className="h-7 w-auto shrink-0 select-none"
             />
-            <h1 className="min-w-0 truncate text-lg font-extrabold leading-tight tracking-tight bg-gradient-to-b from-yellow-200 via-yellow-400 to-amber-700 bg-clip-text text-transparent drop-shadow-[0_2px_2px_rgba(0,0,0,0.45)] [text-shadow:0_0_14px_rgba(212,175,55,0.3)]">
+            <h1 className="min-w-0 whitespace-nowrap text-[15px] font-extrabold leading-tight tracking-tight bg-gradient-to-b from-yellow-200 via-yellow-400 to-amber-700 bg-clip-text text-transparent drop-shadow-[0_2px_2px_rgba(0,0,0,0.45)] [text-shadow:0_0_14px_rgba(212,175,55,0.3)]">
               UST Strategy Console
             </h1>
-            <div className="scale-90 origin-center">
+            <div className="scale-80 origin-center">
               <ThemeToggle />
             </div>
             <span
-              className={`shrink-0 inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs font-semibold ${
+              className={`shrink-0 inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-semibold ${
                 locked && lockOnHit
                   ? "border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/15 dark:text-rose-300"
                   : "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/15 dark:text-emerald-300"
@@ -2065,7 +2065,7 @@ function PageInner() {
                     </span>
                   </h1>
                   <span
-                    className={`shrink-0 inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs font-semibold ${
+                    className={`shrink-0 inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-semibold ${
                       locked && lockOnHit
                         ? "border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/15 dark:text-rose-300"
                         : "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/15 dark:text-emerald-300"
