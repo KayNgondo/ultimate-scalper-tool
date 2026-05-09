@@ -1965,97 +1965,160 @@ function PageInner() {
     <div className="mx-auto max-w-7xl space-y-4 px-3 pb-24 pt-4 sm:px-4 sm:py-6">
       {/* Header */}
       <div className="rounded-3xl border border-slate-800/80 bg-slate-950/70 p-3 shadow-xl shadow-black/25 backdrop-blur md:border-0 md:bg-transparent md:p-0 md:shadow-none">
-      <div className="flex flex-col items-stretch justify-between gap-3 md:flex-row md:items-center">
-        {/* LEFT: logo + responsive title + live status */}
-        <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-3">
+        {/* Mobile: compact command header so the Trading Command Centre appears immediately */}
+        <div className="space-y-3 md:hidden">
+          <div className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-2">
             <img
               src="/ust-logo.png"
               alt="Ultimate Scalper Tool"
-              className="h-8 w-auto shrink-0 select-none sm:h-9"
+              className="h-8 w-auto shrink-0 select-none"
             />
-
-            <div className="min-w-0 flex-1">
-              <div className="flex min-w-0 items-start justify-between gap-2 sm:items-center sm:justify-start">
-                <h1 className="font-extrabold leading-tight tracking-tight">
-                  <span className="hidden sm:inline text-2xl md:text-3xl bg-gradient-to-b from-yellow-200 via-yellow-400 to-amber-700 bg-clip-text text-transparent drop-shadow-[0_2px_2px_rgba(0,0,0,0.45)] [text-shadow:0_0_16px_rgba(212,175,55,0.25)]">
-                    Ultimate Scalper Tool – Strategy Console
-                  </span>
-                  <span className="sm:hidden text-lg bg-gradient-to-b from-yellow-200 via-yellow-400 to-amber-700 bg-clip-text text-transparent drop-shadow-[0_2px_2px_rgba(0,0,0,0.45)] [text-shadow:0_0_14px_rgba(212,175,55,0.3)]">
-                    UST Strategy Console
-                  </span>
-                </h1>
-
-                <span
-                  className={`shrink-0 inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs font-semibold ${
-                    locked && lockOnHit
-                      ? "border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/15 dark:text-rose-300"
-                      : "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/15 dark:text-emerald-300"
-                  }`}
-                  title={locked && lockOnHit ? "Trading locked for today (max loss hit)" : "Active"}
-                >
-                  <span
-                    className={`h-2 w-2 rounded-full ${
-                      locked && lockOnHit ? "bg-rose-500" : "bg-emerald-500"
-                    }`}
-                  />
-                  {locked && lockOnHit ? "Locked" : "Active"}
-                </span>
-              </div>
+            <h1 className="min-w-0 truncate text-lg font-extrabold leading-tight tracking-tight bg-gradient-to-b from-yellow-200 via-yellow-400 to-amber-700 bg-clip-text text-transparent drop-shadow-[0_2px_2px_rgba(0,0,0,0.45)] [text-shadow:0_0_14px_rgba(212,175,55,0.3)]">
+              UST Strategy Console
+            </h1>
+            <div className="scale-90 origin-center">
+              <ThemeToggle />
             </div>
+            <span
+              className={`shrink-0 inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs font-semibold ${
+                locked && lockOnHit
+                  ? "border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/15 dark:text-rose-300"
+                  : "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/15 dark:text-emerald-300"
+              }`}
+              title={locked && lockOnHit ? "Trading locked for today (max loss hit)" : "Active"}
+            >
+              <span className={`h-2 w-2 rounded-full ${locked && lockOnHit ? "bg-rose-500" : "bg-emerald-500"}`} />
+              {locked && lockOnHit ? "Locked" : "Active"}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2">
+            <Button type="button" onClick={() => setActiveTab('dashboard')} className="h-11 rounded-xl bg-[#D4AF37] px-2 text-xs font-black text-black shadow-lg shadow-[#D4AF37]/20 hover:bg-[#c9a42f]">
+              <Home className="mr-1.5 h-4 w-4" /> Dashboard
+            </Button>
+            <Button disabled={!hasSessionActivity}
+              className="h-11 rounded-xl px-2 text-xs font-black"
+              onClick={async () => {
+                if (!hasSessionActivity) {
+                  push({ title: "No trades logged", desc: "You can’t end the session without at least one trade or equity change." });
+                  return;
+                }
+                try {
+                  if (!user?.id) {
+                    push({ title: "Please sign in", desc: "You need to sign in to save sessions." });
+                    return;
+                  }
+                  const startedAtISO = new Date(Number(sessionId || Date.now())).toISOString();
+                  const endedAtISO = new Date().toISOString();
+                  const safeSessionId = sessionId ?? crypto.randomUUID();
+                  const summary = buildSessionSummary({
+                    sessionId: safeSessionId,
+                    startedAt: startedAtISO,
+                    endedAt: endedAtISO,
+                    pnl: Number(pnl || 0),
+                    trades: sessionTrades.map((t) => ({ market: t.symbol, pnl: t.pnl })),
+                    disciplineScore,
+                    badges: currentRuleBadges,
+                  });
+                  setLastSessionSummary(summary);
+                  await recordSessionToLeaderboard(user.id, Number(pnl || 0), startedAtISO, endedAtISO);
+                  newSessionId();
+                  push({ title: "Leaderboard synced", desc: `Board synced • Discipline ${summary.disciplineScore}/100` });
+                } catch (e) {
+                  console.error(e);
+                  newSessionId();
+                }
+              }}
+            >
+              Sync Board
+            </Button>
+            {user && (
+              <Button
+                variant="outline"
+                className="h-11 rounded-xl px-2 text-xs font-black"
+                onClick={async () => {
+                  try {
+                    await supabase.auth.signOut();
+                    push({ title: "Signed out", desc: "See you soon." });
+                  } catch (e) {
+                    console.error(e);
+                    push({ title: "Sign out failed", desc: "Please try again." });
+                  }
+                }}
+              >
+                Sign Out
+              </Button>
+            )}
           </div>
         </div>
 
-        {/* RIGHT: theme toggle + actions */}
-        <div className="flex w-full items-center gap-2 overflow-x-auto pb-1 md:w-auto md:justify-end">
-          <ThemeToggle />
+        {/* Desktop/tablet: original wider layout */}
+        <div className="hidden flex-col items-stretch justify-between gap-3 md:flex md:flex-row md:items-center">
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 items-center gap-3">
+              <img src="/ust-logo.png" alt="Ultimate Scalper Tool" className="h-9 w-auto shrink-0 select-none" />
+              <div className="min-w-0 flex-1">
+                <div className="flex min-w-0 items-start justify-between gap-2 sm:items-center sm:justify-start">
+                  <h1 className="font-extrabold leading-tight tracking-tight">
+                    <span className="text-2xl md:text-3xl bg-gradient-to-b from-yellow-200 via-yellow-400 to-amber-700 bg-clip-text text-transparent drop-shadow-[0_2px_2px_rgba(0,0,0,0.45)] [text-shadow:0_0_16px_rgba(212,175,55,0.25)]">
+                      Ultimate Scalper Tool – Strategy Console
+                    </span>
+                  </h1>
+                  <span
+                    className={`shrink-0 inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs font-semibold ${
+                      locked && lockOnHit
+                        ? "border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/15 dark:text-rose-300"
+                        : "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/15 dark:text-emerald-300"
+                    }`}
+                    title={locked && lockOnHit ? "Trading locked for today (max loss hit)" : "Active"}
+                  >
+                    <span className={`h-2 w-2 rounded-full ${locked && lockOnHit ? "bg-rose-500" : "bg-emerald-500"}`} />
+                    {locked && lockOnHit ? "Locked" : "Active"}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
 
-          <Button disabled={!hasSessionActivity}
-            onClick={async () => {
-              if (!hasSessionActivity) {
-                push({ title: "No trades logged", desc: "You can’t end the session without at least one trade or equity change." });
-                return;
-              }
-              try {
-                if (!user?.id) {
-                  push({ title: "Please sign in", desc: "You need to sign in to save sessions." });
+          <div className="flex w-full items-center gap-2 overflow-x-auto pb-1 md:w-auto md:justify-end">
+            <ThemeToggle />
+            <Button disabled={!hasSessionActivity}
+              onClick={async () => {
+                if (!hasSessionActivity) {
+                  push({ title: "No trades logged", desc: "You can’t end the session without at least one trade or equity change." });
                   return;
                 }
-                const startedAtISO = new Date(Number(sessionId || Date.now())).toISOString();
-                const endedAtISO = new Date().toISOString();
-
-                // Build + store local Session Summary (shows on Dashboard)
-                const safeSessionId = sessionId ?? crypto.randomUUID();
-                const summary = buildSessionSummary({
-                  sessionId: safeSessionId,
-                  startedAt: startedAtISO,
-                  endedAt: endedAtISO,
-                  pnl: Number(pnl || 0),
-                  trades: sessionTrades.map((t) => ({ market: t.symbol, pnl: t.pnl })),
-                  disciplineScore,
-                  badges: currentRuleBadges,
-                });
-                setLastSessionSummary(summary);
-
-                await recordSessionToLeaderboard(user.id, Number(pnl || 0), startedAtISO, endedAtISO);
-                newSessionId();
-                push({
-                  title: "Leaderboard synced",
-                  desc: `Board synced • Discipline ${summary.disciplineScore}/100`,
-                });
-              } catch (e) {
-                console.error(e);
-                newSessionId();
-              }
-            }}
-          >
-            <span className="hidden sm:inline">Sync Board</span><span className="sm:hidden">Sync Board</span>
-          </Button>
-
-          {user && (
-            <Button
-              variant="outline"
-              onClick={async () => {
+                try {
+                  if (!user?.id) {
+                    push({ title: "Please sign in", desc: "You need to sign in to save sessions." });
+                    return;
+                  }
+                  const startedAtISO = new Date(Number(sessionId || Date.now())).toISOString();
+                  const endedAtISO = new Date().toISOString();
+                  const safeSessionId = sessionId ?? crypto.randomUUID();
+                  const summary = buildSessionSummary({
+                    sessionId: safeSessionId,
+                    startedAt: startedAtISO,
+                    endedAt: endedAtISO,
+                    pnl: Number(pnl || 0),
+                    trades: sessionTrades.map((t) => ({ market: t.symbol, pnl: t.pnl })),
+                    disciplineScore,
+                    badges: currentRuleBadges,
+                  });
+                  setLastSessionSummary(summary);
+                  await recordSessionToLeaderboard(user.id, Number(pnl || 0), startedAtISO, endedAtISO);
+                  newSessionId();
+                  push({ title: "Leaderboard synced", desc: `Board synced • Discipline ${summary.disciplineScore}/100` });
+                } catch (e) {
+                  console.error(e);
+                  newSessionId();
+                }
+              }}
+            >
+              Sync Board
+            </Button>
+            {user && (
+              <Button variant="outline" onClick={async () => {
                 try {
                   await supabase.auth.signOut();
                   push({ title: "Signed out", desc: "See you soon." });
@@ -2063,13 +2126,12 @@ function PageInner() {
                   console.error(e);
                   push({ title: "Sign out failed", desc: "Please try again." });
                 }
-              }}
-            >
-              Sign Out
-            </Button>
-          )}
+              }}>
+                Sign Out
+              </Button>
+            )}
+          </div>
         </div>
-      </div>
       </div>
 
       {/* Tabs */}
@@ -2133,48 +2195,29 @@ function PageInner() {
             </div>
           </div>
 
-          {/* Mobile: one dashboard button, bundled shortcuts, feature cards — light-mode icon contrast fixed */}
-          <div className="space-y-3 md:hidden">
-            <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
-              <Button type="button" onClick={() => setActiveTab('dashboard')} className="shrink-0 rounded-xl bg-[#D4AF37] px-5 py-2 font-bold text-black shadow-lg shadow-[#D4AF37]/20 hover:bg-[#c9a42f]">
-                <Home className="mr-2 h-4 w-4" /> Dashboard
-              </Button>
-            </div>
-
-            <TabsList className="grid h-auto grid-cols-4 gap-2 bg-transparent p-0">
-              <TabsTrigger value="analytics" className="flex min-h-[74px] flex-col items-center justify-center gap-1 rounded-2xl border border-slate-400 bg-white px-1 py-2 text-center text-[10px] font-bold leading-tight text-slate-950 shadow-sm data-[state=active]:border-[#D4AF37] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:border-slate-700/80 dark:bg-slate-950/40 dark:text-slate-100 dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black">
+          {/* Mobile: six equal shortcuts, no More button — keeps the Command Centre higher on screen */}
+          <div className="md:hidden">
+            <TabsList className="grid h-auto grid-cols-3 gap-2 bg-transparent p-0">
+              <TabsTrigger value="analytics" className="flex min-h-[70px] flex-col items-center justify-center gap-1 rounded-2xl border border-slate-400 bg-white px-1 py-2 text-center text-[10px] font-bold leading-tight text-slate-950 shadow-sm data-[state=active]:border-[#D4AF37] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:border-slate-700/80 dark:bg-slate-950/40 dark:text-slate-100 dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black">
                 <span className="grid h-9 w-9 place-items-center rounded-full border border-slate-400 bg-[#0B1220] text-[#F6C945] shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:text-[#F6C945]"><BarChart3 className="h-4 w-4" /></span><span>Analytics</span>
               </TabsTrigger>
-              <TabsTrigger value="battle" className="flex min-h-[74px] flex-col items-center justify-center gap-1 rounded-2xl border border-slate-400 bg-white px-1 py-2 text-center text-[10px] font-bold leading-tight text-slate-950 shadow-sm data-[state=active]:border-[#D4AF37] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:border-slate-700/80 dark:bg-slate-950/40 dark:text-slate-100 dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black">
+              <TabsTrigger value="battle" className="flex min-h-[70px] flex-col items-center justify-center gap-1 rounded-2xl border border-slate-400 bg-white px-1 py-2 text-center text-[10px] font-bold leading-tight text-slate-950 shadow-sm data-[state=active]:border-[#D4AF37] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:border-slate-700/80 dark:bg-slate-950/40 dark:text-slate-100 dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black">
                 <span className="grid h-9 w-9 place-items-center rounded-full border border-slate-400 bg-[#0B1220] text-[#F6C945] shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:text-[#F6C945]"><Target className="h-4 w-4" /></span><span>Battle</span>
               </TabsTrigger>
-              <TabsTrigger value="risk-deriv" className="flex min-h-[74px] flex-col items-center justify-center gap-1 rounded-2xl border border-slate-400 bg-white px-1 py-2 text-center text-[10px] font-bold leading-tight text-slate-950 shadow-sm data-[state=active]:border-[#D4AF37] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:border-slate-700/80 dark:bg-slate-950/40 dark:text-slate-100 dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black">
+              <TabsTrigger value="risk-deriv" className="flex min-h-[70px] flex-col items-center justify-center gap-1 rounded-2xl border border-slate-400 bg-white px-1 py-2 text-center text-[10px] font-bold leading-tight text-slate-950 shadow-sm data-[state=active]:border-[#D4AF37] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:border-slate-700/80 dark:bg-slate-950/40 dark:text-slate-100 dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black">
                 <span className="grid h-9 w-9 place-items-center rounded-full border border-slate-400 bg-[#0B1220] text-[#F6C945] shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:text-[#F6C945]"><Calculator className="h-4 w-4" /></span><span>Risk<br />Calc</span>
               </TabsTrigger>
-              <TabsTrigger value="checklist" className="flex min-h-[74px] flex-col items-center justify-center gap-1 rounded-2xl border border-slate-400 bg-white px-1 py-2 text-center text-[10px] font-bold leading-tight text-slate-950 shadow-sm data-[state=active]:border-[#D4AF37] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:border-slate-700/80 dark:bg-slate-950/40 dark:text-slate-100 dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black">
-                <span className="grid h-9 w-9 place-items-center rounded-full border border-slate-400 bg-[#0B1220] text-[#F6C945] shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:text-[#F6C945]"><MoreHorizontal className="h-4 w-4" /></span><span>More</span>
+              <TabsTrigger value="asetups" className="flex min-h-[70px] flex-col items-center justify-center gap-1 rounded-2xl border border-slate-400 bg-white px-1 py-2 text-center text-[10px] font-bold leading-tight text-slate-950 shadow-sm data-[state=active]:border-[#D4AF37] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:border-slate-700/80 dark:bg-slate-950/40 dark:text-slate-100 dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black">
+                <span className="grid h-9 w-9 place-items-center rounded-full border border-slate-400 bg-[#0B1220] text-purple-200 shadow-sm dark:border-slate-700 dark:bg-slate-950"><Target className="h-4 w-4" /></span><span>A-Setups</span>
               </TabsTrigger>
-            </TabsList>
-
-            <div className="grid grid-cols-3 gap-2">
-              <button type="button" onClick={() => setActiveTab('asetups')} className="rounded-xl border border-slate-600 bg-gradient-to-br from-slate-900 to-slate-700 p-3 text-left shadow-md dark:border-slate-700/80 dark:from-slate-950/90 dark:to-slate-900/60">
-                <Target className="mb-2 h-8 w-8 text-purple-200 drop-shadow" />
-                <div className="text-[10px] font-black uppercase text-white">A-Setups</div>
-                <div className="text-[10px] font-semibold text-sky-300">View setups →</div>
-              </button>
-              <button type="button" onClick={() => setActiveTab('checklist')} className="rounded-xl border border-slate-600 bg-gradient-to-br from-slate-900 to-slate-700 p-3 text-left shadow-md dark:border-slate-700/80 dark:from-slate-950/90 dark:to-slate-900/60">
-                <ClipboardCheck className="mb-2 h-8 w-8 text-sky-200 drop-shadow" />
-                <div className="text-[10px] font-black uppercase text-white">Checklist</div>
-                <div className="text-[10px] font-semibold text-sky-300">Open checklist →</div>
-              </button>
-              <a href="/leaderboard" className="rounded-xl border border-slate-600 bg-gradient-to-br from-slate-900 to-slate-700 p-3 text-left shadow-md dark:border-slate-700/80 dark:from-slate-950/90 dark:to-slate-900/60">
-                <BarChart3 className="mb-2 h-8 w-8 text-[#F6C945] drop-shadow" />
-                <div className="text-[10px] font-black uppercase text-white">Leaders</div>
-                <div className="text-[10px] font-semibold text-sky-300">View board →</div>
+              <TabsTrigger value="checklist" className="flex min-h-[70px] flex-col items-center justify-center gap-1 rounded-2xl border border-slate-400 bg-white px-1 py-2 text-center text-[10px] font-bold leading-tight text-slate-950 shadow-sm data-[state=active]:border-[#D4AF37] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:border-slate-700/80 dark:bg-slate-950/40 dark:text-slate-100 dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black">
+                <span className="grid h-9 w-9 place-items-center rounded-full border border-slate-400 bg-[#0B1220] text-sky-200 shadow-sm dark:border-slate-700 dark:bg-slate-950"><ClipboardCheck className="h-4 w-4" /></span><span>Checklist</span>
+              </TabsTrigger>
+              <a href="/leaderboard" className="flex min-h-[70px] flex-col items-center justify-center gap-1 rounded-2xl border border-slate-400 bg-white px-1 py-2 text-center text-[10px] font-bold leading-tight text-slate-950 shadow-sm transition hover:border-[#D4AF37] hover:bg-[#D4AF37] hover:text-black dark:border-slate-700/80 dark:bg-slate-950/40 dark:text-slate-100">
+                <span className="grid h-9 w-9 place-items-center rounded-full border border-slate-400 bg-[#0B1220] text-[#F6C945] shadow-sm dark:border-slate-700 dark:bg-slate-950"><BarChart3 className="h-4 w-4" /></span><span>Leaders</span>
               </a>
-            </div>
-          </div>
-        </div>
+            </TabsList>
+          </div>        </div>
 
         {/* UST MARKETS BATTLE BOARD */}
         <TabsContent value="battle" className="space-y-4">
