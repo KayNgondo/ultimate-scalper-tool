@@ -35,7 +35,7 @@ import {
   CommandItem,
   CommandGroup,
 } from "@/components/ui/command";
-import { ChevronsUpDown, Check, Wallet, TrendingUp, TrendingDown, BarChart3, CalendarDays, Target, ShieldCheck, Activity, Info, PieChart, Star, Scale, Home, MoreHorizontal, Settings, BookOpen, ClipboardCheck, RefreshCw, Calculator } from "lucide-react";
+import { ChevronsUpDown, Check, Wallet, TrendingUp, TrendingDown, BarChart3, CalendarDays, Target, ShieldCheck, Activity, Info, PieChart, Star, Scale, Home, MoreHorizontal, Settings, BookOpen, ClipboardCheck, RefreshCw, Calculator, FileText } from "lucide-react";
 
 /* ========== recharts ========== */
 import {
@@ -1447,6 +1447,161 @@ function PageInner() {
     });
   }, [battleRows]);
 
+
+  const exportBattleBoardPdf = useCallback(() => {
+    if (typeof window === "undefined") return;
+
+    const esc = (value: unknown) => String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+
+    const reportDate = new Date().toLocaleString();
+    const periodText = `${battlePeriodStart || "Start"} → ${battlePeriodEnd || "Today"}`;
+    const selectedMarket = battleRows.find((r) => r.id === battleExplorerMarketId) || battleRows[0];
+    const totalProfit = battleRows.reduce((sum, r) => sum + Number(r.profit || 0), 0);
+    const totalTrades = battleRows.reduce((sum, r) => sum + Number(r.trades || 0), 0);
+    const avgWinRate = battleRows.length ? battleRows.reduce((sum, r) => sum + Number(r.winRate || 0), 0) / battleRows.length : 0;
+    const avgDd = battleRows.length ? battleRows.reduce((sum, r) => sum + Number(r.maxDd || 0), 0) / battleRows.length : 0;
+
+    const marketRows = battleRankedRows.map((m, idx) => `
+      <tr>
+        <td><strong>#${idx + 1} ${esc(m.market)}</strong></td>
+        <td>${esc(m.trades)}/${esc(m.targetTrades)}</td>
+        <td class="${m.profit >= 0 ? "positive" : "negative"}">${esc(currency(m.profit))}</td>
+        <td>${esc(fmt(m.winRate))}%</td>
+        <td>${esc(fmt(m.avgR))}R</td>
+        <td>${esc(fmt(m.profitFactor))}</td>
+        <td>${esc(fmt(m.maxDd))}%</td>
+        <td>${esc(m.discipline)}/100</td>
+        <td><span class="pill">${esc(m.status)}</span></td>
+      </tr>`).join("");
+
+    const notesRows = battleRankedRows.map((m) => `
+      <div class="note-card">
+        <div class="note-title">${esc(m.market)} Weekly Read</div>
+        <div>${esc(m.notes || "No notes published yet.")}</div>
+      </div>`).join("");
+
+    const gradeRows = (battleGradeStats.length ? battleGradeStats : [])
+      .map((g) => `<tr><td><strong>${esc(g.label)}</strong></td><td>${esc(g.trades)}</td><td class="${g.profit >= 0 ? "positive" : "negative"}">${esc(currency(g.profit))}</td><td>${esc(fmt(g.winRate))}%</td><td>${esc(fmt(g.profitFactor))}</td><td>${esc(fmt(g.avgR))}R</td></tr>`)
+      .join("");
+
+    const sessionRows = (battleSessionStats.length ? battleSessionStats : [])
+      .map((g) => `<tr><td><strong>${esc(g.label)}</strong></td><td>${esc(g.trades)}</td><td class="${g.profit >= 0 ? "positive" : "negative"}">${esc(currency(g.profit))}</td><td>${esc(fmt(g.winRate))}%</td><td>${esc(fmt(g.profitFactor))}</td><td>${esc(fmt(g.avgR))}R</td></tr>`)
+      .join("");
+
+    const tradeRowsHtml = battleExplorerTrades.slice(0, 60).map((t) => `
+      <tr>
+        <td>${esc(t.timestamp ? new Date(t.timestamp).toLocaleString() : "-")}</td>
+        <td>${esc(t.session)}</td>
+        <td><strong>${esc(t.setupGrade)}</strong></td>
+        <td>${esc(t.side)}</td>
+        <td>${esc(t.symbol)}</td>
+        <td>${esc(t.result)}</td>
+        <td class="${t.pnl >= 0 ? "positive" : "negative"}">${esc(currency(t.pnl))}</td>
+        <td>${esc(fmt(t.r))}R</td>
+      </tr>`).join("");
+
+    const html = `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>UST Markets Battle Board PDF Report</title>
+  <style>
+    @page { size: A4; margin: 12mm; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Arial, Helvetica, sans-serif; color: #111827; background: #ffffff; }
+    .cover { border: 2px solid #D4AF37; border-radius: 22px; padding: 22px; background: linear-gradient(135deg, #050814, #0B1220 62%, #111827); color: white; }
+    .brand { color: #F6C945; font-size: 12px; font-weight: 900; letter-spacing: 0.24em; text-transform: uppercase; }
+    h1 { margin: 8px 0 8px; font-size: 30px; line-height: 1.05; }
+    h2 { margin: 22px 0 10px; font-size: 18px; color: #0f172a; }
+    .subtitle { max-width: 760px; color: #cbd5e1; line-height: 1.5; font-size: 13px; }
+    .meta { margin-top: 14px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .meta-card { border: 1px solid rgba(212,175,55,.45); border-radius: 16px; padding: 10px; background: rgba(0,0,0,.24); }
+    .meta-label { color: #94a3b8; font-size: 10px; text-transform: uppercase; font-weight: 800; }
+    .meta-value { margin-top: 4px; color: #fff; font-size: 15px; font-weight: 900; }
+    .summary { margin-top: 14px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+    .summary-card { border: 1px solid #e5e7eb; border-radius: 16px; padding: 12px; background: #f8fafc; }
+    .summary-label { color: #64748b; font-size: 10px; text-transform: uppercase; font-weight: 900; }
+    .summary-value { margin-top: 6px; font-size: 18px; font-weight: 900; color: #0f172a; }
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 11px; }
+    th { background: #0B1220; color: #F6C945; padding: 8px; text-align: left; text-transform: uppercase; font-size: 9px; letter-spacing: .06em; }
+    td { border-bottom: 1px solid #e5e7eb; padding: 8px; vertical-align: top; }
+    .positive { color: #047857; font-weight: 900; }
+    .negative { color: #be123c; font-weight: 900; }
+    .pill { display: inline-block; border: 1px solid #D4AF37; border-radius: 999px; padding: 3px 7px; font-weight: 900; font-size: 9px; background: #fffbeb; color: #78350f; }
+    .notes-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 8px; }
+    .note-card { border: 1px solid #e5e7eb; border-radius: 14px; padding: 10px; background: #f8fafc; font-size: 11px; line-height: 1.45; }
+    .note-title { color: #92400e; font-weight: 900; margin-bottom: 5px; }
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .section { break-inside: avoid; }
+    .footer { margin-top: 18px; padding-top: 10px; border-top: 1px solid #e5e7eb; color: #64748b; font-size: 10px; display: flex; justify-content: space-between; }
+    @media print { .no-print { display: none; } body { print-color-adjust: exact; -webkit-print-color-adjust: exact; } }
+  </style>
+</head>
+<body>
+  <section class="cover">
+    <div class="brand">Ultimate Scalper Tool • UST Research Lab</div>
+    <h1>Markets Battle Board Report</h1>
+    <div class="subtitle">Professional PDF export for sharing the weekly UST market research board with investors, followers and trading students. The report focuses on survival, discipline, drawdown control and repeatable performance.</div>
+    <div class="meta">
+      <div class="meta-card"><div class="meta-label">Period</div><div class="meta-value">${esc(periodText)}</div></div>
+      <div class="meta-card"><div class="meta-label">Last Published</div><div class="meta-value">${esc(battleUpdatedAt || "Not published yet")}</div></div>
+      <div class="meta-card"><div class="meta-label">Exported</div><div class="meta-value">${esc(reportDate)}</div></div>
+    </div>
+  </section>
+
+  <div class="summary">
+    <div class="summary-card"><div class="summary-label">Total Profit</div><div class="summary-value ${totalProfit >= 0 ? "positive" : "negative"}">${esc(currency(totalProfit))}</div></div>
+    <div class="summary-card"><div class="summary-label">Total Trades</div><div class="summary-value">${esc(totalTrades)}</div></div>
+    <div class="summary-card"><div class="summary-label">Average Win Rate</div><div class="summary-value">${esc(fmt(avgWinRate))}%</div></div>
+    <div class="summary-card"><div class="summary-label">Average Drawdown</div><div class="summary-value">${esc(fmt(avgDd))}%</div></div>
+  </div>
+
+  <section class="section">
+    <h2>Detailed Market Stats</h2>
+    <table><thead><tr><th>Market</th><th>Trades</th><th>Profit</th><th>Win %</th><th>Avg R</th><th>PF</th><th>DD %</th><th>Health</th><th>Status</th></tr></thead><tbody>${marketRows}</tbody></table>
+  </section>
+
+  <section class="section">
+    <h2>Weekly Reads</h2>
+    <div class="notes-grid">${notesRows}</div>
+  </section>
+
+  <section class="section two-col">
+    <div>
+      <h2>Setup Grade Analytics${selectedMarket ? ` • ${esc(selectedMarket.market)}` : ""}</h2>
+      <table><thead><tr><th>Grade</th><th>Trades</th><th>Profit</th><th>Win %</th><th>PF</th><th>Avg R</th></tr></thead><tbody>${gradeRows || `<tr><td colspan="6">No setup grade data loaded yet.</td></tr>`}</tbody></table>
+    </div>
+    <div>
+      <h2>Session Intelligence${selectedMarket ? ` • ${esc(selectedMarket.market)}` : ""}</h2>
+      <table><thead><tr><th>Session</th><th>Trades</th><th>Profit</th><th>Win %</th><th>PF</th><th>Avg R</th></tr></thead><tbody>${sessionRows || `<tr><td colspan="6">No session data loaded yet.</td></tr>`}</tbody></table>
+    </div>
+  </section>
+
+  <section class="section">
+    <h2>Recent Closed Trades${selectedMarket ? ` • ${esc(selectedMarket.market)}` : ""}</h2>
+    <table><thead><tr><th>Time</th><th>Session</th><th>Grade</th><th>Side</th><th>Symbol</th><th>Result</th><th>Profit</th><th>R</th></tr></thead><tbody>${tradeRowsHtml || `<tr><td colspan="8">No recent trades loaded yet.</td></tr>`}</tbody></table>
+  </section>
+
+  <div class="footer"><span>UST PDF Export</span><span>Generated from the live Battle Board</span></div>
+  <script>window.onload = () => { window.focus(); window.print(); };</script>
+</body>
+</html>`;
+
+    const printWindow = window.open("", "_blank", "width=1100,height=800");
+    if (!printWindow) {
+      push({ title: "PDF export blocked", desc: "Please allow pop-ups for this site, then try Export PDF again." });
+      return;
+    }
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+  }, [battleRows, battleRankedRows, battleGradeStats, battleSessionStats, battleExplorerTrades, battleExplorerMarketId, battlePeriodStart, battlePeriodEnd, battleUpdatedAt, push]);
+
   /* Derived */
   const tradeRows = useMemo(
     () =>
@@ -2043,9 +2198,14 @@ function PageInner() {
                 <div className="mt-2 text-xs leading-5">Only the admin account can publish updates. Everyone else can view the same board.</div>
                 <div className="mt-3 text-xs text-slate-400">Period: {battlePeriodStart || "Start"} → {battlePeriodEnd || "Today"}</div>
                 <div className="mt-1 text-xs text-slate-400">Last update: {battleUpdatedAt || "Not published yet"}</div>
-                <Button type="button" variant="outline" className="mt-3 w-full" onClick={() => void loadBattleBoard()} disabled={battleLoading}>
-                  <RefreshCw className="mr-2 h-4 w-4" /> Refresh Board
-                </Button>
+                <div className="mt-3 grid gap-2">
+                  <Button type="button" variant="outline" className="w-full" onClick={() => void loadBattleBoard()} disabled={battleLoading}>
+                    <RefreshCw className="mr-2 h-4 w-4" /> Refresh Board
+                  </Button>
+                  <Button type="button" className="w-full bg-[#D4AF37] font-black text-black hover:bg-[#c9a42f]" onClick={exportBattleBoardPdf}>
+                    <FileText className="mr-2 h-4 w-4" /> Export PDF Report
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
@@ -2099,7 +2259,12 @@ function PageInner() {
                 <h3 className="text-lg font-black text-white">Detailed Market Stats</h3>
                 <p className="text-sm text-slate-400">Use this section for weekly research reports and public transparency.</p>
               </div>
-              {isAdmin && <Button type="button" onClick={() => void publishBattleBoard()} disabled={battleSaving}>{battleSaving ? "Publishing..." : "Publish Battle Board"}</Button>}
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="outline" onClick={exportBattleBoardPdf}>
+                  <FileText className="mr-2 h-4 w-4" /> Export PDF
+                </Button>
+                {isAdmin && <Button type="button" onClick={() => void publishBattleBoard()} disabled={battleSaving}>{battleSaving ? "Publishing..." : "Publish Battle Board"}</Button>}
+              </div>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[920px] text-left text-sm">
