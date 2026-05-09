@@ -2123,9 +2123,20 @@ function PageInner() {
               </div>
               <div className="flex flex-wrap gap-2">
                 {battleRows.map((m) => (
-                  <Button key={m.id} type="button" size="sm" variant={battleExplorerMarketId === m.id ? "default" : "outline"} onClick={() => void loadBattleTradeExplorer(m.id)}>
-                    {m.market}
-                  </Button>
+                  <Button
+  key={m.id}
+  type="button"
+  size="sm"
+  onClick={() => void loadBattleTradeExplorer(m.id)}
+  className={`transition-all duration-300 font-bold border rounded-xl px-4 py-2
+    ${
+      battleExplorerMarketId === m.id
+        ? "bg-gradient-to-r from-yellow-400 to-amber-500 text-black border-yellow-300 shadow-[0_0_22px_rgba(250,204,21,0.55)] scale-105"
+        : "bg-[#081225] text-white border-slate-700 hover:border-yellow-400/70 hover:text-yellow-300"
+    }`}
+>
+  {m.market}
+</Button>
                 ))}
               </div>
             </div>
