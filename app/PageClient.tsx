@@ -88,6 +88,40 @@ function useLS<T>(key: string, initial: T) {
   return [v, setV] as const;
 }
 
+
+type BattleMarketRow = {
+  id: string;
+  market: string;
+  account: string;
+  trades: number;
+  targetTrades: number;
+  profit: number;
+  winRate: number;
+  maxDd: number;
+  profitFactor: number;
+  bestRunnerR: number;
+  avgR: number;
+  discipline: number;
+  manualInterruptions: number;
+  status: "Stable" | "Under Pressure" | "Recovery Mode" | "Failed Challenge" | "Certified";
+  notes: string;
+};
+
+const DEFAULT_BATTLE_ROWS: BattleMarketRow[] = [
+  { id: "kuda-gold", market: "Gold", account: "Kuda_Gold", trades: 0, targetTrades: 100, profit: 0, winRate: 0, maxDd: 0, profitFactor: 0, bestRunnerR: 0, avgR: 0, discipline: 100, manualInterruptions: 0, status: "Stable", notes: "Fresh 100 live-trade race. Waiting for the market to prove itself." },
+  { id: "kuda-silver", market: "Silver", account: "Kuda_Silver", trades: 0, targetTrades: 100, profit: 0, winRate: 0, maxDd: 0, profitFactor: 0, bestRunnerR: 0, avgR: 0, discipline: 100, manualInterruptions: 0, status: "Stable", notes: "Separated from Gold so Silver can run its own race." },
+  { id: "kuda-nasdaq", market: "Nasdaq", account: "Kuda_Nasdaq", trades: 0, targetTrades: 100, profit: 0, winRate: 0, maxDd: 0, profitFactor: 0, bestRunnerR: 0, avgR: 0, discipline: 100, manualInterruptions: 0, status: "Stable", notes: "Momentum market under observation for smooth continuation behaviour." },
+  { id: "kuda-us30", market: "US30", account: "Kuda_US30", trades: 0, targetTrades: 100, profit: 0, winRate: 0, maxDd: 0, profitFactor: 0, bestRunnerR: 0, avgR: 0, discipline: 100, manualInterruptions: 0, status: "Stable", notes: "High-volatility test. Runner potential must prove it can survive drawdown." },
+];
+
+const BATTLE_STATUS_STYLES: Record<BattleMarketRow["status"], string> = {
+  "Stable": "border-emerald-400/40 bg-emerald-500/10 text-emerald-300",
+  "Under Pressure": "border-amber-400/40 bg-amber-500/10 text-amber-300",
+  "Recovery Mode": "border-sky-400/40 bg-sky-500/10 text-sky-300",
+  "Failed Challenge": "border-rose-400/40 bg-rose-500/10 text-rose-300",
+  "Certified": "border-[#D4AF37]/50 bg-[#D4AF37]/15 text-[#F6C945]",
+};
+
 type SheetItem = {
   timestamp?: string;
   account?: string;
@@ -1041,6 +1075,112 @@ function PageInner() {
   }, [loadWatchlist]);
 
 
+
+  /* ---------- UST Markets Battle Board (admin published, everyone can view) ---------- */
+  // Recommended Supabase table: ust_market_battle_board
+  // Columns: id text primary key, market text, account text, trades int, target_trades int,
+  // profit numeric, win_rate numeric, max_dd numeric, profit_factor numeric, best_runner_r numeric,
+  // avg_r numeric, discipline int, manual_interruptions int, status text, notes text, updated_at timestamptz.
+  const BATTLE_TABLE = "ust_market_battle_board";
+  const [battleRows, setBattleRows] = useState<BattleMarketRow[]>(DEFAULT_BATTLE_ROWS);
+  const [battleDraftRows, setBattleDraftRows] = useState<BattleMarketRow[]>(DEFAULT_BATTLE_ROWS);
+  const [battleLoading, setBattleLoading] = useState(false);
+  const [battleSaving, setBattleSaving] = useState(false);
+  const [battleError, setBattleError] = useState<string | null>(null);
+  const [battleUpdatedAt, setBattleUpdatedAt] = useState<string>("");
+
+  const normalizeBattleRow = (row: any, fallback?: BattleMarketRow): BattleMarketRow => ({
+    id: String(row?.id ?? fallback?.id ?? crypto.randomUUID()),
+    market: String(row?.market ?? fallback?.market ?? "Market"),
+    account: String(row?.account ?? fallback?.account ?? "Kuda_Market"),
+    trades: Number(row?.trades ?? fallback?.trades ?? 0),
+    targetTrades: Number(row?.target_trades ?? row?.targetTrades ?? fallback?.targetTrades ?? 100),
+    profit: Number(row?.profit ?? fallback?.profit ?? 0),
+    winRate: Number(row?.win_rate ?? row?.winRate ?? fallback?.winRate ?? 0),
+    maxDd: Number(row?.max_dd ?? row?.maxDd ?? fallback?.maxDd ?? 0),
+    profitFactor: Number(row?.profit_factor ?? row?.profitFactor ?? fallback?.profitFactor ?? 0),
+    bestRunnerR: Number(row?.best_runner_r ?? row?.bestRunnerR ?? fallback?.bestRunnerR ?? 0),
+    avgR: Number(row?.avg_r ?? row?.avgR ?? fallback?.avgR ?? 0),
+    discipline: Number(row?.discipline ?? fallback?.discipline ?? 100),
+    manualInterruptions: Number(row?.manual_interruptions ?? row?.manualInterruptions ?? fallback?.manualInterruptions ?? 0),
+    status: (row?.status ?? fallback?.status ?? "Stable") as BattleMarketRow["status"],
+    notes: String(row?.notes ?? fallback?.notes ?? ""),
+  });
+
+  const loadBattleBoard = useCallback(async () => {
+    setBattleLoading(true);
+    setBattleError(null);
+    try {
+      const { data, error } = await supabase
+        .from(BATTLE_TABLE)
+        .select("*")
+        .order("profit", { ascending: false });
+      if (error) throw error;
+      if (Array.isArray(data) && data.length) {
+        const rows = data.map((r: any) => normalizeBattleRow(r));
+        setBattleRows(rows);
+        setBattleDraftRows(rows);
+        const latest = data.map((r: any) => r.updated_at).filter(Boolean).sort().pop();
+        if (latest) setBattleUpdatedAt(new Date(latest).toLocaleString());
+      } else {
+        setBattleRows(DEFAULT_BATTLE_ROWS);
+        setBattleDraftRows(DEFAULT_BATTLE_ROWS);
+      }
+    } catch (e: any) {
+      setBattleError(e?.message || "Battle Board table not connected yet. Showing starter board.");
+      setBattleRows(DEFAULT_BATTLE_ROWS);
+      setBattleDraftRows(DEFAULT_BATTLE_ROWS);
+    } finally {
+      setBattleLoading(false);
+    }
+  }, []);
+
+  const publishBattleBoard = useCallback(async () => {
+    if (!isAdmin) return;
+    setBattleSaving(true);
+    setBattleError(null);
+    try {
+      const payload = battleDraftRows.map((r) => ({
+        id: r.id,
+        market: r.market,
+        account: r.account,
+        trades: Number(r.trades || 0),
+        target_trades: Number(r.targetTrades || 100),
+        profit: Number(r.profit || 0),
+        win_rate: Number(r.winRate || 0),
+        max_dd: Number(r.maxDd || 0),
+        profit_factor: Number(r.profitFactor || 0),
+        best_runner_r: Number(r.bestRunnerR || 0),
+        avg_r: Number(r.avgR || 0),
+        discipline: Number(r.discipline || 0),
+        manual_interruptions: Number(r.manualInterruptions || 0),
+        status: r.status,
+        notes: r.notes,
+        updated_at: new Date().toISOString(),
+      }));
+      const { error } = await supabase.from(BATTLE_TABLE).upsert(payload, { onConflict: "id" });
+      if (error) throw error;
+      setBattleRows(battleDraftRows);
+      setBattleUpdatedAt(new Date().toLocaleString());
+      push({ title: "Battle Board published", desc: "The weekly market stats are live for everyone." });
+      await loadBattleBoard();
+    } catch (e: any) {
+      setBattleError(e?.message || "Could not publish Battle Board.");
+    } finally {
+      setBattleSaving(false);
+    }
+  }, [battleDraftRows, isAdmin, loadBattleBoard, push]);
+
+  useEffect(() => { void loadBattleBoard(); }, [loadBattleBoard]);
+
+  const battleRankedRows = useMemo(() => {
+    return [...battleRows].sort((a, b) => {
+      const scoreA = (a.profit > 0 ? 30 : 0) + a.discipline * 0.25 + Math.min(a.trades / Math.max(1, a.targetTrades), 1) * 25 + Math.max(0, 20 - a.maxDd);
+      const scoreB = (b.profit > 0 ? 30 : 0) + b.discipline * 0.25 + Math.min(b.trades / Math.max(1, b.targetTrades), 1) * 25 + Math.max(0, 20 - b.maxDd);
+      return scoreB - scoreA;
+    });
+  }, [battleRows]);
+
   /* Derived */
   const tradeRows = useMemo(
     () =>
@@ -1524,6 +1664,9 @@ function PageInner() {
               <TabsTrigger value="analytics" className="rounded-xl border border-slate-700/80 px-4 py-2 text-sm font-semibold data-[state=active]:border-[#D4AF37] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black">
                 <BarChart3 className="mr-2 h-4 w-4" /> Analytics
               </TabsTrigger>
+              <TabsTrigger value="battle" className="rounded-xl border border-slate-700/80 px-4 py-2 text-sm font-semibold data-[state=active]:border-[#D4AF37] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black">
+                <Target className="mr-2 h-4 w-4" /> Battle Board
+              </TabsTrigger>
               <TabsTrigger value="risk-deriv" className="rounded-xl border border-slate-700/80 px-4 py-2 text-sm font-semibold data-[state=active]:border-[#D4AF37] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black">
                 <Calculator className="mr-2 h-4 w-4" /> Risk Calculator
               </TabsTrigger>
@@ -1577,9 +1720,12 @@ function PageInner() {
               </Button>
             </div>
 
-            <TabsList className="grid h-auto grid-cols-5 gap-2 bg-transparent p-0">
+            <TabsList className="grid h-auto grid-cols-4 gap-2 bg-transparent p-0">
               <TabsTrigger value="analytics" className="flex min-h-[74px] flex-col items-center justify-center gap-1 rounded-2xl border border-slate-400 bg-white px-1 py-2 text-center text-[10px] font-bold leading-tight text-slate-950 shadow-sm data-[state=active]:border-[#D4AF37] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:border-slate-700/80 dark:bg-slate-950/40 dark:text-slate-100 dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black">
                 <span className="grid h-9 w-9 place-items-center rounded-full border border-slate-400 bg-[#0B1220] text-[#F6C945] shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:text-[#F6C945]"><BarChart3 className="h-4 w-4" /></span><span>Analytics</span>
+              </TabsTrigger>
+              <TabsTrigger value="battle" className="flex min-h-[74px] flex-col items-center justify-center gap-1 rounded-2xl border border-slate-400 bg-white px-1 py-2 text-center text-[10px] font-bold leading-tight text-slate-950 shadow-sm data-[state=active]:border-[#D4AF37] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:border-slate-700/80 dark:bg-slate-950/40 dark:text-slate-100 dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black">
+                <span className="grid h-9 w-9 place-items-center rounded-full border border-slate-400 bg-[#0B1220] text-[#F6C945] shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:text-[#F6C945]"><Target className="h-4 w-4" /></span><span>Battle</span>
               </TabsTrigger>
               <TabsTrigger value="risk-deriv" className="flex min-h-[74px] flex-col items-center justify-center gap-1 rounded-2xl border border-slate-400 bg-white px-1 py-2 text-center text-[10px] font-bold leading-tight text-slate-950 shadow-sm data-[state=active]:border-[#D4AF37] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:border-slate-700/80 dark:bg-slate-950/40 dark:text-slate-100 dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black">
                 <span className="grid h-9 w-9 place-items-center rounded-full border border-slate-400 bg-[#0B1220] text-[#F6C945] shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:text-[#F6C945]"><Calculator className="h-4 w-4" /></span><span>Risk<br />Calc</span>
@@ -1608,6 +1754,131 @@ function PageInner() {
             </div>
           </div>
         </div>
+
+        {/* UST MARKETS BATTLE BOARD */}
+        <TabsContent value="battle" className="space-y-4">
+          <div className="overflow-hidden rounded-3xl border border-[#D4AF37]/30 bg-[radial-gradient(circle_at_top_left,rgba(212,175,55,0.20),transparent_32%),linear-gradient(135deg,#050814_0%,#0B1220_55%,#111827_100%)] p-4 shadow-2xl shadow-black/30 md:p-6">
+            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.35em] text-[#F6C945]">UST Research Lab</p>
+                <h2 className="mt-2 text-2xl font-black tracking-tight text-white md:text-4xl">Markets Battle Board</h2>
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300 md:text-base">
+                  Four live markets. One race to 100 trades. The goal is not hype — it is survival, discipline, drawdown control and repeatable performance.
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold text-slate-300">
+                  <span className="rounded-full border border-slate-700 bg-slate-950/60 px-3 py-1">Kuda_Gold</span>
+                  <span className="rounded-full border border-slate-700 bg-slate-950/60 px-3 py-1">Kuda_Silver</span>
+                  <span className="rounded-full border border-slate-700 bg-slate-950/60 px-3 py-1">Kuda_Nasdaq</span>
+                  <span className="rounded-full border border-slate-700 bg-slate-950/60 px-3 py-1">Kuda_US30</span>
+                </div>
+              </div>
+              <div className="rounded-2xl border border-[#D4AF37]/30 bg-black/30 p-4 text-sm text-slate-300 md:min-w-[260px]">
+                <div className="font-black uppercase tracking-wide text-[#F6C945]">Weekly Published Board</div>
+                <div className="mt-2 text-xs leading-5">Only the admin account can publish updates. Everyone else can view the same board.</div>
+                <div className="mt-3 text-xs text-slate-400">Last update: {battleUpdatedAt || "Not published yet"}</div>
+                <Button type="button" variant="outline" className="mt-3 w-full" onClick={() => void loadBattleBoard()} disabled={battleLoading}>
+                  <RefreshCw className="mr-2 h-4 w-4" /> Refresh Board
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {battleError && (
+            <div className="rounded-2xl border border-amber-400/30 bg-amber-500/10 p-3 text-sm text-amber-200">
+              {battleError}
+            </div>
+          )}
+
+          <div className="grid gap-4 lg:grid-cols-4">
+            {battleRankedRows.map((m, idx) => {
+              const progress = Math.min(100, Math.round((Number(m.trades || 0) / Math.max(1, Number(m.targetTrades || 100))) * 100));
+              const survival = Math.max(0, Math.min(100, Math.round((m.discipline || 0) - Math.max(0, m.maxDd || 0) - (m.manualInterruptions || 0) * 3 + (m.profit > 0 ? 8 : 0))));
+              return (
+                <div key={m.id} className="rounded-3xl border border-slate-700/80 bg-gradient-to-b from-slate-950 to-slate-900 p-4 shadow-xl shadow-black/20">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-xs font-black uppercase tracking-[0.22em] text-[#F6C945]">Rank #{idx + 1}</div>
+                      <h3 className="mt-1 text-xl font-black text-white">{m.account}</h3>
+                      <p className="text-xs font-semibold text-slate-400">{m.market} • Road to {m.targetTrades}</p>
+                    </div>
+                    <span className={`rounded-full border px-2.5 py-1 text-[10px] font-black ${BATTLE_STATUS_STYLES[m.status] || BATTLE_STATUS_STYLES.Stable}`}>{m.status}</span>
+                  </div>
+
+                  <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-800">
+                    <div className="h-full rounded-full bg-[#D4AF37]" style={{ width: `${progress}%` }} />
+                  </div>
+                  <div className="mt-1 flex justify-between text-xs text-slate-400"><span>{m.trades}/{m.targetTrades} trades</span><span>{progress}%</span></div>
+
+                  <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
+                    <div className="rounded-2xl border border-slate-800 bg-black/25 p-3"><div className="text-xs text-slate-400">Profit</div><div className={`font-black ${m.profit >= 0 ? "text-emerald-300" : "text-rose-300"}`}>{currency(m.profit)}</div></div>
+                    <div className="rounded-2xl border border-slate-800 bg-black/25 p-3"><div className="text-xs text-slate-400">Win Rate</div><div className="font-black text-white">{fmt(m.winRate)}%</div></div>
+                    <div className="rounded-2xl border border-slate-800 bg-black/25 p-3"><div className="text-xs text-slate-400">Max DD</div><div className="font-black text-amber-300">{fmt(m.maxDd)}%</div></div>
+                    <div className="rounded-2xl border border-slate-800 bg-black/25 p-3"><div className="text-xs text-slate-400">Survival</div><div className="font-black text-sky-300">{survival}/100</div></div>
+                    <div className="rounded-2xl border border-slate-800 bg-black/25 p-3"><div className="text-xs text-slate-400">Profit Factor</div><div className="font-black text-white">{fmt(m.profitFactor)}</div></div>
+                    <div className="rounded-2xl border border-slate-800 bg-black/25 p-3"><div className="text-xs text-slate-400">Best Runner</div><div className="font-black text-[#F6C945]">{fmt(m.bestRunnerR)}R</div></div>
+                  </div>
+
+                  <div className="mt-3 rounded-2xl border border-slate-800 bg-slate-950/70 p-3 text-xs leading-5 text-slate-300">
+                    <span className="font-black text-white">Weekly read:</span> {m.notes || "No notes published yet."}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="rounded-3xl border border-slate-800 bg-slate-950/70 p-4 shadow-xl shadow-black/20">
+            <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+              <div>
+                <h3 className="text-lg font-black text-white">Detailed Market Stats</h3>
+                <p className="text-sm text-slate-400">Use this section for weekly research reports and public transparency.</p>
+              </div>
+              {isAdmin && <Button type="button" onClick={() => void publishBattleBoard()} disabled={battleSaving}>{battleSaving ? "Publishing..." : "Publish Battle Board"}</Button>}
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[920px] text-left text-sm">
+                <thead className="bg-slate-900/80 text-xs uppercase tracking-wide text-slate-400">
+                  <tr><th className="px-3 py-3">Market</th><th className="px-3 py-3">Trades</th><th className="px-3 py-3">Profit</th><th className="px-3 py-3">Win %</th><th className="px-3 py-3">Avg R</th><th className="px-3 py-3">PF</th><th className="px-3 py-3">DD %</th><th className="px-3 py-3">Discipline</th><th className="px-3 py-3">Manual</th><th className="px-3 py-3">Status</th></tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800">
+                  {battleRankedRows.map((m) => (
+                    <tr key={m.id} className="text-slate-200"><td className="px-3 py-3 font-bold text-white">{m.account}</td><td className="px-3 py-3">{m.trades}/{m.targetTrades}</td><td className={`px-3 py-3 font-bold ${m.profit >= 0 ? "text-emerald-300" : "text-rose-300"}`}>{currency(m.profit)}</td><td className="px-3 py-3">{fmt(m.winRate)}%</td><td className="px-3 py-3">{fmt(m.avgR)}R</td><td className="px-3 py-3">{fmt(m.profitFactor)}</td><td className="px-3 py-3 text-amber-300">{fmt(m.maxDd)}%</td><td className="px-3 py-3">{m.discipline}/100</td><td className="px-3 py-3">{m.manualInterruptions}</td><td className="px-3 py-3"><span className={`rounded-full border px-2 py-1 text-xs font-bold ${BATTLE_STATUS_STYLES[m.status] || BATTLE_STATUS_STYLES.Stable}`}>{m.status}</span></td></tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {isAdmin && (
+            <div className="rounded-3xl border border-[#D4AF37]/30 bg-slate-950 p-4 shadow-xl shadow-black/20">
+              <h3 className="text-lg font-black text-white">Admin Publisher</h3>
+              <p className="mb-4 text-sm text-slate-400">Update the weekly stats here, then publish. Viewers will only see the published board.</p>
+              <div className="grid gap-4">
+                {battleDraftRows.map((m, i) => (
+                  <div key={m.id} className="rounded-2xl border border-slate-800 bg-slate-900/50 p-3">
+                    <div className="mb-3 font-black text-[#F6C945]">{m.account}</div>
+                    <div className="grid gap-2 md:grid-cols-6">
+                      <Input value={m.account} onChange={(e) => setBattleDraftRows((prev) => prev.map((r, idx) => idx === i ? { ...r, account: e.target.value } : r))} />
+                      <Input type="number" value={m.trades} onChange={(e) => setBattleDraftRows((prev) => prev.map((r, idx) => idx === i ? { ...r, trades: Number(e.target.value) } : r))} placeholder="Trades" />
+                      <Input type="number" value={m.profit} onChange={(e) => setBattleDraftRows((prev) => prev.map((r, idx) => idx === i ? { ...r, profit: Number(e.target.value) } : r))} placeholder="Profit" />
+                      <Input type="number" value={m.winRate} onChange={(e) => setBattleDraftRows((prev) => prev.map((r, idx) => idx === i ? { ...r, winRate: Number(e.target.value) } : r))} placeholder="Win %" />
+                      <Input type="number" value={m.maxDd} onChange={(e) => setBattleDraftRows((prev) => prev.map((r, idx) => idx === i ? { ...r, maxDd: Number(e.target.value) } : r))} placeholder="Max DD" />
+                      <Select value={m.status} onValueChange={(value) => setBattleDraftRows((prev) => prev.map((r, idx) => idx === i ? { ...r, status: value as BattleMarketRow["status"] } : r))}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>{Object.keys(BATTLE_STATUS_STYLES).map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                      </Select>
+                      <Input type="number" value={m.avgR} onChange={(e) => setBattleDraftRows((prev) => prev.map((r, idx) => idx === i ? { ...r, avgR: Number(e.target.value) } : r))} placeholder="Avg R" />
+                      <Input type="number" value={m.profitFactor} onChange={(e) => setBattleDraftRows((prev) => prev.map((r, idx) => idx === i ? { ...r, profitFactor: Number(e.target.value) } : r))} placeholder="PF" />
+                      <Input type="number" value={m.bestRunnerR} onChange={(e) => setBattleDraftRows((prev) => prev.map((r, idx) => idx === i ? { ...r, bestRunnerR: Number(e.target.value) } : r))} placeholder="Best R" />
+                      <Input type="number" value={m.discipline} onChange={(e) => setBattleDraftRows((prev) => prev.map((r, idx) => idx === i ? { ...r, discipline: Number(e.target.value) } : r))} placeholder="Discipline" />
+                      <Input type="number" value={m.manualInterruptions} onChange={(e) => setBattleDraftRows((prev) => prev.map((r, idx) => idx === i ? { ...r, manualInterruptions: Number(e.target.value) } : r))} placeholder="Manual" />
+                      <Input value={m.notes} className="md:col-span-6" onChange={(e) => setBattleDraftRows((prev) => prev.map((r, idx) => idx === i ? { ...r, notes: e.target.value } : r))} placeholder="Weekly read / notes" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </TabsContent>
 
         {/* DASHBOARD */}
         <TabsContent value="dashboard" className="space-y-4">
