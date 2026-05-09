@@ -93,6 +93,7 @@ type BattleMarketRow = {
   id: string;
   market: string;
   account: string;
+  startingCapital: number;
   trades: number;
   targetTrades: number;
   profit: number;
@@ -108,10 +109,10 @@ type BattleMarketRow = {
 };
 
 const DEFAULT_BATTLE_ROWS: BattleMarketRow[] = [
-  { id: "kuda-gold", market: "Gold", account: "Kuda_Gold", trades: 0, targetTrades: 100, profit: 0, winRate: 0, maxDd: 0, profitFactor: 0, bestRunnerR: 0, avgR: 0, discipline: 100, manualInterruptions: 0, status: "Stable", notes: "Fresh 100 live-trade race. Waiting for the market to prove itself." },
-  { id: "kuda-silver", market: "Silver", account: "Kuda_Silver", trades: 0, targetTrades: 100, profit: 0, winRate: 0, maxDd: 0, profitFactor: 0, bestRunnerR: 0, avgR: 0, discipline: 100, manualInterruptions: 0, status: "Stable", notes: "Separated from Gold so Silver can run its own race." },
-  { id: "kuda-nasdaq", market: "Nasdaq", account: "Kuda_Nasdaq", trades: 0, targetTrades: 100, profit: 0, winRate: 0, maxDd: 0, profitFactor: 0, bestRunnerR: 0, avgR: 0, discipline: 100, manualInterruptions: 0, status: "Stable", notes: "Momentum market under observation for smooth continuation behaviour." },
-  { id: "kuda-us30", market: "US30", account: "Kuda_US30", trades: 0, targetTrades: 100, profit: 0, winRate: 0, maxDd: 0, profitFactor: 0, bestRunnerR: 0, avgR: 0, discipline: 100, manualInterruptions: 0, status: "Stable", notes: "High-volatility test. Runner potential must prove it can survive drawdown." },
+  { id: "kuda-gold", market: "Gold", account: "Kuda_Gold", startingCapital: 0, trades: 0, targetTrades: 100, profit: 0, winRate: 0, maxDd: 0, profitFactor: 0, bestRunnerR: 0, avgR: 0, discipline: 100, manualInterruptions: 0, status: "Stable", notes: "Fresh 100 live-trade race. Waiting for the market to prove itself." },
+  { id: "kuda-silver", market: "Silver", account: "Kuda_Silver", startingCapital: 0, trades: 0, targetTrades: 100, profit: 0, winRate: 0, maxDd: 0, profitFactor: 0, bestRunnerR: 0, avgR: 0, discipline: 100, manualInterruptions: 0, status: "Stable", notes: "Separated from Gold so Silver can run its own race." },
+  { id: "kuda-nasdaq", market: "Nasdaq", account: "Kuda_Nasdaq", startingCapital: 0, trades: 0, targetTrades: 100, profit: 0, winRate: 0, maxDd: 0, profitFactor: 0, bestRunnerR: 0, avgR: 0, discipline: 100, manualInterruptions: 0, status: "Stable", notes: "Momentum market under observation for smooth continuation behaviour." },
+  { id: "kuda-us30", market: "US30", account: "Kuda_US30", startingCapital: 0, trades: 0, targetTrades: 100, profit: 0, winRate: 0, maxDd: 0, profitFactor: 0, bestRunnerR: 0, avgR: 0, discipline: 100, manualInterruptions: 0, status: "Stable", notes: "High-volatility test. Runner potential must prove it can survive drawdown." },
 ];
 
 const BATTLE_STATUS_STYLES: Record<BattleMarketRow["status"], string> = {
@@ -201,6 +202,58 @@ function tradeUniqueKey(t: Partial<TradeRow>) {
   const notes = String(t.notes || "").replace(/\s+/g, " ").trim().toUpperCase();
 
   return `fallback:${roundedTs}|${symbol}|${pnl}|${notes}`;
+}
+
+function computeBattleStatsFromSheet(items: SheetItem[], base: BattleMarketRow): BattleMarketRow {
+  const closed = normalizeToTradeRows(items).sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0));
+  const trades = closed.length;
+  const profit = Number(closed.reduce((sum, t) => sum + Number(t.pnl || 0), 0).toFixed(2));
+  const wins = closed.filter((t) => Number(t.pnl || 0) > 0).length;
+  const losses = closed.filter((t) => Number(t.pnl || 0) < 0).length;
+  const grossProfit = closed.filter((t) => Number(t.pnl || 0) > 0).reduce((sum, t) => sum + Number(t.pnl || 0), 0);
+  const grossLoss = Math.abs(closed.filter((t) => Number(t.pnl || 0) < 0).reduce((sum, t) => sum + Number(t.pnl || 0), 0));
+  const winRate = trades ? Number(((wins / trades) * 100).toFixed(1)) : 0;
+  const profitFactor = grossLoss > 0 ? Number((grossProfit / grossLoss).toFixed(2)) : grossProfit > 0 ? 99 : 0;
+
+  const startingCapital = Number(base.startingCapital || 0);
+  let equity = startingCapital;
+  let peak = startingCapital;
+  let maxDd = 0;
+  for (const t of closed) {
+    equity += Number(t.pnl || 0);
+    peak = Math.max(peak, equity);
+    if (peak > 0) maxDd = Math.max(maxDd, ((peak - equity) / peak) * 100);
+  }
+
+  const riskUnit = startingCapital > 0 ? startingCapital * 0.01 : 0;
+  const avgR = riskUnit > 0 && trades ? Number(((profit / trades) / riskUnit).toFixed(2)) : 0;
+  const bestRunnerR = riskUnit > 0 && closed.length ? Number((Math.max(...closed.map((t) => Number(t.pnl || 0))) / riskUnit).toFixed(2)) : 0;
+  const manualInterruptions = items.filter((it) => (it.action || "").toUpperCase() === "ORDER_CLOSE")
+    .filter((it) => {
+      const c = String(it.comment || "").toUpperCase();
+      return c && !c.includes("UST") && !c.includes("EA");
+    }).length;
+  const discipline = Math.max(0, Math.min(100, Math.round(100 - manualInterruptions * 5 - maxDd * 1.5)));
+
+  let status: BattleMarketRow["status"] = "Stable";
+  if (trades >= Number(base.targetTrades || 100) && profit > 0 && maxDd <= 15 && winRate >= 50) status = "Certified";
+  else if (maxDd >= 25 || (startingCapital > 0 && profit <= -startingCapital * 0.2)) status = "Failed Challenge";
+  else if (profit < 0) status = "Recovery Mode";
+  else if (maxDd >= 10 || (trades >= 10 && winRate < 45)) status = "Under Pressure";
+
+  return {
+    ...base,
+    trades,
+    profit,
+    winRate,
+    maxDd: Number(maxDd.toFixed(1)),
+    profitFactor,
+    bestRunnerR,
+    avgR,
+    discipline,
+    manualInterruptions,
+    status,
+  };
 }
 
 function dedupeTrades(rows: TradeRow[]) {
@@ -1078,7 +1131,7 @@ function PageInner() {
 
   /* ---------- UST Markets Battle Board (admin published, everyone can view) ---------- */
   // Recommended Supabase table: ust_market_battle_board
-  // Columns: id text primary key, market text, account text, trades int, target_trades int,
+  // Columns: id text primary key, market text, account text, starting_capital numeric, trades int, target_trades int,
   // profit numeric, win_rate numeric, max_dd numeric, profit_factor numeric, best_runner_r numeric,
   // avg_r numeric, discipline int, manual_interruptions int, status text, notes text, updated_at timestamptz.
   const BATTLE_TABLE = "ust_market_battle_board";
@@ -1086,6 +1139,7 @@ function PageInner() {
   const [battleDraftRows, setBattleDraftRows] = useState<BattleMarketRow[]>(DEFAULT_BATTLE_ROWS);
   const [battleLoading, setBattleLoading] = useState(false);
   const [battleSaving, setBattleSaving] = useState(false);
+  const [battleSyncing, setBattleSyncing] = useState<string | null>(null);
   const [battleError, setBattleError] = useState<string | null>(null);
   const [battleUpdatedAt, setBattleUpdatedAt] = useState<string>("");
 
@@ -1093,6 +1147,7 @@ function PageInner() {
     id: String(row?.id ?? fallback?.id ?? crypto.randomUUID()),
     market: String(row?.market ?? fallback?.market ?? "Market"),
     account: String(row?.account ?? fallback?.account ?? "Kuda_Market"),
+    startingCapital: Number(row?.starting_capital ?? row?.startingCapital ?? fallback?.startingCapital ?? 0),
     trades: Number(row?.trades ?? fallback?.trades ?? 0),
     targetTrades: Number(row?.target_trades ?? row?.targetTrades ?? fallback?.targetTrades ?? 100),
     profit: Number(row?.profit ?? fallback?.profit ?? 0),
@@ -1144,6 +1199,7 @@ function PageInner() {
         id: r.id,
         market: r.market,
         account: r.account,
+        starting_capital: Number(r.startingCapital || 0),
         trades: Number(r.trades || 0),
         target_trades: Number(r.targetTrades || 100),
         profit: Number(r.profit || 0),
@@ -1158,7 +1214,12 @@ function PageInner() {
         notes: r.notes,
         updated_at: new Date().toISOString(),
       }));
-      const { error } = await supabase.from(BATTLE_TABLE).upsert(payload, { onConflict: "id" });
+      let { error } = await supabase.from(BATTLE_TABLE).upsert(payload, { onConflict: "id" });
+      if (error && String(error.message || "").toLowerCase().includes("starting_capital")) {
+        const fallbackPayload = payload.map(({ starting_capital, ...rest }) => rest);
+        const retry = await supabase.from(BATTLE_TABLE).upsert(fallbackPayload, { onConflict: "id" });
+        error = retry.error;
+      }
       if (error) throw error;
       setBattleRows(battleDraftRows);
       setBattleUpdatedAt(new Date().toLocaleString());
@@ -1172,6 +1233,36 @@ function PageInner() {
   }, [battleDraftRows, isAdmin, loadBattleBoard, push]);
 
   useEffect(() => { void loadBattleBoard(); }, [loadBattleBoard]);
+  const syncBattleMarket = useCallback(async (idx: number) => {
+    if (!isAdmin) return;
+    const base = battleDraftRows[idx];
+    if (!base?.account) return;
+    setBattleSyncing(base.id);
+    setBattleError(null);
+    try {
+      const url = buildSheetsUrl(base.account);
+      if (!url) throw new Error("Google Sheet connection is missing. Check SHEETS_WEBAPP_URL and READ_TOKEN.");
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) throw new Error(`Sheet import failed for ${base.account}.`);
+      const json = await res.json();
+      const items: SheetItem[] = Array.isArray(json) ? json : Array.isArray(json?.items) ? json.items : Array.isArray(json?.data) ? json.data : [];
+      const calculated = computeBattleStatsFromSheet(items, base);
+      setBattleDraftRows((prev) => prev.map((r, i) => i === idx ? calculated : r));
+      push({ title: "Market stats calculated", desc: `${base.account} updated from Google Sheet closed trades.` });
+    } catch (e: any) {
+      setBattleError(e?.message || `Could not sync ${base.account}.`);
+    } finally {
+      setBattleSyncing(null);
+    }
+  }, [battleDraftRows, isAdmin, push]);
+
+  const syncAllBattleMarkets = useCallback(async () => {
+    if (!isAdmin) return;
+    for (let i = 0; i < battleDraftRows.length; i++) {
+      await syncBattleMarket(i);
+    }
+  }, [battleDraftRows.length, isAdmin, syncBattleMarket]);
+
 
   const battleRankedRows = useMemo(() => {
     return [...battleRows].sort((a, b) => {
@@ -1850,28 +1941,66 @@ function PageInner() {
 
           {isAdmin && (
             <div className="rounded-3xl border border-[#D4AF37]/30 bg-slate-950 p-4 shadow-xl shadow-black/20">
-              <h3 className="text-lg font-black text-white">Admin Publisher</h3>
-              <p className="mb-4 text-sm text-slate-400">Update the weekly stats here, then publish. Viewers will only see the published board.</p>
+              <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <h3 className="text-lg font-black text-white">Admin Auto Publisher</h3>
+                  <p className="text-sm text-slate-400">Enter only the market name, MT5 account name/number and starting capital. Click Calculate from Sheet, then Publish.</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" variant="outline" onClick={() => void syncAllBattleMarkets()} disabled={!!battleSyncing}>
+                    <RefreshCw className="mr-2 h-4 w-4" /> {battleSyncing ? "Calculating..." : "Calculate All from Sheet"}
+                  </Button>
+                  <Button type="button" onClick={() => void publishBattleBoard()} disabled={battleSaving || !!battleSyncing}>
+                    {battleSaving ? "Publishing..." : "Publish Battle Board"}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="mb-4 rounded-2xl border border-sky-400/20 bg-sky-500/10 p-3 text-xs leading-5 text-sky-100">
+                Auto-derived stats: trades completed, weekly/all imported profit, win rate, drawdown, profit factor, average R estimate, best runner estimate, manual interruptions, discipline score and market status. R estimates use 1% of starting capital as the risk unit.
+              </div>
+
               <div className="grid gap-4">
                 {battleDraftRows.map((m, i) => (
-                  <div key={m.id} className="rounded-2xl border border-slate-800 bg-slate-900/50 p-3">
-                    <div className="mb-3 font-black text-[#F6C945]">{m.account}</div>
-                    <div className="grid gap-2 md:grid-cols-6">
-                      <Input value={m.account} onChange={(e) => setBattleDraftRows((prev) => prev.map((r, idx) => idx === i ? { ...r, account: e.target.value } : r))} />
-                      <Input type="number" value={m.trades} onChange={(e) => setBattleDraftRows((prev) => prev.map((r, idx) => idx === i ? { ...r, trades: Number(e.target.value) } : r))} placeholder="Trades" />
-                      <Input type="number" value={m.profit} onChange={(e) => setBattleDraftRows((prev) => prev.map((r, idx) => idx === i ? { ...r, profit: Number(e.target.value) } : r))} placeholder="Profit" />
-                      <Input type="number" value={m.winRate} onChange={(e) => setBattleDraftRows((prev) => prev.map((r, idx) => idx === i ? { ...r, winRate: Number(e.target.value) } : r))} placeholder="Win %" />
-                      <Input type="number" value={m.maxDd} onChange={(e) => setBattleDraftRows((prev) => prev.map((r, idx) => idx === i ? { ...r, maxDd: Number(e.target.value) } : r))} placeholder="Max DD" />
-                      <Select value={m.status} onValueChange={(value) => setBattleDraftRows((prev) => prev.map((r, idx) => idx === i ? { ...r, status: value as BattleMarketRow["status"] } : r))}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>{Object.keys(BATTLE_STATUS_STYLES).map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-                      </Select>
-                      <Input type="number" value={m.avgR} onChange={(e) => setBattleDraftRows((prev) => prev.map((r, idx) => idx === i ? { ...r, avgR: Number(e.target.value) } : r))} placeholder="Avg R" />
-                      <Input type="number" value={m.profitFactor} onChange={(e) => setBattleDraftRows((prev) => prev.map((r, idx) => idx === i ? { ...r, profitFactor: Number(e.target.value) } : r))} placeholder="PF" />
-                      <Input type="number" value={m.bestRunnerR} onChange={(e) => setBattleDraftRows((prev) => prev.map((r, idx) => idx === i ? { ...r, bestRunnerR: Number(e.target.value) } : r))} placeholder="Best R" />
-                      <Input type="number" value={m.discipline} onChange={(e) => setBattleDraftRows((prev) => prev.map((r, idx) => idx === i ? { ...r, discipline: Number(e.target.value) } : r))} placeholder="Discipline" />
-                      <Input type="number" value={m.manualInterruptions} onChange={(e) => setBattleDraftRows((prev) => prev.map((r, idx) => idx === i ? { ...r, manualInterruptions: Number(e.target.value) } : r))} placeholder="Manual" />
-                      <Input value={m.notes} className="md:col-span-6" onChange={(e) => setBattleDraftRows((prev) => prev.map((r, idx) => idx === i ? { ...r, notes: e.target.value } : r))} placeholder="Weekly read / notes" />
+                  <div key={m.id} className="rounded-2xl border border-slate-800 bg-slate-900/50 p-4">
+                    <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                      <div className="font-black text-[#F6C945]">{m.account || m.market}</div>
+                      <Button type="button" size="sm" variant="outline" onClick={() => void syncBattleMarket(i)} disabled={!!battleSyncing}>
+                        <RefreshCw className="mr-2 h-4 w-4" /> {battleSyncing === m.id ? "Calculating..." : "Calculate from Sheet"}
+                      </Button>
+                    </div>
+
+                    <div className="grid gap-3 md:grid-cols-4">
+                      <div className="space-y-1">
+                        <Label className="text-xs text-slate-300">Market Name</Label>
+                        <Input value={m.market} placeholder="Gold" onChange={(e) => setBattleDraftRows((prev) => prev.map((r, idx) => idx === i ? { ...r, market: e.target.value } : r))} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-slate-300">Account Name / Number</Label>
+                        <Input value={m.account} placeholder="Kuda_Gold or 123456" onChange={(e) => setBattleDraftRows((prev) => prev.map((r, idx) => idx === i ? { ...r, account: e.target.value } : r))} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-slate-300">Starting Capital</Label>
+                        <Input type="number" value={m.startingCapital} placeholder="500" onChange={(e) => setBattleDraftRows((prev) => prev.map((r, idx) => idx === i ? { ...r, startingCapital: Number(e.target.value) } : r))} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-slate-300">Target Trades</Label>
+                        <Input type="number" value={m.targetTrades} placeholder="100" onChange={(e) => setBattleDraftRows((prev) => prev.map((r, idx) => idx === i ? { ...r, targetTrades: Number(e.target.value) } : r))} />
+                      </div>
+                    </div>
+
+                    <div className="mt-4 grid grid-cols-2 gap-2 text-xs md:grid-cols-6">
+                      <div className="rounded-xl border border-slate-800 bg-black/25 p-2"><div className="text-slate-400">Trades</div><div className="font-black text-white">{m.trades}/{m.targetTrades}</div></div>
+                      <div className="rounded-xl border border-slate-800 bg-black/25 p-2"><div className="text-slate-400">Profit</div><div className={m.profit >= 0 ? "font-black text-emerald-300" : "font-black text-rose-300"}>{currency(m.profit)}</div></div>
+                      <div className="rounded-xl border border-slate-800 bg-black/25 p-2"><div className="text-slate-400">Win Rate</div><div className="font-black text-white">{fmt(m.winRate)}%</div></div>
+                      <div className="rounded-xl border border-slate-800 bg-black/25 p-2"><div className="text-slate-400">Max DD</div><div className="font-black text-amber-300">{fmt(m.maxDd)}%</div></div>
+                      <div className="rounded-xl border border-slate-800 bg-black/25 p-2"><div className="text-slate-400">PF</div><div className="font-black text-white">{fmt(m.profitFactor)}</div></div>
+                      <div className="rounded-xl border border-slate-800 bg-black/25 p-2"><div className="text-slate-400">Status</div><div className="font-black text-[#F6C945]">{m.status}</div></div>
+                    </div>
+
+                    <div className="mt-3 space-y-1">
+                      <Label className="text-xs text-slate-300">Weekly Admin Notes</Label>
+                      <Input value={m.notes} onChange={(e) => setBattleDraftRows((prev) => prev.map((r, idx) => idx === i ? { ...r, notes: e.target.value } : r))} placeholder="Example: Gold is leading with cleaner NY session runners." />
                     </div>
                   </div>
                 ))}
