@@ -288,6 +288,86 @@ function groupBattleTrades(trades: BattleExplorerTrade[], key: "setupGrade" | "s
   }).sort((a, b) => b.profit - a.profit);
 }
 
+
+type BattleCoachSummary = {
+  title: string;
+  tone: string;
+  summary: string;
+  action: string;
+  chips: string[];
+};
+
+function buildBattleAiCoachSummary(
+  rows: BattleMarketRow[],
+  selectedMarket: BattleMarketRow | undefined,
+  trades: BattleExplorerTrade[],
+  gradeStats: BattleStatGroup[],
+  sessionStats: BattleStatGroup[]
+): BattleCoachSummary {
+  const ranked = [...rows].sort((a, b) => Number(b.profit || 0) - Number(a.profit || 0));
+  const bestMarket = ranked[0];
+  const worstMarket = [...rows].sort((a, b) => Number(a.profit || 0) - Number(b.profit || 0))[0];
+  const profitableMarkets = rows.filter((r) => Number(r.profit || 0) > 0).length;
+  const totalProfit = Number(rows.reduce((sum, r) => sum + Number(r.profit || 0), 0).toFixed(2));
+  const totalTrades = rows.reduce((sum, r) => sum + Number(r.trades || 0), 0);
+  const avgWinRate = rows.length ? Number((rows.reduce((sum, r) => sum + Number(r.winRate || 0), 0) / rows.length).toFixed(1)) : 0;
+  const bestGrade = gradeStats.filter((g) => g.trades > 0).sort((a, b) => b.profit - a.profit)[0];
+  const weakGrade = gradeStats.filter((g) => g.trades > 0).sort((a, b) => a.profit - b.profit)[0];
+  const bestSession = sessionStats.filter((g) => g.trades > 0).sort((a, b) => b.profit - a.profit)[0];
+  const weakSession = sessionStats.filter((g) => g.trades > 0).sort((a, b) => a.profit - b.profit)[0];
+  const recent = trades.slice(0, 5);
+  const recentLosses = recent.filter((t) => t.pnl < 0).length;
+  const selectedName = selectedMarket?.market || "selected market";
+
+  let title = "Collecting Evidence";
+  let tone = "border-sky-400/25 bg-sky-500/10 text-sky-100";
+  let summary = "UST Coach is waiting for more closed trades before giving a strong decision.";
+  let action = "Keep importing trades. Do not judge a market before there is enough sample size.";
+
+  if (totalTrades >= 10) {
+    if (totalProfit > 0 && profitableMarkets >= Math.ceil(rows.length / 2)) {
+      title = "Controlled Growth";
+      tone = "border-emerald-400/25 bg-emerald-500/10 text-emerald-100";
+      summary = `The board is positive overall. ${bestMarket?.market || "The leader"} is currently leading, while ${worstMarket?.market || "the weakest market"} needs tighter review.`;
+      action = bestSession
+        ? `Prioritise the strongest session: ${bestSession.label}. Scale only after the same behaviour repeats.`
+        : "Continue with normal risk and protect the current profitable curve.";
+    } else if (totalProfit < 0 || profitableMarkets === 0) {
+      title = "Defensive Mode";
+      tone = "border-rose-400/25 bg-rose-500/10 text-rose-100";
+      summary = `The board is under pressure. ${worstMarket?.market || selectedName} is dragging performance and needs protection before more exposure.`;
+      action = weakSession
+        ? `Reduce or pause trades during ${weakSession.label} until it becomes profitable again.`
+        : "Reduce risk, pause weak markets, and wait for cleaner A/B setups.";
+    } else {
+      title = "Mixed Conditions";
+      tone = "border-amber-400/25 bg-amber-500/10 text-amber-100";
+      summary = `The system is mixed. Some markets are paying, but consistency is not yet strong enough for aggressive scaling.`;
+      action = bestMarket
+        ? `Focus on ${bestMarket.market} and keep weaker markets in observation mode.`
+        : "Trade smaller until the strongest market becomes clear.";
+    }
+  }
+
+  if (recent.length >= 3 && recentLosses >= 3) {
+    title = "Short-Term Caution";
+    tone = "border-amber-400/25 bg-amber-500/10 text-amber-100";
+    summary = `${selectedName} has recent loss pressure. The next trade should be treated as a protection trade, not a recovery trade.`;
+    action = "Avoid revenge entries. Wait for checklist confirmation and keep risk fixed.";
+  }
+
+  const chips = [
+    `${totalTrades} total trades`,
+    `${profitableMarkets}/${rows.length} markets positive`,
+    `${avgWinRate}% avg win rate`,
+    bestGrade ? `Best grade: ${bestGrade.label}` : "Best grade: pending",
+    bestSession ? `Best session: ${bestSession.label}` : "Best session: pending",
+    weakGrade && weakGrade.profit < 0 ? `Review grade: ${weakGrade.label}` : "Grade risk: controlled",
+  ];
+
+  return { title, tone, summary, action, chips };
+}
+
 function buildBattleExplorerTrades(items: SheetItem[], base: BattleMarketRow, periodStart?: string, periodEnd?: string): BattleExplorerTrade[] {
   const scopedItems = filterSheetItemsByPeriod(items, periodStart, periodEnd);
   const riskUnit = Number(base.startingCapital || 0) > 0 ? Number(base.startingCapital || 0) * 0.01 : 0;
@@ -1443,6 +1523,8 @@ function PageInner() {
 
   const battleGradeStats = useMemo(() => groupBattleTrades(battleExplorerTrades, "setupGrade"), [battleExplorerTrades]);
   const battleSessionStats = useMemo(() => groupBattleTrades(battleExplorerTrades, "session"), [battleExplorerTrades]);
+  const battleSelectedMarket = useMemo(() => battleRows.find((r) => r.id === battleExplorerMarketId) || battleRows[0], [battleRows, battleExplorerMarketId]);
+  const battleCoachSummary = useMemo(() => buildBattleAiCoachSummary(battleRows, battleSelectedMarket, battleExplorerTrades, battleGradeStats, battleSessionStats), [battleRows, battleSelectedMarket, battleExplorerTrades, battleGradeStats, battleSessionStats]);
 
   const battleRankedRows = useMemo(() => {
     return [...battleRows].sort((a, b) => {
@@ -2446,6 +2528,24 @@ function PageInner() {
                     </tbody>
                   </table>
                 </div>
+              </div>
+            </div>
+
+            <div className={`mt-4 rounded-2xl border p-4 ${battleCoachSummary.tone}`}>
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <div className="text-xs font-black uppercase tracking-[0.28em] text-[#F6C945]">AI Coach Summary</div>
+                  <h4 className="mt-1 text-xl font-black text-white">{battleCoachSummary.title}</h4>
+                  <p className="mt-2 max-w-4xl text-sm leading-6 text-slate-200">{battleCoachSummary.summary}</p>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-black/25 p-3 text-xs leading-5 text-slate-200 md:max-w-[360px]">
+                  <span className="font-black text-[#F6C945]">Coach Action:</span> {battleCoachSummary.action}
+                </div>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {battleCoachSummary.chips.map((chip) => (
+                  <span key={chip} className="rounded-full border border-white/10 bg-black/25 px-3 py-1 text-[11px] font-bold text-slate-100">{chip}</span>
+                ))}
               </div>
             </div>
 
