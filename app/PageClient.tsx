@@ -115,6 +115,7 @@ const DEFAULT_BATTLE_ROWS: BattleMarketRow[] = [
   { id: "kuda-silver", market: "Silver", account: "Kuda_Silver", startingCapital: 0, trades: 0, targetTrades: 100, profit: 0, winRate: 0, maxDd: 0, profitFactor: 0, bestRunnerR: 0, avgR: 0, discipline: 100, manualInterruptions: 0, status: "Stable", notes: "Separated from Gold so Silver can run its own race." },
   { id: "kuda-nasdaq", market: "Nasdaq", account: "Kuda_Nasdaq", startingCapital: 0, trades: 0, targetTrades: 100, profit: 0, winRate: 0, maxDd: 0, profitFactor: 0, bestRunnerR: 0, avgR: 0, discipline: 100, manualInterruptions: 0, status: "Stable", notes: "Momentum market under observation for smooth continuation behaviour." },
   { id: "kuda-us30", market: "US30", account: "Kuda_US30", startingCapital: 0, trades: 0, targetTrades: 100, profit: 0, winRate: 0, maxDd: 0, profitFactor: 0, bestRunnerR: 0, avgR: 0, discipline: 100, manualInterruptions: 0, status: "Stable", notes: "High-volatility test. Runner potential must prove it can survive drawdown." },
+  { id: "kuda-v90", market: "V90", account: "Kuda_V90", startingCapital: 0, trades: 0, targetTrades: 100, profit: 0, winRate: 0, maxDd: 0, profitFactor: 0, bestRunnerR: 0, avgR: 0, discipline: 100, manualInterruptions: 0, status: "Stable", notes: "Volatility market added as the 5th Battle Board contender." },
 ];
 
 const BATTLE_STATUS_STYLES: Record<BattleMarketRow["status"], string> = {
@@ -1313,7 +1314,11 @@ function PageInner() {
         .order("profit", { ascending: false });
       if (error) throw error;
       if (Array.isArray(data) && data.length) {
-        const rows = data.map((r: any) => normalizeBattleRow(r));
+        const rowsFromDb = data.map((r: any) => normalizeBattleRow(r));
+        // Keep the board at 5 markets even when Supabase still has the older 4-market data.
+        // The new market will appear for admin, then it can be calculated and published once.
+        const missingDefaults = DEFAULT_BATTLE_ROWS.filter((d) => !rowsFromDb.some((r) => r.id === d.id));
+        const rows = [...rowsFromDb, ...missingDefaults];
         setBattleRows(rows);
         setBattleDraftRows(rows);
         const latest = data.map((r: any) => r.updated_at).filter(Boolean).sort().pop();
