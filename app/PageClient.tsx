@@ -1549,6 +1549,33 @@ function PageInner() {
   }, [battleRows]);
 
 
+  const battleLeader = battleRankedRows[0];
+  const battleRiskRows = useMemo(() => {
+    return [...battleRows]
+      .filter((r) => String(r.market || "").trim())
+      .sort((a, b) => {
+        const riskA = Math.max(0, Number(a.maxDd || 0)) + Math.max(0, 70 - Number(a.discipline || 0)) + (Number(a.profit || 0) < 0 ? 12 : 0);
+        const riskB = Math.max(0, Number(b.maxDd || 0)) + Math.max(0, 70 - Number(b.discipline || 0)) + (Number(b.profit || 0) < 0 ? 12 : 0);
+        return riskB - riskA;
+      })
+      .slice(0, 3);
+  }, [battleRows]);
+
+  const battleAiInsightLines = useMemo(() => {
+    const active = battleOverallSummary.activeRows;
+    const profitable = active.filter((r) => Number(r.profit || 0) > 0).length;
+    const pressure = active.filter((r) => Number(r.maxDd || 0) >= 10 || Number(r.discipline || 0) < 80 || Number(r.profit || 0) < 0).length;
+    const leader = battleRankedRows[0];
+    const lagger = [...active].sort((a, b) => Number(a.profit || 0) - Number(b.profit || 0))[0];
+
+    return [
+      leader ? `${leader.market} is currently carrying the strongest battle score. Keep capital focus here only while drawdown stays controlled.` : "Waiting for enough market data to identify a clear leader.",
+      `${profitable}/${active.length || 0} markets are currently profitable, with ${pressure} market${pressure === 1 ? "" : "s"} needing closer risk monitoring.`,
+      lagger && Number(lagger.profit || 0) < 0 ? `${lagger.market} is the weakest performer by net PnL. Reduce confidence until it proves recovery through clean closed trades.` : "No market is deeply negative by net PnL yet; continue collecting clean closed-trade data.",
+    ];
+  }, [battleOverallSummary.activeRows, battleRankedRows]);
+
+
   const exportBattleBoardPdf = useCallback(() => {
     if (typeof window === "undefined") return;
 
@@ -2413,41 +2440,83 @@ function PageInner() {
             </div>
           )}
 
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {battleRankedRows.map((m, idx) => {
-              const progress = Math.min(100, Math.round((Number(m.trades || 0) / Math.max(1, Number(m.targetTrades || 100))) * 100));
-              const survival = Math.max(0, Math.min(100, Math.round((m.discipline || 0) - Math.max(0, m.maxDd || 0) + (m.profit > 0 ? 8 : 0))));
-              return (
-                <div key={m.id} className="rounded-3xl border border-slate-700/80 bg-gradient-to-b from-slate-950 to-slate-900 p-3 shadow-xl shadow-black/20 md:p-4">
-                  <div className="flex items-start justify-between gap-3">
+          <div className="grid gap-4 lg:grid-cols-[1.2fr_0.9fr_0.9fr]">
+            <div className="rounded-3xl border border-sky-400/25 bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.18),transparent_34%),linear-gradient(135deg,rgba(15,23,42,0.95),rgba(2,6,23,0.95))] p-4 shadow-xl shadow-black/25">
+              <div className="flex items-center gap-2">
+                <span className="grid h-9 w-9 place-items-center rounded-2xl border border-sky-300/30 bg-sky-400/10 text-sky-200"><Activity className="h-4 w-4" /></span>
+                <div>
+                  <div className="text-xs font-black uppercase tracking-[0.25em] text-sky-200">AI Battle Insights</div>
+                  <div className="text-sm text-slate-400">What the board is saying right now</div>
+                </div>
+              </div>
+
+              <div className="mt-4 space-y-3">
+                {battleAiInsightLines.map((line, idx) => (
+                  <div key={idx} className="rounded-2xl border border-slate-700/70 bg-black/25 p-3 text-sm leading-6 text-slate-200">
+                    <span className="mr-2 inline-flex h-6 w-6 items-center justify-center rounded-full bg-sky-400/15 text-xs font-black text-sky-200">{idx + 1}</span>
+                    {line}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-3xl border border-[#D4AF37]/35 bg-[radial-gradient(circle_at_top,rgba(212,175,55,0.22),transparent_38%),linear-gradient(180deg,rgba(15,23,42,0.95),rgba(2,6,23,0.95))] p-4 shadow-xl shadow-black/25">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-xs font-black uppercase tracking-[0.25em] text-[#F6C945]">Market Leader</div>
+                  <div className="mt-1 text-sm text-slate-400">Highest battle score</div>
+                </div>
+                <span className="grid h-10 w-10 place-items-center rounded-2xl border border-[#D4AF37]/30 bg-[#D4AF37]/10 text-[#F6C945]"><Star className="h-5 w-5" /></span>
+              </div>
+
+              {battleLeader ? (
+                <div className="mt-5">
+                  <div className="flex items-end justify-between gap-3">
                     <div>
-                      <div className="text-xs font-black uppercase tracking-[0.22em] text-[#F6C945]">Rank #{idx + 1}</div>
-                      <h3 className="mt-1 text-xl font-black text-white">{m.market}</h3>
-                      <p className="text-xs font-semibold text-slate-400">Road to {m.targetTrades} trades</p>
+                      <div className="text-3xl font-black text-white">{battleLeader.market}</div>
+                      <div className={`mt-1 text-xl font-black ${battleLeader.profit >= 0 ? "text-emerald-300" : "text-rose-300"}`}>{currency(battleLeader.profit)}</div>
                     </div>
-                    <span className={`rounded-full border px-2.5 py-1 text-[10px] font-black ${BATTLE_STATUS_STYLES[m.status] || BATTLE_STATUS_STYLES.Stable}`}>{m.status}</span>
+                    <span className={`rounded-full border px-2.5 py-1 text-[10px] font-black ${BATTLE_STATUS_STYLES[battleLeader.status] || BATTLE_STATUS_STYLES.Stable}`}>{battleLeader.status}</span>
                   </div>
 
-                  <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-800">
-                    <div className="h-full rounded-full bg-[#D4AF37]" style={{ width: `${progress}%` }} />
-                  </div>
-                  <div className="mt-1 flex justify-between text-xs text-slate-400"><span>{m.trades}/{m.targetTrades} trades</span><span>{progress}%</span></div>
-
-                  <div className="mt-4 grid grid-cols-2 gap-2 text-xs sm:text-sm">
-                    <div className="rounded-2xl border border-slate-800 bg-black/25 p-3"><div className="text-xs text-slate-400">Profit</div><div className={`font-black ${m.profit >= 0 ? "text-emerald-300" : "text-rose-300"}`}>{currency(m.profit)}</div></div>
-                    <div className="rounded-2xl border border-slate-800 bg-black/25 p-3"><div className="text-xs text-slate-400">Win Rate</div><div className="font-black text-white">{fmt(m.winRate)}%</div></div>
-                    <div className="rounded-2xl border border-slate-800 bg-black/25 p-3"><div className="text-xs text-slate-400">Max DD</div><div className="font-black text-amber-300">{fmt(m.maxDd)}%</div></div>
-                    <div className="rounded-2xl border border-slate-800 bg-black/25 p-3"><div className="text-xs text-slate-400">Survival</div><div className="font-black text-sky-300">{survival}/100</div></div>
-                    <div className="rounded-2xl border border-slate-800 bg-black/25 p-3"><div className="text-xs text-slate-400">Profit Factor</div><div className="font-black text-white">{fmt(m.profitFactor)}</div></div>
-                    <div className="rounded-2xl border border-slate-800 bg-black/25 p-3"><div className="text-xs text-slate-400">Best Runner</div><div className="font-black text-[#F6C945]">{fmt(m.bestRunnerR)}R</div></div>
-                  </div>
-
-                  <div className="mt-3 rounded-2xl border border-slate-800 bg-slate-950/70 p-3 text-xs leading-5 text-slate-300">
-                    <span className="font-black text-white">Weekly read:</span> {m.notes || "No notes published yet."}
+                  <div className="mt-5 grid grid-cols-2 gap-2 text-sm">
+                    <div className="rounded-2xl border border-slate-800 bg-black/25 p-3"><div className="text-xs text-slate-400">Win Rate</div><div className="font-black text-white">{fmt(battleLeader.winRate)}%</div></div>
+                    <div className="rounded-2xl border border-slate-800 bg-black/25 p-3"><div className="text-xs text-slate-400">Profit Factor</div><div className="font-black text-white">{fmt(battleLeader.profitFactor)}</div></div>
+                    <div className="rounded-2xl border border-slate-800 bg-black/25 p-3"><div className="text-xs text-slate-400">Drawdown</div><div className="font-black text-amber-300">{fmt(battleLeader.maxDd)}%</div></div>
+                    <div className="rounded-2xl border border-slate-800 bg-black/25 p-3"><div className="text-xs text-slate-400">Progress</div><div className="font-black text-sky-300">{battleLeader.trades}/{battleLeader.targetTrades}</div></div>
                   </div>
                 </div>
-              );
-            })}
+              ) : <div className="mt-5 rounded-2xl border border-slate-800 bg-black/25 p-3 text-sm text-slate-400">No market data available yet.</div>}
+            </div>
+
+            <div className="rounded-3xl border border-amber-400/25 bg-[radial-gradient(circle_at_top,rgba(251,191,36,0.16),transparent_34%),linear-gradient(180deg,rgba(15,23,42,0.95),rgba(2,6,23,0.95))] p-4 shadow-xl shadow-black/25">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-xs font-black uppercase tracking-[0.25em] text-amber-200">Risk Radar</div>
+                  <div className="mt-1 text-sm text-slate-400">Markets needing attention</div>
+                </div>
+                <span className="grid h-10 w-10 place-items-center rounded-2xl border border-amber-300/30 bg-amber-400/10 text-amber-200"><ShieldCheck className="h-5 w-5" /></span>
+              </div>
+
+              <div className="mt-4 space-y-3">
+                {(battleRiskRows.length ? battleRiskRows : battleRows.slice(0, 3)).map((m) => {
+                  const riskScore = Math.min(100, Math.max(0, Math.round(Math.max(0, Number(m.maxDd || 0)) * 3 + Math.max(0, 80 - Number(m.discipline || 0)) + (Number(m.profit || 0) < 0 ? 20 : 0))));
+                  const riskLabel = riskScore >= 65 ? "High" : riskScore >= 35 ? "Medium" : "Low";
+                  return (
+                    <div key={m.id} className="rounded-2xl border border-slate-800 bg-black/25 p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="font-black text-white">{m.market}</div>
+                        <div className={riskScore >= 65 ? "text-xs font-black text-rose-300" : riskScore >= 35 ? "text-xs font-black text-amber-300" : "text-xs font-black text-emerald-300"}>{riskLabel}</div>
+                      </div>
+                      <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-800">
+                        <div className={riskScore >= 65 ? "h-full rounded-full bg-rose-400" : riskScore >= 35 ? "h-full rounded-full bg-amber-400" : "h-full rounded-full bg-emerald-400"} style={{ width: `${riskScore}%` }} />
+                      </div>
+                      <div className="mt-2 flex justify-between text-xs text-slate-400"><span>DD {fmt(m.maxDd)}%</span><span>Health {m.discipline}/100</span></div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
 
           <div className="rounded-3xl border border-slate-800 bg-slate-950/70 p-4 shadow-xl shadow-black/20">
