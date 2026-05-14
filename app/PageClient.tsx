@@ -4432,13 +4432,13 @@ function PageInner() {
               </div>
             )}
 
-            <div className="mb-4 grid grid-cols-1 gap-3 rounded-2xl border border-[#D4AF37]/30 bg-black/25 p-3 sm:grid-cols-2 md:p-4 lg:grid-cols-5">
-              <div className="rounded-2xl border border-emerald-400/30 bg-[radial-gradient(circle_at_top_right,rgba(16,185,129,0.18),transparent_45%),rgba(16,185,129,0.06)] p-5 shadow-lg shadow-emerald-950/20 lg:col-span-1 lg:border-r lg:border-slate-700/70 lg:bg-transparent lg:p-0 lg:pr-4 lg:shadow-none">
+            <div className="mb-4 grid grid-cols-2 gap-3 rounded-2xl border border-[#D4AF37]/30 bg-black/25 p-3 sm:grid-cols-2 md:p-4 lg:grid-cols-5">
+              <div className="col-span-2 rounded-2xl border border-emerald-400/30 bg-[radial-gradient(circle_at_top_right,rgba(16,185,129,0.18),transparent_45%),rgba(16,185,129,0.06)] p-4 shadow-lg shadow-emerald-950/20 lg:col-span-1 lg:border-r lg:border-slate-700/70 lg:bg-transparent lg:p-0 lg:pr-4 lg:shadow-none">
                 <p className="text-xs font-black uppercase tracking-[0.22em] text-[#F6C945]">
                   Live Status
                 </p>
                 <div
-                  className={`mt-2 flex items-center gap-2 text-xl font-black ${locked && lockOnHit ? "text-rose-300" : "text-emerald-300"}`}
+                  className={`mt-2 flex items-center gap-2 text-[24px] font-black ${locked && lockOnHit ? "text-rose-300" : "text-emerald-300"}`}
                 >
                   <span
                     className={`h-2.5 w-2.5 rounded-full ${locked && lockOnHit ? "bg-rose-400" : "bg-emerald-400"}`}
@@ -5599,21 +5599,21 @@ function TopStatusMetric({
         : "text-emerald-300";
 
   return (
-    <div className="relative min-w-0 overflow-hidden rounded-2xl border border-slate-700/70 bg-[linear-gradient(135deg,rgba(15,23,42,0.92),rgba(2,6,23,0.96))] p-4 shadow-lg shadow-black/20 lg:flex lg:items-center lg:gap-3 lg:border-r lg:border-y-0 lg:border-l-0 lg:bg-transparent lg:p-0 lg:pr-4 lg:shadow-none last:border-r-0">
-      <div className="mb-3 grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-emerald-400/25 bg-emerald-500/10 text-emerald-300/90 lg:mb-0 lg:h-auto lg:w-auto lg:border-0 lg:bg-transparent">
+    <div className="relative min-w-0 overflow-hidden rounded-2xl border border-slate-700/70 bg-[linear-gradient(135deg,rgba(15,23,42,0.92),rgba(2,6,23,0.96))] p-3 shadow-lg shadow-black/20 lg:flex lg:items-center lg:gap-3 lg:border-r lg:border-y-0 lg:border-l-0 lg:bg-transparent lg:p-0 lg:pr-4 lg:shadow-none last:border-r-0">
+      <div className="mb-2 grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-emerald-400/25 bg-emerald-500/10 text-emerald-300/90 sm:h-11 sm:w-11 lg:mb-0 lg:h-auto lg:w-auto lg:border-0 lg:bg-transparent">
         {Icon}
       </div>
       <div className="min-w-0">
-        <p className="text-[11px] font-black uppercase leading-tight tracking-wide text-slate-400 md:text-xs">
+        <p className="text-[10px] font-black uppercase leading-tight tracking-wide text-slate-400 sm:text-[11px] md:text-xs">
           {label}
         </p>
         <p
-          className={`mt-2 max-w-full whitespace-nowrap text-[26px] font-black leading-none tracking-[-0.04em] sm:text-2xl lg:mt-1 lg:text-xl ${valueClass}`}
+          className={`mt-1 max-w-full break-words text-[20px] font-black leading-none tracking-[-0.04em] sm:text-2xl lg:mt-1 lg:text-xl ${valueClass}`}
         >
           {value}
         </p>
       </div>
-      <div className="pointer-events-none absolute bottom-3 right-3 h-6 w-20 opacity-70 lg:hidden">
+      <div className="pointer-events-none absolute bottom-2 right-2 h-5 w-14 opacity-60 lg:hidden">
         <div className="h-full w-full rounded-full bg-gradient-to-r from-transparent via-emerald-400/25 to-emerald-300/10" />
       </div>
     </div>
@@ -5786,7 +5786,7 @@ function DashCard({
       <CardContent
         className={
           featured
-            ? "relative min-h-[140px] p-3 sm:min-h-[150px] sm:p-5"
+            ? "relative min-h-[125px] p-3 sm:min-h-[150px] sm:p-5"
             : "relative min-h-[105px] p-3 sm:p-4"
         }
       >
@@ -5801,7 +5801,7 @@ function DashCard({
           {title}
         </div>
         <div
-          className={`${featured ? "text-[24px] sm:text-3xl" : "text-[20px] sm:text-2xl"} mt-2 max-w-full whitespace-nowrap font-black leading-none tracking-[-0.04em] ${toneText(tone)}`}
+          className={`${featured ? "text-[22px] sm:text-3xl" : "text-[20px] sm:text-2xl"} mt-2 max-w-full break-words font-black leading-none tracking-[-0.04em] ${toneText(tone)}`}
         >
           {value}
         </div>
