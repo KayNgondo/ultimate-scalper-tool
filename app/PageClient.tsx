@@ -70,6 +70,7 @@ import {
   RefreshCw,
   Calculator,
   FileText,
+  MoreHorizontal,
 } from "lucide-react";
 
 /* ========== recharts ========== */
@@ -1198,6 +1199,7 @@ function PageInner() {
   const { user } = useSupabaseUser();
   const { push } = useToast();
   const [activeTab, setActiveTab] = useState<string>("dashboard");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Default UST to dark mode on first visit. Users can still switch theme afterwards.
   useEffect(() => {
@@ -2757,109 +2759,124 @@ function PageInner() {
             </span>
           </div>
 
-          <div className="grid grid-cols-4 gap-2 border-t border-slate-800/70 pt-2">
+          <div className="flex items-center justify-between gap-2 border-t border-slate-800/70 pt-2">
             <Button
               type="button"
-              onClick={() => setActiveTab("dashboard")}
-              className="h-16 rounded-2xl bg-[#D4AF37] px-1.5 text-[11px] font-black text-black shadow-lg shadow-[#D4AF37]/20 hover:bg-[#c9a42f] sm:h-14 sm:text-xs"
+              variant="outline"
+              onClick={() => setMobileMenuOpen((v) => !v)}
+              className="h-11 flex-1 rounded-2xl border-slate-700/80 bg-slate-950/40 text-sm font-black text-slate-100 hover:border-[#D4AF37]/70 hover:bg-slate-900"
             >
-              <span className="flex min-w-0 flex-col items-center justify-center gap-1 leading-none">
-                <Home className="h-5 w-5 shrink-0 sm:h-4 sm:w-4" />
-                <span className="max-w-full truncate">Dashboard</span>
-              </span>
+              <MoreHorizontal className="mr-2 h-5 w-5 text-[#F6C945]" />
+              Menu
             </Button>
-            <Button
-              disabled={!hasSessionActivity}
-              className="h-16 rounded-2xl px-1.5 text-[11px] font-black sm:h-14 sm:text-xs"
-              onClick={async () => {
-                if (!hasSessionActivity) {
-                  push({
-                    title: "No trades logged",
-                    desc: "You can’t end the session without at least one trade or equity change.",
-                  });
-                  return;
-                }
-                try {
-                  if (!user?.id) {
+          </div>
+
+          {mobileMenuOpen && (
+            <div className="grid grid-cols-2 gap-2 rounded-2xl border border-slate-800/80 bg-slate-950/95 p-2 shadow-xl shadow-black/40">
+              {[
+                { value: "dashboard", label: "Dashboard", icon: Home },
+                { value: "analytics", label: "Analytics", icon: BarChart3 },
+                { value: "battle", label: "Battle Board", icon: Target },
+                { value: "risk-deriv", label: "Risk Calculator", icon: Calculator },
+                { value: "journal", label: "Trade Journal", icon: BookOpen },
+                { value: "calendar", label: "Calendar", icon: CalendarDays },
+                { value: "asetups", label: "A-Setups", icon: Target },
+                { value: "checklist", label: "Checklist", icon: ClipboardCheck },
+              ].map((item) => {
+                const Icon = item.icon;
+                const active = activeTab === item.value;
+                return (
+                  <button
+                    key={item.value}
+                    type="button"
+                    onClick={() => {
+                      setActiveTab(item.value);
+                      setMobileMenuOpen(false);
+                    }}
+                    className={`flex items-center gap-2 rounded-xl border px-3 py-3 text-left text-xs font-black transition ${
+                      active
+                        ? "border-[#D4AF37] bg-[#D4AF37] text-black"
+                        : "border-slate-700/80 bg-slate-900/60 text-slate-100 hover:border-[#D4AF37]/60"
+                    }`}
+                  >
+                    <Icon className={`h-4 w-4 ${active ? "text-black" : "text-[#F6C945]"}`} />
+                    <span className="truncate">{item.label}</span>
+                  </button>
+                );
+              })}
+
+              <Button
+                disabled={!hasSessionActivity}
+                className="h-11 rounded-xl text-xs font-black"
+                onClick={async () => {
+                  if (!hasSessionActivity) {
                     push({
-                      title: "Please sign in",
-                      desc: "You need to sign in to save sessions.",
+                      title: "No trades logged",
+                      desc: "You can’t end the session without at least one trade or equity change.",
                     });
                     return;
                   }
-                  const startedAtISO = new Date(
-                    Number(sessionId || Date.now()),
-                  ).toISOString();
-                  const endedAtISO = new Date().toISOString();
-                  const safeSessionId = sessionId ?? crypto.randomUUID();
-                  const summary = buildSessionSummary({
-                    sessionId: safeSessionId,
-                    startedAt: startedAtISO,
-                    endedAt: endedAtISO,
-                    pnl: Number(pnl || 0),
-                    trades: sessionTrades.map((t) => ({
-                      market: t.symbol,
-                      pnl: t.pnl,
-                    })),
-                    disciplineScore,
-                    badges: currentRuleBadges,
-                  });
-                  setLastSessionSummary(summary);
-                  await recordSessionToLeaderboard(
-                    user.id,
-                    Number(pnl || 0),
-                    startedAtISO,
-                    endedAtISO,
-                  );
-                  newSessionId();
-                  push({
-                    title: "Leaderboard synced",
-                    desc: `Board synced • Discipline ${summary.disciplineScore}/100`,
-                  });
-                } catch (e) {
-                  console.error(e);
-                  newSessionId();
-                }
-              }}
-            >
-              <span className="flex min-w-0 flex-col items-center justify-center gap-1 leading-none">
-                <RefreshCw className="h-5 w-5 shrink-0 sm:h-4 sm:w-4" />
-                <span className="max-w-full truncate">Sync</span>
-              </span>
-            </Button>
-            <a
-              href="/leaderboard"
-              className="inline-flex h-16 min-w-0 items-center justify-center rounded-2xl border border-slate-700/80 px-1.5 text-[11px] font-black text-slate-100 transition hover:border-[#D4AF37]/70 hover:bg-slate-900 sm:h-14 sm:text-xs"
-            >
-              <span className="flex min-w-0 flex-col items-center justify-center gap-1 leading-none">
-                <BarChart3 className="h-5 w-5 shrink-0 sm:h-4 sm:w-4" />
-                <span className="max-w-full truncate">Leaders</span>
-              </span>
-            </a>
-            {user && (
-              <Button
-                variant="outline"
-                className="h-16 rounded-2xl px-1.5 text-[11px] font-black sm:h-14 sm:text-xs"
-                onClick={async () => {
                   try {
-                    await supabase.auth.signOut();
-                    push({ title: "Signed out", desc: "See you soon." });
+                    if (!user?.id) {
+                      push({
+                        title: "Please sign in",
+                        desc: "You need to sign in to save sessions.",
+                      });
+                      return;
+                    }
+                    const startedAtISO = new Date(Number(sessionId || Date.now())).toISOString();
+                    const endedAtISO = new Date().toISOString();
+                    const safeSessionId = sessionId ?? crypto.randomUUID();
+                    const summary = buildSessionSummary({
+                      sessionId: safeSessionId,
+                      startedAt: startedAtISO,
+                      endedAt: endedAtISO,
+                      pnl: Number(pnl || 0),
+                      trades: sessionTrades.map((t) => ({ market: t.symbol, pnl: t.pnl })),
+                      disciplineScore,
+                      badges: currentRuleBadges,
+                    });
+                    setLastSessionSummary(summary);
+                    await recordSessionToLeaderboard(user.id, Number(pnl || 0), startedAtISO, endedAtISO);
+                    newSessionId();
+                    setMobileMenuOpen(false);
+                    push({ title: "Leaderboard synced", desc: `Board synced • Discipline ${summary.disciplineScore}/100` });
                   } catch (e) {
                     console.error(e);
-                    push({
-                      title: "Sign out failed",
-                      desc: "Please try again.",
-                    });
+                    newSessionId();
                   }
                 }}
               >
-                <span className="flex min-w-0 flex-col items-center justify-center gap-1 leading-none">
-                  <FileText className="h-5 w-5 shrink-0 sm:h-4 sm:w-4" />
-                  <span className="max-w-full truncate">Sign Out</span>
-                </span>
+                <RefreshCw className="mr-2 h-4 w-4" /> Sync Board
               </Button>
-            )}
-          </div>
+
+              <a
+                href="/leaderboard"
+                className="inline-flex h-11 items-center justify-center rounded-xl border border-slate-700/80 bg-slate-900/60 px-3 text-xs font-black text-slate-100 hover:border-[#D4AF37]/60"
+              >
+                <BarChart3 className="mr-2 h-4 w-4 text-[#F6C945]" /> Leaders
+              </a>
+
+              {user && (
+                <Button
+                  variant="outline"
+                  className="col-span-2 h-11 rounded-xl text-xs font-black"
+                  onClick={async () => {
+                    try {
+                      await supabase.auth.signOut();
+                      setMobileMenuOpen(false);
+                      push({ title: "Signed out", desc: "See you soon." });
+                    } catch (e) {
+                      console.error(e);
+                      push({ title: "Sign out failed", desc: "Please try again." });
+                    }
+                  }}
+                >
+                  <FileText className="mr-2 h-4 w-4" /> Sign Out
+                </Button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Desktop/tablet: original wider layout */}
@@ -3043,60 +3060,7 @@ function PageInner() {
               </TabsTrigger>
             </TabsList>
           </div>
-          {/* Mobile: single-line command ribbon — all 6 tools stay on one row */}
-          <div className="md:hidden">
-            <TabsList className="flex h-auto w-full flex-nowrap items-stretch justify-between gap-1 bg-transparent p-0">
-              <TabsTrigger
-                value="analytics"
-                className="flex min-h-[58px] flex-1 basis-0 flex-col items-center justify-center gap-1 rounded-xl border border-slate-400 bg-white px-0.5 py-1 text-center text-[9px] font-black leading-tight text-slate-950 shadow-sm data-[state=active]:border-[#D4AF37] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:border-slate-700/80 dark:bg-slate-950/40 dark:text-slate-100 dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black"
-              >
-                <span className="grid h-7 w-7 place-items-center rounded-full border border-slate-400 bg-[#0B1220] text-[#F6C945] shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:text-[#F6C945]">
-                  <BarChart3 className="h-3.5 w-3.5" />
-                </span>
-                <span>Analytics</span>
-              </TabsTrigger>
-              <TabsTrigger
-                value="battle"
-                className="flex min-h-[58px] flex-1 basis-0 flex-col items-center justify-center gap-1 rounded-xl border border-slate-400 bg-white px-0.5 py-1 text-center text-[9px] font-black leading-tight text-slate-950 shadow-sm data-[state=active]:border-[#D4AF37] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:border-slate-700/80 dark:bg-slate-950/40 dark:text-slate-100 dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black"
-              >
-                <span className="grid h-7 w-7 place-items-center rounded-full border border-slate-400 bg-[#0B1220] text-[#F6C945] shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:text-[#F6C945]">
-                  <Target className="h-3.5 w-3.5" />
-                </span>
-                <span>Battle</span>
-              </TabsTrigger>
-              <TabsTrigger
-                value="risk-deriv"
-                className="flex min-h-[58px] flex-1 basis-0 flex-col items-center justify-center gap-1 rounded-xl border border-slate-400 bg-white px-0.5 py-1 text-center text-[9px] font-black leading-tight text-slate-950 shadow-sm data-[state=active]:border-[#D4AF37] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:border-slate-700/80 dark:bg-slate-950/40 dark:text-slate-100 dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black"
-              >
-                <span className="grid h-7 w-7 place-items-center rounded-full border border-slate-400 bg-[#0B1220] text-[#F6C945] shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:text-[#F6C945]">
-                  <Calculator className="h-3.5 w-3.5" />
-                </span>
-                <span>
-                  Risk
-                  <br />
-                  Calc
-                </span>
-              </TabsTrigger>
-              <TabsTrigger
-                value="asetups"
-                className="flex min-h-[58px] flex-1 basis-0 flex-col items-center justify-center gap-1 rounded-xl border border-slate-400 bg-white px-0.5 py-1 text-center text-[9px] font-black leading-tight text-slate-950 shadow-sm data-[state=active]:border-[#D4AF37] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:border-slate-700/80 dark:bg-slate-950/40 dark:text-slate-100 dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black"
-              >
-                <span className="grid h-7 w-7 place-items-center rounded-full border border-slate-400 bg-[#0B1220] text-purple-200 shadow-sm dark:border-slate-700 dark:bg-slate-950">
-                  <Target className="h-3.5 w-3.5" />
-                </span>
-                <span>A-Setups</span>
-              </TabsTrigger>
-              <TabsTrigger
-                value="checklist"
-                className="flex min-h-[58px] flex-1 basis-0 flex-col items-center justify-center gap-1 rounded-xl border border-slate-400 bg-white px-0.5 py-1 text-center text-[9px] font-black leading-tight text-slate-950 shadow-sm data-[state=active]:border-[#D4AF37] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:border-slate-700/80 dark:bg-slate-950/40 dark:text-slate-100 dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black"
-              >
-                <span className="grid h-7 w-7 place-items-center rounded-full border border-slate-400 bg-[#0B1220] text-sky-200 shadow-sm dark:border-slate-700 dark:bg-slate-950">
-                  <ClipboardCheck className="h-3.5 w-3.5" />
-                </span>
-                <span>Checklist</span>
-              </TabsTrigger>
-            </TabsList>
-          </div>{" "}
+          {/* Mobile navigation moved into the compact Menu above so the dashboard starts higher. */}
         </div>
 
         {/* UST MARKETS BATTLE BOARD */}
@@ -4608,8 +4572,8 @@ function PageInner() {
               </div>
             </div>
 
-            <div className="mb-4 grid grid-cols-2 gap-3 rounded-2xl border border-[#D4AF37]/30 bg-black/25 p-3 md:p-4 lg:grid-cols-5">
-              <div className="col-span-2 rounded-2xl border border-emerald-400/30 bg-[radial-gradient(circle_at_top_right,rgba(16,185,129,0.18),transparent_45%),rgba(16,185,129,0.06)] p-5 shadow-lg shadow-emerald-950/20 lg:col-span-1 lg:border-r lg:border-slate-700/70 lg:bg-transparent lg:p-0 lg:pr-4 lg:shadow-none">
+            <div className="mb-4 grid grid-cols-1 gap-3 rounded-2xl border border-[#D4AF37]/30 bg-black/25 p-3 sm:grid-cols-2 md:p-4 lg:grid-cols-5">
+              <div className="rounded-2xl border border-emerald-400/30 bg-[radial-gradient(circle_at_top_right,rgba(16,185,129,0.18),transparent_45%),rgba(16,185,129,0.06)] p-5 shadow-lg shadow-emerald-950/20 lg:col-span-1 lg:border-r lg:border-slate-700/70 lg:bg-transparent lg:p-0 lg:pr-4 lg:shadow-none">
                 <p className="text-xs font-black uppercase tracking-[0.22em] text-[#F6C945]">
                   Live Status
                 </p>
@@ -5784,7 +5748,7 @@ function TopStatusMetric({
           {label}
         </p>
         <p
-          className={`mt-2 max-w-full whitespace-nowrap text-[22px] font-black leading-none tracking-[-0.04em] sm:text-2xl lg:mt-1 lg:text-xl ${valueClass}`}
+          className={`mt-2 max-w-full whitespace-nowrap text-[26px] font-black leading-none tracking-[-0.04em] sm:text-2xl lg:mt-1 lg:text-xl ${valueClass}`}
         >
           {value}
         </p>
