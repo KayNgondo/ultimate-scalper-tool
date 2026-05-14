@@ -2758,257 +2758,15 @@ function PageInner() {
               {locked && lockOnHit ? "Locked" : "Active"}
             </span>
           </div>
-
-          <div className="flex items-center justify-between gap-2 border-t border-slate-800/70 pt-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setMobileMenuOpen((v) => !v)}
-              className="h-11 flex-1 rounded-2xl border-slate-700/80 bg-slate-950/40 text-sm font-black text-slate-100 hover:border-[#D4AF37]/70 hover:bg-slate-900"
-            >
-              <MoreHorizontal className="mr-2 h-5 w-5 text-[#F6C945]" />
-              Menu
-            </Button>
-          </div>
-
-          {mobileMenuOpen && (
-            <div className="grid grid-cols-2 gap-2 rounded-2xl border border-slate-800/80 bg-slate-950/95 p-2 shadow-xl shadow-black/40">
-              {[
-                { value: "dashboard", label: "Dashboard", icon: Home },
-                { value: "analytics", label: "Analytics", icon: BarChart3 },
-                { value: "battle", label: "Battle Board", icon: Target },
-                { value: "risk-deriv", label: "Risk Calculator", icon: Calculator },
-                { value: "journal", label: "Trade Journal", icon: BookOpen },
-                { value: "calendar", label: "Calendar", icon: CalendarDays },
-                { value: "asetups", label: "A-Setups", icon: Target },
-                { value: "checklist", label: "Checklist", icon: ClipboardCheck },
-              ].map((item) => {
-                const Icon = item.icon;
-                const active = activeTab === item.value;
-                return (
-                  <button
-                    key={item.value}
-                    type="button"
-                    onClick={() => {
-                      setActiveTab(item.value);
-                      setMobileMenuOpen(false);
-                    }}
-                    className={`flex items-center gap-2 rounded-xl border px-3 py-3 text-left text-xs font-black transition ${
-                      active
-                        ? "border-[#D4AF37] bg-[#D4AF37] text-black"
-                        : "border-slate-700/80 bg-slate-900/60 text-slate-100 hover:border-[#D4AF37]/60"
-                    }`}
-                  >
-                    <Icon className={`h-4 w-4 ${active ? "text-black" : "text-[#F6C945]"}`} />
-                    <span className="truncate">{item.label}</span>
-                  </button>
-                );
-              })}
-
-              <Button
-                disabled={!hasSessionActivity}
-                className="h-11 rounded-xl text-xs font-black"
-                onClick={async () => {
-                  if (!hasSessionActivity) {
-                    push({
-                      title: "No trades logged",
-                      desc: "You can’t end the session without at least one trade or equity change.",
-                    });
-                    return;
-                  }
-                  try {
-                    if (!user?.id) {
-                      push({
-                        title: "Please sign in",
-                        desc: "You need to sign in to save sessions.",
-                      });
-                      return;
-                    }
-                    const startedAtISO = new Date(Number(sessionId || Date.now())).toISOString();
-                    const endedAtISO = new Date().toISOString();
-                    const safeSessionId = sessionId ?? crypto.randomUUID();
-                    const summary = buildSessionSummary({
-                      sessionId: safeSessionId,
-                      startedAt: startedAtISO,
-                      endedAt: endedAtISO,
-                      pnl: Number(pnl || 0),
-                      trades: sessionTrades.map((t) => ({ market: t.symbol, pnl: t.pnl })),
-                      disciplineScore,
-                      badges: currentRuleBadges,
-                    });
-                    setLastSessionSummary(summary);
-                    await recordSessionToLeaderboard(user.id, Number(pnl || 0), startedAtISO, endedAtISO);
-                    newSessionId();
-                    setMobileMenuOpen(false);
-                    push({ title: "Leaderboard synced", desc: `Board synced • Discipline ${summary.disciplineScore}/100` });
-                  } catch (e) {
-                    console.error(e);
-                    newSessionId();
-                  }
-                }}
-              >
-                <RefreshCw className="mr-2 h-4 w-4" /> Sync Board
-              </Button>
-
-              <a
-                href="/leaderboard"
-                className="inline-flex h-11 items-center justify-center rounded-xl border border-slate-700/80 bg-slate-900/60 px-3 text-xs font-black text-slate-100 hover:border-[#D4AF37]/60"
-              >
-                <BarChart3 className="mr-2 h-4 w-4 text-[#F6C945]" /> Leaders
-              </a>
-
-              {user && (
-                <Button
-                  variant="outline"
-                  className="col-span-2 h-11 rounded-xl text-xs font-black"
-                  onClick={async () => {
-                    try {
-                      await supabase.auth.signOut();
-                      setMobileMenuOpen(false);
-                      push({ title: "Signed out", desc: "See you soon." });
-                    } catch (e) {
-                      console.error(e);
-                      push({ title: "Sign out failed", desc: "Please try again." });
-                    }
-                  }}
-                >
-                  <FileText className="mr-2 h-4 w-4" /> Sign Out
-                </Button>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Desktop/tablet: original wider layout */}
-        <div className="hidden flex-col items-stretch justify-between gap-3 md:flex md:flex-row md:items-center">
-          <div className="min-w-0 flex-1">
-            <div className="flex min-w-0 items-center gap-3">
-              <img
-                src="/ust-logo.png"
-                alt="Ultimate Scalper Tool"
-                className="h-9 w-auto shrink-0 select-none"
-              />
-              <div className="min-w-0 flex-1">
-                <div className="flex min-w-0 items-start justify-between gap-2 sm:items-center sm:justify-start">
-                  <h1 className="font-extrabold leading-tight tracking-tight">
-                    <span className="text-2xl md:text-3xl bg-gradient-to-b from-yellow-200 via-yellow-400 to-amber-700 bg-clip-text text-transparent drop-shadow-[0_2px_2px_rgba(0,0,0,0.45)] [text-shadow:0_0_16px_rgba(212,175,55,0.25)]">
-                      Ultimate Scalper Tool – Strategy Console
-                    </span>
-                  </h1>
-                  <span
-                    className={`shrink-0 inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-semibold ${
-                      locked && lockOnHit
-                        ? "border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/15 dark:text-rose-300"
-                        : "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/15 dark:text-emerald-300"
-                    }`}
-                    title={
-                      locked && lockOnHit
-                        ? "Trading locked for today (max loss hit)"
-                        : "Active"
-                    }
-                  >
-                    <span
-                      className={`h-2 w-2 rounded-full ${locked && lockOnHit ? "bg-rose-500" : "bg-emerald-500"}`}
-                    />
-                    {locked && lockOnHit ? "Locked" : "Active"}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex w-full items-center gap-2 overflow-x-auto pb-1 md:w-auto md:justify-end">
-            <ThemeToggle />
-            <a
-              href="/leaderboard"
-              className="inline-flex h-10 items-center rounded-xl border border-slate-700/80 px-4 text-sm font-semibold text-slate-100 transition hover:border-[#D4AF37]/70 hover:bg-slate-900"
-            >
-              <BarChart3 className="mr-2 h-4 w-4" /> Leaderboards
-            </a>
-            <Button
-              disabled={!hasSessionActivity}
-              onClick={async () => {
-                if (!hasSessionActivity) {
-                  push({
-                    title: "No trades logged",
-                    desc: "You can’t end the session without at least one trade or equity change.",
-                  });
-                  return;
-                }
-                try {
-                  if (!user?.id) {
-                    push({
-                      title: "Please sign in",
-                      desc: "You need to sign in to save sessions.",
-                    });
-                    return;
-                  }
-                  const startedAtISO = new Date(
-                    Number(sessionId || Date.now()),
-                  ).toISOString();
-                  const endedAtISO = new Date().toISOString();
-                  const safeSessionId = sessionId ?? crypto.randomUUID();
-                  const summary = buildSessionSummary({
-                    sessionId: safeSessionId,
-                    startedAt: startedAtISO,
-                    endedAt: endedAtISO,
-                    pnl: Number(pnl || 0),
-                    trades: sessionTrades.map((t) => ({
-                      market: t.symbol,
-                      pnl: t.pnl,
-                    })),
-                    disciplineScore,
-                    badges: currentRuleBadges,
-                  });
-                  setLastSessionSummary(summary);
-                  await recordSessionToLeaderboard(
-                    user.id,
-                    Number(pnl || 0),
-                    startedAtISO,
-                    endedAtISO,
-                  );
-                  newSessionId();
-                  push({
-                    title: "Leaderboard synced",
-                    desc: `Board synced • Discipline ${summary.disciplineScore}/100`,
-                  });
-                } catch (e) {
-                  console.error(e);
-                  newSessionId();
-                }
-              }}
-            >
-              Sync Board
-            </Button>
-            {user && (
-              <Button
-                variant="outline"
-                onClick={async () => {
-                  try {
-                    await supabase.auth.signOut();
-                    push({ title: "Signed out", desc: "See you soon." });
-                  } catch (e) {
-                    console.error(e);
-                    push({
-                      title: "Sign out failed",
-                      desc: "Please try again.",
-                    });
-                  }
-                }}
-              >
-                Sign Out
-              </Button>
-            )}
-          </div>
         </div>
       </div>
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         {/* Primary navigation — compact mock-style desktop + mobile */}
-        <div className="mb-4 space-y-3">
+        <div className="mb-4 hidden space-y-3 md:block">
           {/* Desktop: clean compact two-line nav, no stretched empty buttons */}
-          <div className="hidden space-y-3 md:block">
+          <div className="space-y-3">
             <TabsList className="flex h-auto w-full flex-wrap items-center gap-2 bg-transparent p-0">
               <TabsTrigger
                 value="dashboard"
@@ -4550,13 +4308,24 @@ function PageInner() {
         </TabsContent>
 
         {/* DASHBOARD */}
-        <TabsContent value="dashboard" className="space-y-4">
+        <TabsContent value="dashboard" className="space-y-3">
           <div className="rounded-3xl border border-[#D4AF37]/25 bg-[radial-gradient(circle_at_top_left,rgba(212,175,55,0.13),transparent_30%),linear-gradient(135deg,#050814_0%,#0B1220_55%,#101827_100%)] p-4 shadow-2xl shadow-black/25 md:p-5">
             <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <p className="text-xs font-black uppercase tracking-[0.35em] text-[#F6C945]">
-                  Trading Command Centre
-                </p>
+              <div className="min-w-0">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="min-w-0 text-xs font-black uppercase tracking-[0.24em] text-[#F6C945] sm:tracking-[0.35em]">
+                    Trading Command Centre
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setMobileMenuOpen((v) => !v)}
+                    className="h-8 shrink-0 rounded-xl border-slate-700/80 bg-slate-950/45 px-3 text-xs font-black text-slate-100 hover:border-[#D4AF37]/70 hover:bg-slate-900 md:hidden"
+                  >
+                    <MoreHorizontal className="mr-1.5 h-4 w-4 text-[#F6C945]" />
+                    Menu
+                  </Button>
+                </div>
                 <h2 className="mt-1 text-[28px] font-black leading-tight tracking-tight text-white md:text-3xl">
                   Dashboard Overview
                 </h2>
@@ -4571,6 +4340,42 @@ function PageInner() {
                 </div>
               </div>
             </div>
+
+            {mobileMenuOpen && (
+              <div className="mb-4 grid grid-cols-2 gap-2 rounded-2xl border border-slate-800/80 bg-slate-950/95 p-2 shadow-xl shadow-black/40 md:hidden">
+                {[
+                  { value: "dashboard", label: "Dashboard", icon: Home },
+                  { value: "analytics", label: "Analytics", icon: BarChart3 },
+                  { value: "battle", label: "Battle Board", icon: Target },
+                  { value: "risk-deriv", label: "Risk Calculator", icon: Calculator },
+                  { value: "journal", label: "Trade Journal", icon: BookOpen },
+                  { value: "calendar", label: "Calendar", icon: CalendarDays },
+                  { value: "asetups", label: "A-Setups", icon: Target },
+                  { value: "checklist", label: "Checklist", icon: ClipboardCheck },
+                ].map((item) => {
+                  const Icon = item.icon;
+                  const active = activeTab === item.value;
+                  return (
+                    <button
+                      key={item.value}
+                      type="button"
+                      onClick={() => {
+                        setActiveTab(item.value);
+                        setMobileMenuOpen(false);
+                      }}
+                      className={`flex items-center gap-2 rounded-xl border px-3 py-3 text-left text-xs font-black transition ${
+                        active
+                          ? "border-[#D4AF37] bg-[#D4AF37] text-black"
+                          : "border-slate-700/80 bg-slate-900/60 text-slate-100 hover:border-[#D4AF37]/60"
+                      }`}
+                    >
+                      <Icon className={`h-4 w-4 ${active ? "text-black" : "text-[#F6C945]"}`} />
+                      <span className="truncate">{item.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
 
             <div className="mb-4 grid grid-cols-1 gap-3 rounded-2xl border border-[#D4AF37]/30 bg-black/25 p-3 sm:grid-cols-2 md:p-4 lg:grid-cols-5">
               <div className="rounded-2xl border border-emerald-400/30 bg-[radial-gradient(circle_at_top_right,rgba(16,185,129,0.18),transparent_45%),rgba(16,185,129,0.06)] p-5 shadow-lg shadow-emerald-950/20 lg:col-span-1 lg:border-r lg:border-slate-700/70 lg:bg-transparent lg:p-0 lg:pr-4 lg:shadow-none">
