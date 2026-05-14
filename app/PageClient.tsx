@@ -1956,11 +1956,11 @@ function PageInner() {
   }
 
   return (
-    <div className="mx-auto max-w-7xl space-y-4 px-3 pb-24 pt-4 sm:px-4 sm:py-6">
+    <div className="mx-auto max-w-7xl space-y-3 px-3 pb-24 pt-3 sm:px-4 sm:py-6">
       {/* Header */}
-      <div className="rounded-3xl border border-slate-800/80 bg-slate-950/70 p-3 shadow-xl shadow-black/25 backdrop-blur md:border-0 md:bg-transparent md:p-0 md:shadow-none">
+      <div className="rounded-3xl border border-[#D4AF37]/20 bg-[radial-gradient(circle_at_top_left,rgba(212,175,55,0.12),transparent_35%),rgba(2,6,23,0.86)] p-3 shadow-xl shadow-black/25 backdrop-blur md:border-0 md:bg-transparent md:p-0 md:shadow-none">
         {/* Mobile: compact command header so the Trading Command Centre appears immediately */}
-        <div className="space-y-3 md:hidden">
+        <div className="space-y-2 md:hidden">
           <div className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-2">
             <img
               src="/ust-logo.png"
@@ -1986,7 +1986,7 @@ function PageInner() {
             </span>
           </div>
 
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-4 gap-2">
             <Button type="button" onClick={() => setActiveTab('dashboard')} className="h-11 rounded-xl bg-[#D4AF37] px-2 text-xs font-black text-black shadow-lg shadow-[#D4AF37]/20 hover:bg-[#c9a42f]">
               <Home className="mr-1.5 h-4 w-4" /> Dashboard
             </Button>
@@ -2026,6 +2026,9 @@ function PageInner() {
             >
               Sync Board
             </Button>
+            <a href="/leaderboard" className="inline-flex h-11 items-center justify-center rounded-xl border border-slate-700/80 px-2 text-xs font-black text-slate-100 transition hover:border-[#D4AF37]/70 hover:bg-slate-900">
+              <BarChart3 className="mr-1.5 h-4 w-4" /> Leaders
+            </a>
             {user && (
               <Button
                 variant="outline"
@@ -2076,6 +2079,9 @@ function PageInner() {
 
           <div className="flex w-full items-center gap-2 overflow-x-auto pb-1 md:w-auto md:justify-end">
             <ThemeToggle />
+            <a href="/leaderboard" className="inline-flex h-10 items-center rounded-xl border border-slate-700/80 px-4 text-sm font-semibold text-slate-100 transition hover:border-[#D4AF37]/70 hover:bg-slate-900">
+              <BarChart3 className="mr-2 h-4 w-4" /> Leaderboards
+            </a>
             <Button disabled={!hasSessionActivity}
               onClick={async () => {
                 if (!hasSessionActivity) {
@@ -2159,9 +2165,6 @@ function PageInner() {
               <TabsTrigger value="checklist" className="rounded-xl border border-slate-700/80 px-4 py-2 text-sm font-semibold data-[state=active]:border-[#D4AF37] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black">
                 <ClipboardCheck className="mr-2 h-4 w-4" /> Checklist
               </TabsTrigger>
-              <a href="/leaderboard" className="inline-flex items-center rounded-xl border border-slate-700/80 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:border-[#D4AF37]/70 hover:bg-slate-900">
-                <BarChart3 className="mr-2 h-4 w-4" /> Leaderboards
-              </a>
             </TabsList>
 
           </div>
@@ -2184,9 +2187,6 @@ function PageInner() {
               <TabsTrigger value="checklist" className="flex min-h-[58px] flex-1 basis-0 flex-col items-center justify-center gap-1 rounded-xl border border-slate-400 bg-white px-0.5 py-1 text-center text-[9px] font-black leading-tight text-slate-950 shadow-sm data-[state=active]:border-[#D4AF37] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:border-slate-700/80 dark:bg-slate-950/40 dark:text-slate-100 dark:data-[state=active]:bg-[#D4AF37] dark:data-[state=active]:text-black">
                 <span className="grid h-7 w-7 place-items-center rounded-full border border-slate-400 bg-[#0B1220] text-sky-200 shadow-sm dark:border-slate-700 dark:bg-slate-950"><ClipboardCheck className="h-3.5 w-3.5" /></span><span>Checklist</span>
               </TabsTrigger>
-              <a href="/leaderboard" className="flex min-h-[58px] flex-1 basis-0 flex-col items-center justify-center gap-1 rounded-xl border border-slate-400 bg-white px-0.5 py-1 text-center text-[9px] font-black leading-tight text-slate-950 shadow-sm transition hover:border-[#D4AF37] hover:bg-[#D4AF37] hover:text-black dark:border-slate-700/80 dark:bg-slate-950/40 dark:text-slate-100">
-                <span className="grid h-7 w-7 place-items-center rounded-full border border-slate-400 bg-[#0B1220] text-[#F6C945] shadow-sm dark:border-slate-700 dark:bg-slate-950"><BarChart3 className="h-3.5 w-3.5" /></span><span>Leaders</span>
-              </a>
             </TabsList>
           </div>        </div>
 
@@ -2827,12 +2827,12 @@ function PageInner() {
         {/* DASHBOARD */}
         <TabsContent value="dashboard" className="space-y-4">
           <div className="rounded-3xl border border-[#D4AF37]/25 bg-[radial-gradient(circle_at_top_left,rgba(212,175,55,0.13),transparent_30%),linear-gradient(135deg,#050814_0%,#0B1220_55%,#101827_100%)] p-4 shadow-2xl shadow-black/25 md:p-5">
-            <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <p className="text-xs font-black uppercase tracking-[0.35em] text-[#F6C945]">Trading Command Centre</p>
-                <h2 className="mt-1 text-2xl font-black tracking-tight text-white md:text-3xl">Dashboard Overview</h2>
+                <h2 className="mt-1 text-[28px] font-black leading-tight tracking-tight text-white md:text-3xl">Dashboard Overview</h2>
               </div>
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
                 <DashboardSyncButton addTradesBulkFn={addTradesBulk} />
                 <div className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-black shadow-lg ${locked && lockOnHit ? "border-rose-500/50 bg-rose-500/10 text-rose-300 shadow-rose-950/30" : "border-emerald-400/50 bg-emerald-500/10 text-emerald-300 shadow-emerald-950/30"}`}>
                   <Activity className="h-4 w-4" />
@@ -2841,8 +2841,8 @@ function PageInner() {
               </div>
             </div>
 
-            <div className="mb-5 grid gap-3 rounded-2xl border border-[#D4AF37]/30 bg-black/25 p-4 lg:grid-cols-5">
-              <div className="lg:border-r lg:border-slate-700/70 lg:pr-4">
+            <div className="mb-4 grid grid-cols-2 gap-2 rounded-2xl border border-[#D4AF37]/30 bg-black/25 p-3 md:p-4 lg:grid-cols-5">
+              <div className="col-span-2 rounded-2xl border border-emerald-400/20 bg-emerald-500/5 p-3 lg:col-span-1 lg:border-r lg:border-slate-700/70 lg:bg-transparent lg:p-0 lg:pr-4">
                 <p className="text-xs font-black uppercase tracking-[0.22em] text-[#F6C945]">Live Status</p>
                 <div className={`mt-2 flex items-center gap-2 text-xl font-black ${locked && lockOnHit ? "text-rose-300" : "text-emerald-300"}`}><span className={`h-2.5 w-2.5 rounded-full ${locked && lockOnHit ? "bg-rose-400" : "bg-emerald-400"}`} />{locked && lockOnHit ? "Locked" : "Active"}</div>
                 <p className="mt-2 text-xs text-slate-400">Last update: {new Date().toLocaleString()}</p>
@@ -3439,7 +3439,7 @@ function TopStatusMetric({
   value: string;
   tone?: "positive" | "negative" | "neutral";
 }) {
-  const iconClass = "h-6 w-6";
+  const iconClass = "h-5 w-5 md:h-6 md:w-6";
   const Icon =
     icon === "wallet" ? <Wallet className={iconClass} /> :
     icon === "trend" ? <TrendingUp className={iconClass} /> :
@@ -3448,11 +3448,11 @@ function TopStatusMetric({
   const valueClass = tone === "negative" ? "text-rose-300" : tone === "neutral" ? "text-slate-100" : "text-emerald-300";
 
   return (
-    <div className="flex items-center gap-4 lg:border-r lg:border-slate-700/70 lg:pr-4 last:border-r-0">
-      <div className="hidden text-emerald-300/80 sm:block">{Icon}</div>
+    <div className="flex min-w-0 items-center gap-2 rounded-2xl border border-slate-700/60 bg-slate-950/45 p-3 lg:border-r lg:border-y-0 lg:border-l-0 lg:bg-transparent lg:p-0 lg:pr-4 last:border-r-0">
+      <div className="grid h-8 w-8 shrink-0 place-items-center rounded-xl border border-emerald-400/20 bg-emerald-500/10 text-emerald-300/90 md:h-auto md:w-auto md:border-0 md:bg-transparent">{Icon}</div>
       <div className="min-w-0">
-        <p className="text-xs font-bold uppercase tracking-wide text-slate-400">{label}</p>
-        <p className={`mt-1 truncate text-xl font-black ${valueClass}`}>{value}</p>
+        <p className="text-[10px] font-black uppercase tracking-wide text-slate-400 md:text-xs">{label}</p>
+        <p className={`mt-0.5 truncate text-lg font-black md:mt-1 md:text-xl ${valueClass}`}>{value}</p>
       </div>
     </div>
   );
