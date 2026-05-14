@@ -1575,6 +1575,67 @@ function PageInner() {
     ];
   }, [battleOverallSummary.activeRows, battleRankedRows]);
 
+  const battleSurvivalRaceRows = useMemo(() => {
+    return battleRankedRows.map((m, idx) => {
+      const target = Math.max(1, Number(m.targetTrades || 100));
+      const tradesDone = Math.max(0, Number(m.trades || 0));
+      const progress = Math.min(100, (tradesDone / target) * 100);
+      const remaining = Math.max(0, target - tradesDone);
+      const pfScore = Math.min(30, Math.max(0, Number(m.profitFactor || 0)) * 10);
+      const winScore = Math.min(20, Math.max(0, Number(m.winRate || 0)) * 0.2);
+      const ddScore = Math.max(0, 25 - Math.max(0, Number(m.maxDd || 0)));
+      const progressScore = Math.min(25, progress * 0.25);
+      const survivalScore = Math.round(Math.max(0, Math.min(100, pfScore + winScore + ddScore + progressScore)));
+      const status = tradesDone >= target && Number(m.profit || 0) > 0 && Number(m.maxDd || 0) <= 60
+        ? "Certified"
+        : Number(m.maxDd || 0) >= 40 || Number(m.profit || 0) < 0
+        ? "Survival Risk"
+        : tradesDone < 15
+        ? "Evidence Building"
+        : Number(m.profitFactor || 0) >= 1.8 && Number(m.profit || 0) > 0
+        ? "Front Runner"
+        : "In The Race";
+      return { ...m, raceRank: idx + 1, progress, remaining, survivalScore, raceStatus: status };
+    });
+  }, [battleRankedRows]);
+
+  const battleSurvivalSummary = useMemo(() => {
+    const leader = battleSurvivalRaceRows[0];
+    const avgProgress = battleSurvivalRaceRows.length
+      ? battleSurvivalRaceRows.reduce((sum, r) => sum + r.progress, 0) / battleSurvivalRaceRows.length
+      : 0;
+    const certified = battleSurvivalRaceRows.filter((r) => r.raceStatus === "Certified").length;
+    const risk = battleSurvivalRaceRows.filter((r) => r.raceStatus === "Survival Risk").length;
+    return { leader, avgProgress, certified, risk };
+  }, [battleSurvivalRaceRows]);
+
+  const battleSessionHeatmap = useMemo(() => {
+    const days = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+    const sessions = ["Asia", "London", "New York", "Late NY"];
+    const cells: Record<string, { day: string; session: string; trades: number; profit: number; wins: number; avgR: number }> = {};
+    for (const day of days) for (const session of sessions) cells[`${day}-${session}`] = { day, session, trades: 0, profit: 0, wins: 0, avgR: 0 };
+
+    for (const t of battleExplorerTrades) {
+      const d = t.timestamp ? new Date(t.timestamp) : null;
+      if (!d || Number.isNaN(d.getTime())) continue;
+      const day = days[(d.getDay() + 6) % 7];
+      if (!day) continue;
+      const session = sessions.includes(t.session) ? t.session : "Unknown";
+      if (!sessions.includes(session)) continue;
+      const key = `${day}-${session}`;
+      const cell = cells[key];
+      cell.trades += 1;
+      cell.profit = Number((cell.profit + Number(t.pnl || 0)).toFixed(2));
+      cell.wins += Number(t.pnl || 0) > 0 ? 1 : 0;
+      cell.avgR = Number(((cell.avgR * (cell.trades - 1) + Number(t.r || 0)) / cell.trades).toFixed(2));
+    }
+
+    const populated = Object.values(cells).filter((c) => c.trades > 0);
+    const best = populated.length ? [...populated].sort((a, b) => b.profit - a.profit)[0] : null;
+    const worst = populated.length ? [...populated].sort((a, b) => a.profit - b.profit)[0] : null;
+    return { days, sessions, cells, best, worst };
+  }, [battleExplorerTrades]);
+
 
   const exportBattleBoardPdf = useCallback(() => {
     if (typeof window === "undefined") return;
@@ -1620,6 +1681,14 @@ function PageInner() {
     const sessionRows = (battleSessionStats.length ? battleSessionStats : [])
       .map((g) => `<tr><td><strong>${esc(g.label)}</strong></td><td>${esc(g.trades)}</td><td class="${g.profit >= 0 ? "positive" : "negative"}">${esc(currency(g.profit))}</td><td>${esc(fmt(g.winRate))}%</td><td>${esc(fmt(g.profitFactor))}</td><td>${esc(fmt(g.avgR))}R</td></tr>`)
       .join("");
+
+    const survivalRows = battleSurvivalRaceRows.map((m) => `<tr><td><strong>#${esc(m.raceRank)} ${esc(m.market)}</strong></td><td>${esc(m.trades)}/${esc(m.targetTrades)}</td><td>${esc(fmt(m.progress))}%</td><td>${esc(m.survivalScore)}/100</td><td>${esc(m.raceStatus)}</td><td class="${m.profit >= 0 ? "positive" : "negative"}">${esc(currency(m.profit))}</td></tr>`).join("");
+
+    const heatmapRows = battleSessionHeatmap.sessions.map((session) => `
+      <tr><td><strong>${esc(session)}</strong></td>${battleSessionHeatmap.days.map((day) => {
+        const cell = battleSessionHeatmap.cells[`${day}-${session}`];
+        return `<td class="${cell?.profit >= 0 ? "positive" : "negative"}">${cell?.trades ? `${esc(currency(cell.profit))}<br/><small>${esc(cell.trades)}T • WR ${esc(fmt((cell.wins / cell.trades) * 100))}%</small>` : "—"}</td>`;
+      }).join("")}</tr>`).join("");
 
     const tradeRowsHtml = battleExplorerTrades.slice(0, 60).map((t) => `
       <tr>
@@ -1697,6 +1766,16 @@ function PageInner() {
   <section class="section">
     <h2>Weekly Reads</h2>
     <div class="notes-grid">${notesRows}</div>
+  </section>
+
+  <section class="section">
+    <h2>100 Trade Survival Race</h2>
+    <table><thead><tr><th>Rank</th><th>Trades</th><th>Progress</th><th>Survival Score</th><th>Race Status</th><th>Profit</th></tr></thead><tbody>${survivalRows || `<tr><td colspan="6">No survival race data loaded yet.</td></tr>`}</tbody></table>
+  </section>
+
+  <section class="section">
+    <h2>Session Heatmap${selectedMarket ? ` • ${esc(selectedMarket.market)}` : ""}</h2>
+    <table><thead><tr><th>Session</th>${battleSessionHeatmap.days.map((day) => `<th>${esc(day)}</th>`).join("")}</tr></thead><tbody>${heatmapRows || `<tr><td colspan="6">No heatmap data loaded yet.</td></tr>`}</tbody></table>
   </section>
 
   <section class="section two-col">
@@ -2434,6 +2513,59 @@ function PageInner() {
             </div>
           </div>
 
+          <div className="rounded-3xl border border-[#D4AF37]/25 bg-[radial-gradient(circle_at_top_left,rgba(212,175,55,0.14),transparent_34%),linear-gradient(135deg,rgba(15,23,42,0.96),rgba(2,6,23,0.96))] p-4 shadow-xl shadow-black/25 md:p-5">
+            <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.30em] text-[#F6C945]">100 Trade Survival Race</p>
+                <h3 className="mt-1 text-2xl font-black text-white">Which market can survive the full race?</h3>
+                <p className="mt-1 text-sm text-slate-400">Markets are ranked by survival score, not just profit. The race rewards progress, profit factor, win rate and drawdown control.</p>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-center text-xs md:min-w-[360px]">
+                <div className="rounded-2xl border border-slate-700 bg-black/25 p-3"><div className="text-slate-500">Leader</div><div className="mt-1 font-black text-[#F6C945]">{battleSurvivalSummary.leader?.market || "—"}</div></div>
+                <div className="rounded-2xl border border-slate-700 bg-black/25 p-3"><div className="text-slate-500">Avg Progress</div><div className="mt-1 font-black text-white">{fmt(battleSurvivalSummary.avgProgress)}%</div></div>
+                <div className="rounded-2xl border border-slate-700 bg-black/25 p-3"><div className="text-slate-500">Risk Flags</div><div className="mt-1 font-black text-amber-300">{battleSurvivalSummary.risk}</div></div>
+              </div>
+            </div>
+
+            <div className="grid gap-3 lg:grid-cols-5">
+              {battleSurvivalRaceRows.map((m) => {
+                const statusStyle = m.raceStatus === "Front Runner" || m.raceStatus === "Certified"
+                  ? "border-emerald-400/35 bg-emerald-500/10 text-emerald-300"
+                  : m.raceStatus === "Survival Risk"
+                  ? "border-rose-400/35 bg-rose-500/10 text-rose-300"
+                  : m.raceStatus === "Evidence Building"
+                  ? "border-sky-400/35 bg-sky-500/10 text-sky-300"
+                  : "border-amber-400/35 bg-amber-500/10 text-amber-300";
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => void loadBattleTradeExplorer(m.id)}
+                    className={`rounded-2xl border p-3 text-left transition hover:-translate-y-0.5 ${battleExplorerMarketId === m.id ? "border-[#D4AF37] bg-[#D4AF37]/10" : "border-slate-800 bg-black/25"}`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="grid h-9 w-9 place-items-center rounded-xl border border-[#D4AF37]/30 bg-slate-950 text-sm font-black text-[#F6C945]">#{m.raceRank}</span>
+                        <div>
+                          <div className="font-black text-white">{m.market}</div>
+                          <div className="text-[11px] text-slate-500">{m.trades}/{m.targetTrades} trades • {m.remaining} left</div>
+                        </div>
+                      </div>
+                      <div className="text-right text-sm font-black text-white">{m.survivalScore}</div>
+                    </div>
+                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-800">
+                      <div className="h-full rounded-full bg-[#D4AF37]" style={{ width: `${Math.min(100, Math.max(0, m.progress))}%` }} />
+                    </div>
+                    <div className="mt-3 flex items-center justify-between gap-2">
+                      <span className={`rounded-full border px-2 py-1 text-[10px] font-black ${statusStyle}`}>{m.raceStatus}</span>
+                      <span className={m.profit >= 0 ? "text-xs font-black text-emerald-300" : "text-xs font-black text-rose-300"}>{currency(m.profit)}</span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {battleError && (
             <div className="rounded-2xl border border-amber-400/30 bg-amber-500/10 p-3 text-sm text-amber-200">
               {battleError}
@@ -2642,6 +2774,52 @@ function PageInner() {
                       ))}
                     </tbody>
                   </table>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-3xl border border-slate-800 bg-[radial-gradient(circle_at_top_right,rgba(56,189,248,0.14),transparent_34%),linear-gradient(135deg,rgba(15,23,42,0.95),rgba(2,6,23,0.95))] p-4">
+              <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+                <div>
+                  <div className="text-sm font-black uppercase tracking-wide text-[#F6C945]">Session Heatmap <span className="text-slate-400">• {battleSelectedMarket?.market || "Selected Market"}</span></div>
+                  <p className="mt-1 text-sm text-slate-400">Day-by-session performance map. Green cells show where the selected market is currently paying best.</p>
+                </div>
+                <div className="flex flex-wrap gap-2 text-xs">
+                  <span className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3 py-1 font-bold text-emerald-300">Best: {battleSessionHeatmap.best ? `${battleSessionHeatmap.best.day} ${battleSessionHeatmap.best.session} ${currency(battleSessionHeatmap.best.profit)}` : "Pending"}</span>
+                  <span className="rounded-full border border-rose-400/30 bg-rose-500/10 px-3 py-1 font-bold text-rose-300">Weak: {battleSessionHeatmap.worst ? `${battleSessionHeatmap.worst.day} ${battleSessionHeatmap.worst.session} ${currency(battleSessionHeatmap.worst.profit)}` : "Pending"}</span>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <div className="min-w-[760px]">
+                  <div className="grid grid-cols-[110px_repeat(5,minmax(110px,1fr))] gap-2 text-xs">
+                    <div className="rounded-xl border border-slate-800 bg-black/25 p-2 font-black text-slate-400">Session</div>
+                    {battleSessionHeatmap.days.map((day) => <div key={day} className="rounded-xl border border-slate-800 bg-black/25 p-2 text-center font-black text-slate-300">{day}</div>)}
+                    {battleSessionHeatmap.sessions.map((session) => (
+                      <React.Fragment key={session}>
+                        <div className="rounded-xl border border-slate-800 bg-black/25 p-3 font-black text-white">{session}</div>
+                        {battleSessionHeatmap.days.map((day) => {
+                          const cell = battleSessionHeatmap.cells[`${day}-${session}`];
+                          const tone = !cell?.trades
+                            ? "border-slate-800 bg-slate-950/80 text-slate-500"
+                            : cell.profit > 0
+                            ? "border-emerald-400/30 bg-emerald-500/15 text-emerald-200"
+                            : cell.profit < 0
+                            ? "border-rose-400/30 bg-rose-500/15 text-rose-200"
+                            : "border-slate-700 bg-slate-800/70 text-slate-200";
+                          return (
+                            <div key={`${day}-${session}`} className={`rounded-xl border p-2 ${tone}`}>
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="font-black">{cell?.trades ? currency(cell.profit) : "—"}</span>
+                                <span className="text-[10px] opacity-80">{cell?.trades || 0}T</span>
+                              </div>
+                              <div className="mt-1 text-[10px] opacity-80">WR {cell?.trades ? fmt((cell.wins / cell.trades) * 100) : "0.00"}% • {fmt(cell?.avgR || 0)}R</div>
+                            </div>
+                          );
+                        })}
+                      </React.Fragment>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
