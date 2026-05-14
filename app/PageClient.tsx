@@ -1576,28 +1576,60 @@ function PageInner() {
   }, [battleOverallSummary.activeRows, battleRankedRows]);
 
   const battleSurvivalRaceRows = useMemo(() => {
-    return battleRankedRows.map((m, idx) => {
-      const target = Math.max(1, Number(m.targetTrades || 100));
-      const tradesDone = Math.max(0, Number(m.trades || 0));
-      const progress = Math.min(100, (tradesDone / target) * 100);
-      const remaining = Math.max(0, target - tradesDone);
-      const pfScore = Math.min(30, Math.max(0, Number(m.profitFactor || 0)) * 10);
-      const winScore = Math.min(20, Math.max(0, Number(m.winRate || 0)) * 0.2);
-      const ddScore = Math.max(0, 25 - Math.max(0, Number(m.maxDd || 0)));
-      const progressScore = Math.min(25, progress * 0.25);
-      const survivalScore = Math.round(Math.max(0, Math.min(100, pfScore + winScore + ddScore + progressScore)));
-      const status = tradesDone >= target && Number(m.profit || 0) > 0 && Number(m.maxDd || 0) <= 60
-        ? "Certified"
-        : Number(m.maxDd || 0) >= 40 || Number(m.profit || 0) < 0
-        ? "Survival Risk"
-        : tradesDone < 15
-        ? "Evidence Building"
-        : Number(m.profitFactor || 0) >= 1.8 && Number(m.profit || 0) > 0
-        ? "Front Runner"
-        : "In The Race";
-      return { ...m, raceRank: idx + 1, progress, remaining, survivalScore, raceStatus: status };
-    });
-  }, [battleRankedRows]);
+    const active = battleRows.filter((m) => String(m.market || "").trim());
+    const bestProfit = Math.max(1, ...active.map((m) => Math.max(0, Number(m.profit || 0))));
+
+    return active
+      .map((m) => {
+        const target = Math.max(1, Number(m.targetTrades || 100));
+        const tradesDone = Math.max(0, Number(m.trades || 0));
+        const progress = Math.min(100, (tradesDone / target) * 100);
+        const remaining = Math.max(0, target - tradesDone);
+
+        // UST Survival Race philosophy:
+        // 1) number of completed trades is the main proof,
+        // 2) profit comes next,
+        // 3) drawdown, PF and win rate are supporting quality checks.
+        const progressScore = Math.min(55, progress * 0.55); // 55% weight
+        const profitScore = Math.min(20, (Math.max(0, Number(m.profit || 0)) / bestProfit) * 20); // 20% weight
+        const ddScore = Math.max(0, 15 - Math.max(0, Number(m.maxDd || 0)) * 0.375); // 15% weight
+        const pfScore = Math.min(7, Math.max(0, Number(m.profitFactor || 0)) * 2.33); // 7% weight
+        const winScore = Math.min(3, Math.max(0, Number(m.winRate || 0)) * 0.03); // 3% weight
+        const survivalScore = Math.round(Math.max(0, Math.min(100, progressScore + profitScore + ddScore + pfScore + winScore)));
+
+        const evidenceLevel = tradesDone >= target
+          ? "UST Certified"
+          : tradesDone >= 76
+          ? "Elite Survivor"
+          : tradesDone >= 51
+          ? "Advanced Survivor"
+          : tradesDone >= 26
+          ? "Proven Stability"
+          : tradesDone >= 11
+          ? "Emerging Edge"
+          : "Early Evidence";
+
+        const status = tradesDone >= target && Number(m.profit || 0) > 0 && Number(m.maxDd || 0) <= 60
+          ? "Certified"
+          : Number(m.maxDd || 0) >= 40 || Number(m.profit || 0) < 0
+          ? "Survival Risk"
+          : tradesDone < 11
+          ? "Early Evidence"
+          : tradesDone < 26
+          ? "Evidence Building"
+          : Number(m.profitFactor || 0) >= 1.8 && Number(m.profit || 0) > 0
+          ? "Front Runner"
+          : "In The Race";
+
+        return { ...m, progress, remaining, survivalScore, raceStatus: status, evidenceLevel };
+      })
+      .sort((a, b) => {
+        if (b.survivalScore !== a.survivalScore) return b.survivalScore - a.survivalScore;
+        if (b.trades !== a.trades) return b.trades - a.trades;
+        return Number(b.profit || 0) - Number(a.profit || 0);
+      })
+      .map((m, idx) => ({ ...m, raceRank: idx + 1 }));
+  }, [battleRows]);
 
   const battleSurvivalSummary = useMemo(() => {
     const leader = battleSurvivalRaceRows[0];
@@ -1608,6 +1640,74 @@ function PageInner() {
     const risk = battleSurvivalRaceRows.filter((r) => r.raceStatus === "Survival Risk").length;
     return { leader, avgProgress, certified, risk };
   }, [battleSurvivalRaceRows]);
+
+
+  const battleCertificationRows = useMemo(() => {
+    return battleSurvivalRaceRows.map((m) => {
+      const progress = Math.min(100, Math.max(0, Number(m.progress || 0)));
+      const profitOk = Number(m.profit || 0) > 0;
+      const ddOk = Number(m.maxDd || 0) <= 60;
+      const pfOk = Number(m.profitFactor || 0) >= 1;
+      const winOk = Number(m.winRate || 0) >= 45;
+      const completed = Number(m.trades || 0) >= Number(m.targetTrades || 100);
+
+      const certificationScore = Math.round(
+        Math.min(100,
+          progress * 0.4 +
+          (profitOk ? 20 : 0) +
+          (ddOk ? 20 : 0) +
+          (pfOk ? 10 : 0) +
+          (winOk ? 10 : 0)
+        )
+      );
+
+      const level = completed && profitOk && ddOk
+        ? "UST Certified"
+        : certificationScore >= 80
+        ? "Gold Candidate"
+        : certificationScore >= 60
+        ? "Silver Candidate"
+        : certificationScore >= 40
+        ? "Bronze Candidate"
+        : "Research Candidate";
+
+      const requirements = [
+        { label: "100 trades", ok: completed, value: `${m.trades}/${m.targetTrades}` },
+        { label: "Positive PnL", ok: profitOk, value: currency(Number(m.profit || 0)) },
+        { label: "DD below 60%", ok: ddOk, value: `${fmt(Number(m.maxDd || 0))}%` },
+        { label: "PF above 1.00", ok: pfOk, value: fmt(Number(m.profitFactor || 0)) },
+        { label: "WR above 45%", ok: winOk, value: `${fmt(Number(m.winRate || 0))}%` },
+      ];
+
+      return { ...m, certificationScore, certificationLevel: level, requirements };
+    }).sort((a, b) => b.certificationScore - a.certificationScore);
+  }, [battleSurvivalRaceRows]);
+
+  const battleTransparencyPortal = useMemo(() => {
+    const active = battleRows.filter((r) => String(r.market || "").trim());
+    const markets = active.length || 1;
+    const profitable = active.filter((r) => Number(r.profit || 0) > 0).length;
+    const stable = active.filter((r) => ["Stable", "Certified"].includes(String(r.status || ""))).length;
+    const totalTrades = active.reduce((sum, r) => sum + Number(r.trades || 0), 0);
+    const totalTarget = active.reduce((sum, r) => sum + Number(r.targetTrades || 100), 0) || markets * 100;
+    const avgDd = active.reduce((sum, r) => sum + Number(r.maxDd || 0), 0) / markets;
+    const progressPct = Math.min(100, (totalTrades / Math.max(1, totalTarget)) * 100);
+    const publicScore = Math.round(Math.min(100,
+      progressPct * 0.35 +
+      (profitable / markets) * 25 +
+      (stable / markets) * 20 +
+      Math.max(0, 20 - Math.min(20, avgDd * 0.5))
+    ));
+    const mode = publicScore >= 75 ? "Investor Ready Watchlist" : publicScore >= 50 ? "Public Proof Building" : "Research Transparency Mode";
+    const checklist = [
+      { label: "Live market board published", ok: active.length >= 5, detail: `${active.length}/5 markets` },
+      { label: "100-trade race visible", ok: totalTrades > 0, detail: `${totalTrades}/${totalTarget} trades` },
+      { label: "Positive markets", ok: profitable >= Math.ceil(markets / 2), detail: `${profitable}/${markets}` },
+      { label: "Risk disclosed", ok: active.some((r) => Number(r.maxDd || 0) > 0), detail: `Avg DD ${fmt(avgDd)}%` },
+      { label: "Certification pathway active", ok: battleCertificationRows.length > 0, detail: `${battleCertificationRows.filter((r) => r.certificationLevel === "UST Certified").length} certified` },
+    ];
+    return { publicScore, mode, checklist, progressPct, profitable, stable, markets, totalTrades, totalTarget, avgDd };
+  }, [battleRows, battleCertificationRows]);
 
   const battleSessionHeatmap = useMemo(() => {
     const days = ["Mon", "Tue", "Wed", "Thu", "Fri"];
@@ -1682,7 +1782,7 @@ function PageInner() {
       .map((g) => `<tr><td><strong>${esc(g.label)}</strong></td><td>${esc(g.trades)}</td><td class="${g.profit >= 0 ? "positive" : "negative"}">${esc(currency(g.profit))}</td><td>${esc(fmt(g.winRate))}%</td><td>${esc(fmt(g.profitFactor))}</td><td>${esc(fmt(g.avgR))}R</td></tr>`)
       .join("");
 
-    const survivalRows = battleSurvivalRaceRows.map((m) => `<tr><td><strong>#${esc(m.raceRank)} ${esc(m.market)}</strong></td><td>${esc(m.trades)}/${esc(m.targetTrades)}</td><td>${esc(fmt(m.progress))}%</td><td>${esc(m.survivalScore)}/100</td><td>${esc(m.raceStatus)}</td><td class="${m.profit >= 0 ? "positive" : "negative"}">${esc(currency(m.profit))}</td></tr>`).join("");
+    const survivalRows = battleSurvivalRaceRows.map((m) => `<tr><td><strong>#${esc(m.raceRank)} ${esc(m.market)}</strong></td><td>${esc(m.trades)}/${esc(m.targetTrades)}</td><td>${esc(fmt(m.progress))}%</td><td>${esc(m.survivalScore)}/100</td><td>${esc(m.evidenceLevel || "Early Evidence")}</td><td>${esc(m.raceStatus)}</td><td class="${m.profit >= 0 ? "positive" : "negative"}">${esc(currency(m.profit))}</td></tr>`).join("");
 
     const heatmapRows = battleSessionHeatmap.sessions.map((session) => `
       <tr><td><strong>${esc(session)}</strong></td>${battleSessionHeatmap.days.map((day) => {
@@ -1770,22 +1870,22 @@ function PageInner() {
 
   <section class="section">
     <h2>100 Trade Survival Race</h2>
-    <table><thead><tr><th>Rank</th><th>Trades</th><th>Progress</th><th>Survival Score</th><th>Race Status</th><th>Profit</th></tr></thead><tbody>${survivalRows || `<tr><td colspan="6">No survival race data loaded yet.</td></tr>`}</tbody></table>
+    <table><thead><tr><th>Rank</th><th>Trades</th><th>Progress</th><th>Survival Score</th><th>Evidence Level</th><th>Race Status</th><th>Profit</th></tr></thead><tbody>${survivalRows || `<tr><td colspan="7">No survival race data loaded yet.</td></tr>`}</tbody></table>
   </section>
 
   <section class="section">
     <h2>Session Heatmap${selectedMarket ? ` • ${esc(selectedMarket.market)}` : ""}</h2>
-    <table><thead><tr><th>Session</th>${battleSessionHeatmap.days.map((day) => `<th>${esc(day)}</th>`).join("")}</tr></thead><tbody>${heatmapRows || `<tr><td colspan="6">No heatmap data loaded yet.</td></tr>`}</tbody></table>
+    <table><thead><tr><th>Session</th>${battleSessionHeatmap.days.map((day) => `<th>${esc(day)}</th>`).join("")}</tr></thead><tbody>${heatmapRows || `<tr><td colspan="7">No heatmap data loaded yet.</td></tr>`}</tbody></table>
   </section>
 
   <section class="section two-col">
     <div>
       <h2>Setup Grade Analytics${selectedMarket ? ` • ${esc(selectedMarket.market)}` : ""}</h2>
-      <table><thead><tr><th>Grade</th><th>Trades</th><th>Profit</th><th>Win %</th><th>PF</th><th>Avg R</th></tr></thead><tbody>${gradeRows || `<tr><td colspan="6">No setup grade data loaded yet.</td></tr>`}</tbody></table>
+      <table><thead><tr><th>Grade</th><th>Trades</th><th>Profit</th><th>Win %</th><th>PF</th><th>Avg R</th></tr></thead><tbody>${gradeRows || `<tr><td colspan="7">No setup grade data loaded yet.</td></tr>`}</tbody></table>
     </div>
     <div>
       <h2>Session Intelligence${selectedMarket ? ` • ${esc(selectedMarket.market)}` : ""}</h2>
-      <table><thead><tr><th>Session</th><th>Trades</th><th>Profit</th><th>Win %</th><th>PF</th><th>Avg R</th></tr></thead><tbody>${sessionRows || `<tr><td colspan="6">No session data loaded yet.</td></tr>`}</tbody></table>
+      <table><thead><tr><th>Session</th><th>Trades</th><th>Profit</th><th>Win %</th><th>PF</th><th>Avg R</th></tr></thead><tbody>${sessionRows || `<tr><td colspan="7">No session data loaded yet.</td></tr>`}</tbody></table>
     </div>
   </section>
 
@@ -2518,7 +2618,7 @@ function PageInner() {
               <div>
                 <p className="text-xs font-black uppercase tracking-[0.30em] text-[#F6C945]">100 Trade Survival Race</p>
                 <h3 className="mt-1 text-2xl font-black text-white">Which market can survive the full race?</h3>
-                <p className="mt-1 text-sm text-slate-400">Markets are ranked by survival score, not just profit. The race rewards progress, profit factor, win rate and drawdown control.</p>
+                <p className="mt-1 text-sm text-slate-400">Markets are ranked mainly by completed trades, then profit. Drawdown, profit factor and win rate are used as supporting quality checks.</p>
               </div>
               <div className="grid grid-cols-3 gap-2 text-center text-xs md:min-w-[360px]">
                 <div className="rounded-2xl border border-slate-700 bg-black/25 p-3"><div className="text-slate-500">Leader</div><div className="mt-1 font-black text-[#F6C945]">{battleSurvivalSummary.leader?.market || "—"}</div></div>
@@ -2549,6 +2649,7 @@ function PageInner() {
                         <div>
                           <div className="font-black text-white">{m.market}</div>
                           <div className="text-[11px] text-slate-500">{m.trades}/{m.targetTrades} trades • {m.remaining} left</div>
+                          <div className="mt-0.5 text-[10px] font-bold text-slate-400">{m.evidenceLevel}</div>
                         </div>
                       </div>
                       <div className="text-right text-sm font-black text-white">{m.survivalScore}</div>
@@ -2563,6 +2664,90 @@ function PageInner() {
                   </button>
                 );
               })}
+            </div>
+          </div>
+
+
+          <div className="grid gap-4 xl:grid-cols-[1.05fr_1.35fr]">
+            <div className="rounded-3xl border border-sky-400/25 bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.16),transparent_34%),linear-gradient(135deg,rgba(15,23,42,0.96),rgba(2,6,23,0.96))] p-4 shadow-xl shadow-black/25 md:p-5">
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[0.30em] text-sky-300">Public Transparency Portal</p>
+                  <h3 className="mt-1 text-2xl font-black text-white">Investor-facing proof page preview</h3>
+                  <p className="mt-1 text-sm leading-6 text-slate-400">A clean public layer showing what matters: progress, risk disclosure, consistency and certification status.</p>
+                </div>
+                <div className="rounded-2xl border border-[#D4AF37]/35 bg-[#D4AF37]/10 px-5 py-4 text-center">
+                  <div className="text-xs font-bold uppercase tracking-widest text-slate-400">Public Score</div>
+                  <div className="mt-1 text-3xl font-black text-[#F6C945]">{battleTransparencyPortal.publicScore}</div>
+                  <div className="text-[11px] font-bold text-slate-400">{battleTransparencyPortal.mode}</div>
+                </div>
+              </div>
+
+              <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                <div className="rounded-2xl border border-slate-800 bg-black/25 p-3"><div className="text-xs text-slate-500">Race Progress</div><div className="mt-1 text-xl font-black text-white">{fmt(battleTransparencyPortal.progressPct)}%</div></div>
+                <div className="rounded-2xl border border-slate-800 bg-black/25 p-3"><div className="text-xs text-slate-500">Positive Markets</div><div className="mt-1 text-xl font-black text-emerald-300">{battleTransparencyPortal.profitable}/{battleTransparencyPortal.markets}</div></div>
+                <div className="rounded-2xl border border-slate-800 bg-black/25 p-3"><div className="text-xs text-slate-500">Avg DD</div><div className="mt-1 text-xl font-black text-amber-300">{fmt(battleTransparencyPortal.avgDd)}%</div></div>
+              </div>
+
+              <div className="mt-5 space-y-2">
+                {battleTransparencyPortal.checklist.map((item) => (
+                  <div key={item.label} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-800 bg-black/20 px-3 py-2 text-sm">
+                    <div className="flex items-center gap-2">
+                      <span className={`grid h-6 w-6 place-items-center rounded-full border text-xs font-black ${item.ok ? "border-emerald-400/40 bg-emerald-500/10 text-emerald-300" : "border-amber-400/40 bg-amber-500/10 text-amber-300"}`}>{item.ok ? "✓" : "!"}</span>
+                      <span className="font-bold text-slate-200">{item.label}</span>
+                    </div>
+                    <span className="text-xs font-bold text-slate-400">{item.detail}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-3xl border border-[#D4AF37]/25 bg-[radial-gradient(circle_at_top_right,rgba(212,175,55,0.14),transparent_34%),linear-gradient(135deg,rgba(15,23,42,0.96),rgba(2,6,23,0.96))] p-4 shadow-xl shadow-black/25 md:p-5">
+              <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[0.30em] text-[#F6C945]">UST Certification System</p>
+                  <h3 className="mt-1 text-2xl font-black text-white">Markets must earn certification</h3>
+                  <p className="mt-1 text-sm text-slate-400">Certification is not based on hype. A market must survive 100 trades, stay profitable and remain inside the drawdown rules.</p>
+                </div>
+                <div className="rounded-2xl border border-emerald-400/25 bg-emerald-500/10 px-4 py-3 text-center text-xs">
+                  <div className="text-slate-400">Certified</div>
+                  <div className="mt-1 text-2xl font-black text-emerald-300">{battleCertificationRows.filter((r) => r.certificationLevel === "UST Certified").length}</div>
+                </div>
+              </div>
+
+              <div className="grid gap-3 lg:grid-cols-2">
+                {battleCertificationRows.slice(0, 6).map((m) => {
+                  const levelStyle = m.certificationLevel === "UST Certified"
+                    ? "border-emerald-400/40 bg-emerald-500/10 text-emerald-300"
+                    : m.certificationLevel === "Gold Candidate"
+                    ? "border-[#D4AF37]/45 bg-[#D4AF37]/10 text-[#F6C945]"
+                    : m.certificationLevel === "Silver Candidate"
+                    ? "border-slate-300/30 bg-slate-300/10 text-slate-200"
+                    : m.certificationLevel === "Bronze Candidate"
+                    ? "border-amber-700/40 bg-amber-700/10 text-amber-300"
+                    : "border-sky-400/35 bg-sky-500/10 text-sky-300";
+                  return (
+                    <div key={m.id} className="rounded-2xl border border-slate-800 bg-black/25 p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="font-black text-white">{m.market}</div>
+                          <div className={`mt-1 inline-flex rounded-full border px-2 py-1 text-[10px] font-black ${levelStyle}`}>{m.certificationLevel}</div>
+                        </div>
+                        <div className="text-right"><div className="text-xs text-slate-500">Score</div><div className="text-xl font-black text-white">{m.certificationScore}</div></div>
+                      </div>
+                      <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-800"><div className="h-full rounded-full bg-[#D4AF37]" style={{ width: `${Math.min(100, Math.max(0, m.certificationScore))}%` }} /></div>
+                      <div className="mt-3 grid grid-cols-1 gap-1 text-xs sm:grid-cols-2">
+                        {m.requirements.map((req) => (
+                          <div key={req.label} className="flex items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-950/60 px-2 py-1.5">
+                            <span className={req.ok ? "font-bold text-emerald-300" : "font-bold text-slate-400"}>{req.ok ? "✓" : "○"} {req.label}</span>
+                            <span className="text-slate-300">{req.value}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
 
