@@ -8,7 +8,6 @@ import { useSupabaseUser } from "@/lib/useSupabaseUser";
 import { supabase } from "@/lib/supabase";
 import ThemeToggle from "@/components/ThemeToggle";
 import { SHEETS_WEBAPP_URL as SHEETS_URL, READ_TOKEN as SHEETS_TOKEN, DEFAULT_UST_ACCOUNT as DEFAULT_ACCOUNT } from "@/lib/env";
-import WatchlistPanel from "@/components/WatchlistPanel";
 
 
 /* ========== shadcn/ui ========== */
@@ -35,7 +34,7 @@ import {
   CommandItem,
   CommandGroup,
 } from "@/components/ui/command";
-import { ChevronsUpDown, Check, Wallet, TrendingUp, TrendingDown, BarChart3, CalendarDays, Target, ShieldCheck, Activity, Info, PieChart, Star, Scale, Home, MoreHorizontal, Settings, BookOpen, ClipboardCheck, RefreshCw, Calculator, FileText } from "lucide-react";
+import { ChevronsUpDown, Check, Wallet, TrendingUp, TrendingDown, BarChart3, CalendarDays, Target, ShieldCheck, Activity, Info, PieChart, Star, Scale, Home, Settings, BookOpen, ClipboardCheck, RefreshCw, Calculator, FileText } from "lucide-react";
 
 /* ========== recharts ========== */
 import {
@@ -1009,338 +1008,20 @@ function PageInner() {
   }, []);
 
 
-  /* ---------- Watchlist (shared, editable by admin) ---------- */
-  // Create a table in Supabase named: ust_watchlist
-  // Columns: id (uuid), content (text), created_at (timestamptz default now()), created_by (uuid nullable)
-  // RLS idea:
-  // - SELECT: enabled for everyone
-  // - INSERT/UPDATE/DELETE: only for admin (by user.id or email)
-  const WATCHLIST_TABLE = "ust_watchlist";
-
-
-  // --- Watchlist helpers (handles older DB schemas safely) ---
-  const getWatchlistContent = (row: any): string =>
-    (row?.content ??
-      row?.watchlist_text ??
-      row?.watchlist ??
-      row?.body ??
-      row?.text ??
-      "").toString();
-
-  const getWatchlistImages = (row: any): string[] =>
-    (row?.images ??
-      row?.image_urls ??
-      row?.watchlist_images ??
-      row?.screenshots ??
-      []) as string[];
-
-
-  // Set either of these env vars (recommended) to unlock the editor only for you:
-  // NEXT_PUBLIC_UST_ADMIN_USER_ID="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-  // NEXT_PUBLIC_UST_ADMIN_EMAIL="you@example.com"
+  /* ---------- Admin access (used for Battle Board publishing) ---------- */
   const ADMIN_USER_ID = process.env.NEXT_PUBLIC_UST_ADMIN_USER_ID;
   const ADMIN_EMAIL = process.env.NEXT_PUBLIC_UST_ADMIN_EMAIL;
 
   const isAdmin = useMemo(() => {
-    const uid = (user as any)?.id || (user as any)?.user?.id; // supports both shapes
+    const uid = (user as any)?.id || (user as any)?.user?.id;
     const email = (user as any)?.email || (user as any)?.user?.email;
-
-    // Fallback admin UID (your provided UUID) if env var is not set.
     const adminUid = ADMIN_USER_ID || "39127777-9fd8-4183-96bf-03f943b56a24";
 
     if (!uid) return false;
-
-    // Primary check: UID match
     if (uid === adminUid) return true;
-
-    // Optional secondary check: email match (only if env var is set)
     if (ADMIN_EMAIL && email && String(email).toLowerCase() === String(ADMIN_EMAIL).toLowerCase()) return true;
-
     return false;
   }, [user, ADMIN_USER_ID, ADMIN_EMAIL]);
-
-  const [watchlistDraft, setWatchlistDraft] = useState("");
-  const [watchlistImages, setWatchlistImages] = useState<File[]>([]);
-  const [watchlistScreenshotUrls, setWatchlistScreenshotUrls] = useState<string[]>([]);
-
-  // Upload UI state
-  const [watchlistUploading, setWatchlistUploading] = useState(false);
-  const [watchlistUploadError, setWatchlistUploadError] = useState<string | null>(null);
-
-  // Admin check (editor should only show for admin)
-  const watchlistCanEdit = isAdmin;
-  const [watchlistLatest, setWatchlistLatest] = useState<any | null>(null);
-  const [watchlistHistory, setWatchlistHistory] = useState<any[]>([]);
-  const [watchlistLoading, setWatchlistLoading] = useState(false);
-  const [watchlistSaving, setWatchlistSaving] = useState(false);
-  const [watchlistError, setWatchlistError] = useState<string | null>(null);
-
-  const loadWatchlist = useCallback(async () => {
-    setWatchlistLoading(true);
-    setWatchlistError(null);
-
-    try {
-      const { data, error } = await supabase
-        .from(WATCHLIST_TABLE)
-          .select('*')
-        .order("created_at", { ascending: false })
-        .limit(7);
-
-      if (error) throw error;
-
-      const latest = data?.[0] ?? null;
-      setWatchlistLatest(latest);
-      setWatchlistHistory(data ?? []);
-      setWatchlistScreenshotUrls([]);
-      // keep local selected files separate
-      if (latest?.content) setWatchlistDraft(latest.content);
-    } catch (e: any) {
-      // Common causes: table not created yet, or RLS not configured
-      setWatchlistError(e?.message ?? "Failed to load watchlist.");
-      setWatchlistLatest(null);
-      setWatchlistHistory([]);
-    } finally {
-      setWatchlistLoading(false);
-    }
-  }, []);
-
-
-  const WATCHLIST_BUCKET = "ust-watchlist";
-
-  async function uploadWatchlistScreenshot(file: File) {
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-    const path = `watchlists/${Date.now()}_${safeName}`;
-
-    const { error: upErr } = await supabase.storage.from(WATCHLIST_BUCKET).upload(path, file, {
-      cacheControl: "3600",
-      upsert: true,
-      contentType: file.type || "image/png",
-    });
-    if (upErr) throw upErr;
-
-    const { data } = supabase.storage.from(WATCHLIST_BUCKET).getPublicUrl(path);
-    return data.publicUrl;
-  }
-
-  // Parse a single textarea into two DB fields (primary_focus + monitor_list).
-  // This keeps your older UI (one text box) while supporting the newer table schema.
-  function splitWatchlistSections(text: string) {
-    const t = (text || "").trim();
-    if (!t) return { primary_focus: "", monitor_list: "" };
-
-    const lower = t.toLowerCase();
-    const idxPrimary = lower.indexOf("primary focus");
-    const idxMonitor = lower.indexOf("monitor list");
-
-    // If headings exist, slice around them; otherwise treat everything as primary focus.
-    if (idxPrimary !== -1 && idxMonitor !== -1 && idxMonitor > idxPrimary) {
-      const primary = t.slice(idxPrimary, idxMonitor).trim();
-      const monitor = t.slice(idxMonitor).trim();
-      return { primary_focus: primary, monitor_list: monitor };
-    }
-
-    // Fallback: if only Monitor List exists, treat text before it as primary.
-    if (idxMonitor !== -1) {
-      const primary = t.slice(0, idxMonitor).trim();
-      const monitor = t.slice(idxMonitor).trim();
-      return { primary_focus: primary, monitor_list: monitor };
-    }
-
-    return { primary_focus: t, monitor_list: "" };
-  }
-
-  const publishWatchlist = useCallback(async () => {
-    const content = watchlistDraft.trim();
-    if (!content) return;
-
-    setWatchlistSaving(true);
-    setWatchlistError(null);
-
-    try {
-      // Clean Watchlist Mode: screenshots are intentionally not saved here.
-      // Chart screenshots belong in A-Setups or Trade Journal, not the daily watchlist.
-      setWatchlistUploadError(null);
-      setWatchlistUploading(false);
-      const allUrls: string[] = [];
-
-      // Try saving watchlist; handle older DB schemas (missing columns) gracefully.
-      const baseText = watchlistDraft.trim();
-      if (!baseText) throw new Error("Watchlist text is empty.");
-      const sections = splitWatchlistSections(baseText);
-
-      // One watchlist per day (with edits): write to today's row.
-      // If a row already exists for today, we UPDATE (or UPSERT) instead of INSERT.
-      const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-
-      // Ensure we never send undefined for NOT NULL columns.
-      const safeSections = {
-        primary_focus: sections.primary_focus ?? "",
-        monitor_list: sections.monitor_list ?? "",
-      };
-
-      // Prefer newer schema: upsert on watchlist_date (unique per day)
-      const tryUpsert = async (payload: any) =>
-        supabase.from(WATCHLIST_TABLE).upsert(payload, { onConflict: "watchlist_date" });
-
-      const tryUpdateToday = async (payload: any) =>
-        supabase.from(WATCHLIST_TABLE).update(payload).eq("watchlist_date", today);
-
-      // 1) Try with new schema fields + content + image_urls (UPSERT by date)
-      let insertErr: any = null;
-      let res = await tryUpsert({
-        watchlist_date: today,
-        content: baseText,
-        ...safeSections,
-        created_by: user.id,
-        ...(allUrls.length ? { image_urls: allUrls } : {}),
-      });
-      insertErr = res.error;
-
-      // If upsert isn't supported by this schema (missing watchlist_date), fall back to INSERT.
-      const tryInsert = async (payload: any) => supabase.from(WATCHLIST_TABLE).insert(payload);
-
-      if (insertErr && String(insertErr.message || "").toLowerCase().includes("watchlist_date")) {
-        // Retry without watchlist_date (older schema)
-        const rLegacy = await tryInsert({
-          content: baseText,
-          ...safeSections,
-          created_by: user.id,
-          ...(allUrls.length ? { image_urls: allUrls } : {}),
-        });
-        insertErr = rLegacy.error;
-      }
-
-      // If we hit the unique constraint anyway, do a plain UPDATE for today.
-      if (
-        insertErr &&
-        String(insertErr.message || "").toLowerCase().includes("duplicate key")
-      ) {
-        const rUpdate = await tryUpdateToday({
-          content: baseText,
-          ...safeSections,
-          ...(allUrls.length ? { image_urls: allUrls } : {}),
-        });
-        insertErr = rUpdate.error;
-      }
-
-      // 2) If 'content' column doesn't exist, retry with common older names
-      if (insertErr && String(insertErr.message || "").toLowerCase().includes("content")) {
-        const candidates = ["watchlist_text", "watchlist", "body", "text"];
-        for (const col of candidates) {
-          // Try UPSERT first (newer schema), then fall back to UPDATE/INSERT as needed.
-          const r2 = await tryUpsert({
-            watchlist_date: today,
-            [col]: baseText,
-            ...safeSections,
-            created_by: user.id,
-            ...(allUrls.length ? { image_urls: allUrls } : {}),
-          });
-          insertErr = r2.error;
-
-          if (
-            insertErr &&
-            String(insertErr.message || "").toLowerCase().includes("duplicate key")
-          ) {
-            const r2u = await tryUpdateToday({
-              [col]: baseText,
-              ...safeSections,
-              ...(allUrls.length ? { image_urls: allUrls } : {}),
-            });
-            insertErr = r2u.error;
-          }
-
-          if (insertErr && String(insertErr.message || "").toLowerCase().includes("watchlist_date")) {
-            const r2i = await tryInsert({
-              [col]: baseText,
-              ...safeSections,
-              created_by: user.id,
-              ...(allUrls.length ? { image_urls: allUrls } : {}),
-            });
-            insertErr = r2i.error;
-          }
-          if (!insertErr) break;
-        }
-      }
-
-      // 3) If 'image_urls' column doesn't exist, retry without images (text will still save)
-      if (insertErr && String(insertErr.message || "").toLowerCase().includes("image_urls")) {
-        // First try again with content
-        const r3 = await tryUpsert({
-          watchlist_date: today,
-          content: baseText,
-          ...safeSections,
-          created_by: user.id,
-        });
-        insertErr = r3.error;
-
-        if (
-          insertErr &&
-          String(insertErr.message || "").toLowerCase().includes("duplicate key")
-        ) {
-          const r3u = await tryUpdateToday({ content: baseText, ...safeSections });
-          insertErr = r3u.error;
-        }
-
-        if (insertErr && String(insertErr.message || "").toLowerCase().includes("watchlist_date")) {
-          const r3i = await tryInsert({ content: baseText, ...safeSections, created_by: user.id });
-          insertErr = r3i.error;
-        }
-
-        // Then try older text columns
-        if (insertErr && String(insertErr.message || "").toLowerCase().includes("content")) {
-          const candidates = ["watchlist_text", "watchlist", "body", "text"];
-          for (const col of candidates) {
-            const r4 = await tryUpsert({
-              watchlist_date: today,
-              [col]: baseText,
-              ...safeSections,
-              created_by: user.id,
-            });
-            insertErr = r4.error;
-
-            if (
-              insertErr &&
-              String(insertErr.message || "").toLowerCase().includes("duplicate key")
-            ) {
-              const r4u = await tryUpdateToday({ [col]: baseText, ...safeSections });
-              insertErr = r4u.error;
-            }
-
-            if (insertErr && String(insertErr.message || "").toLowerCase().includes("watchlist_date")) {
-              const r4i = await tryInsert({ [col]: baseText, ...safeSections, created_by: user.id });
-              insertErr = r4i.error;
-            }
-            if (!insertErr) break;
-          }
-        }
-      }
-
-      if (insertErr) throw insertErr;
-
-
-      // Clear local selections after successful publish
-      setWatchlistImages([]);
-      setWatchlistScreenshotUrls([]);
-      // Keep the text so you can keep editing/updating today's watchlist.
-      setWatchlistDraft(baseText);
-      setWatchlistError(null);
-
-      // Reload latest post (so everyone sees it immediately)
-      await loadWatchlist();
-    } catch (e: any) {
-      setWatchlistError(e?.message ?? "Failed to publish watchlist.");
-    } finally {
-      setWatchlistSaving(false);
-      setWatchlistUploading(false);
-      setWatchlistImages([]);
-    }
-  }, [watchlistDraft, watchlistImages, user, loadWatchlist]);
-
-  useEffect(() => {
-    // Load on first mount so everyone sees the latest watchlist immediately
-    void loadWatchlist();
-  }, [loadWatchlist]);
-
 
 
   /* ---------- UST Markets Battle Board (admin published, everyone can view) ---------- */
@@ -2153,6 +1834,12 @@ function PageInner() {
     [trades, today]
   );
 
+  const recentDashboardTrades = useMemo(
+    () => [...tradeRows].sort((a, b) => Number(b.ts || 0) - Number(a.ts || 0)).slice(0, 5),
+    [tradeRows]
+  );
+
+
   // Badge progress now uses total journal trades, not sessions.
   // Withdrawals are excluded because tradeRows only contains real trades.
   const badgeTradeCount = useMemo(() => tradeRows.length, [tradeRows]);
@@ -2466,9 +2153,6 @@ function PageInner() {
               <TabsTrigger value="calendar" className="rounded-xl border border-slate-700/80 px-4 py-2 text-sm font-semibold data-[state=active]:border-[#D4AF37] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black">
                 <CalendarDays className="mr-2 h-4 w-4" /> Calendar
               </TabsTrigger>
-              <TabsTrigger value="watchlist" className="rounded-xl border border-slate-700/80 px-4 py-2 text-sm font-semibold data-[state=active]:border-[#D4AF37] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black">
-                <Star className="mr-2 h-4 w-4" /> Watchlist
-              </TabsTrigger>
               <TabsTrigger value="asetups" className="rounded-xl border border-slate-700/80 px-4 py-2 text-sm font-semibold data-[state=active]:border-[#D4AF37] data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black">
                 <Target className="mr-2 h-4 w-4" /> A-Setups
               </TabsTrigger>
@@ -2478,28 +2162,8 @@ function PageInner() {
               <a href="/leaderboard" className="inline-flex items-center rounded-xl border border-slate-700/80 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:border-[#D4AF37]/70 hover:bg-slate-900">
                 <BarChart3 className="mr-2 h-4 w-4" /> Leaderboards
               </a>
-              <Button type="button" variant="outline" className="rounded-xl border-slate-700/80 px-4 py-2 text-sm font-semibold">
-                <MoreHorizontal className="mr-2 h-4 w-4" /> More
-              </Button>
             </TabsList>
 
-            <div className="grid gap-3 lg:grid-cols-3">
-              <button type="button" onClick={() => setActiveTab('asetups')} className="group flex items-center gap-4 rounded-xl border border-slate-700/80 bg-gradient-to-br from-slate-950/80 to-slate-900/60 p-4 text-left shadow-lg shadow-black/10 transition hover:border-purple-400/50 hover:bg-slate-900">
-                <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl border border-purple-400/30 bg-purple-500/10 text-purple-300"><Target className="h-7 w-7" /></span>
-                <span className="min-w-0 flex-1"><span className="block text-sm font-black uppercase tracking-wide text-white">A-Setups</span><span className="block text-xs text-slate-400">High probability trade setups</span><span className="mt-1 block text-sm font-semibold text-sky-300">View setups →</span></span>
-                <span className="text-2xl text-slate-400 transition group-hover:translate-x-1 group-hover:text-white">›</span>
-              </button>
-              <button type="button" onClick={() => setActiveTab('checklist')} className="group flex items-center gap-4 rounded-xl border border-slate-700/80 bg-gradient-to-br from-slate-950/80 to-slate-900/60 p-4 text-left shadow-lg shadow-black/10 transition hover:border-sky-400/50 hover:bg-slate-900">
-                <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl border border-sky-400/30 bg-sky-500/10 text-sky-300"><ClipboardCheck className="h-7 w-7" /></span>
-                <span className="min-w-0 flex-1"><span className="block text-sm font-black uppercase tracking-wide text-white">Checklist</span><span className="block text-xs text-slate-400">Daily trading checklist</span><span className="mt-1 block text-sm font-semibold text-sky-300">Open checklist →</span></span>
-                <span className="text-2xl text-slate-400 transition group-hover:translate-x-1 group-hover:text-white">›</span>
-              </button>
-              <a href="/leaderboard" className="group flex items-center gap-4 rounded-xl border border-slate-700/80 bg-gradient-to-br from-slate-950/80 to-slate-900/60 p-4 text-left shadow-lg shadow-black/10 transition hover:border-[#D4AF37]/60 hover:bg-slate-900">
-                <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl border border-[#D4AF37]/30 bg-[#D4AF37]/10 text-[#F6C945]"><BarChart3 className="h-7 w-7" /></span>
-                <span className="min-w-0 flex-1"><span className="block text-sm font-black uppercase tracking-wide text-white">Leaderboards</span><span className="block text-xs text-slate-400">Top performers &amp; rankings</span><span className="mt-1 block text-sm font-semibold text-sky-300">View leaderboard →</span></span>
-                <span className="text-2xl text-slate-400 transition group-hover:translate-x-1 group-hover:text-white">›</span>
-              </a>
-            </div>
           </div>
 
           {/* Mobile: single-line command ribbon — all 6 tools stay on one row */}
@@ -3162,34 +2826,105 @@ function PageInner() {
 
         {/* DASHBOARD */}
         <TabsContent value="dashboard" className="space-y-4">
-          <div className="rounded-2xl border border-slate-800/80 bg-[radial-gradient(circle_at_top_left,rgba(212,175,55,0.13),transparent_28%),linear-gradient(135deg,#07111f_0%,#0b1220_55%,#101827_100%)] p-3 shadow-2xl shadow-black/25 dark:border-slate-700/70 md:p-5">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="rounded-3xl border border-[#D4AF37]/25 bg-[radial-gradient(circle_at_top_left,rgba(212,175,55,0.13),transparent_30%),linear-gradient(135deg,#050814_0%,#0B1220_55%,#101827_100%)] p-4 shadow-2xl shadow-black/25 md:p-5">
+            <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-[#F6C945] sm:text-xs sm:tracking-[0.35em]">Trading Command Centre</p>
-                <h2 className="mt-1 text-xl font-extrabold leading-tight tracking-tight text-white sm:text-2xl md:text-3xl">Dashboard Overview</h2>
+                <p className="text-xs font-black uppercase tracking-[0.35em] text-[#F6C945]">Trading Command Centre</p>
+                <h2 className="mt-1 text-2xl font-black tracking-tight text-white md:text-3xl">Dashboard Overview</h2>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <DashboardSyncButton addTradesBulkFn={addTradesBulk} />
-                <div className={`inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-bold shadow-lg ${locked && lockOnHit ? "border-rose-500/50 bg-rose-500/10 text-rose-300 shadow-rose-950/30" : "border-emerald-400/50 bg-emerald-500/10 text-emerald-300 shadow-emerald-950/30"}`}>
+                <div className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-black shadow-lg ${locked && lockOnHit ? "border-rose-500/50 bg-rose-500/10 text-rose-300 shadow-rose-950/30" : "border-emerald-400/50 bg-emerald-500/10 text-emerald-300 shadow-emerald-950/30"}`}>
                   <Activity className="h-4 w-4" />
                   {locked && lockOnHit ? "Trading Locked" : "Trading Active"}
                 </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 md:gap-4 lg:grid-cols-4">
-              <DashCard title="Equity" value={currency(equity)} hint={`Start: ${currency(startBalance)}`} tone={equity >= startBalance ? "positive" : "negative"} featured icon="wallet" spark="up" />
-              <DashCard
-                title="Realised PnL"
-                value={currency(totalTradePnlAllTime)}
-                hint={`All journal trades: ${closed}`}
-                tone={totalTradePnlAllTime > 0 ? "positive" : totalTradePnlAllTime < 0 ? "negative" : "blue"}
-                featured
-                icon="trend"
-                spark="flat"
-              />
-              <DashCard title="Overall Win Rate" value={`${fmt(winRate)}%`} hint={`${wins}W / ${losses}L / ${bes}BE`} tone={winRate >= 50 ? "purple" : closed > 0 ? "warning" : "purple"} featured icon="pie" />
-              <DashCard title="Discipline" value={`${disciplineScore}/100`} hint={currentRuleBadges.length ? `${currentRuleBadges.length} rules active` : "Checklist pending"} tone={disciplineScore >= 80 ? "positive" : disciplineScore >= 60 ? "gold" : "negative"} featured icon="shield" progress={disciplineScore} />
+            <div className="mb-5 grid gap-3 rounded-2xl border border-[#D4AF37]/30 bg-black/25 p-4 lg:grid-cols-5">
+              <div className="lg:border-r lg:border-slate-700/70 lg:pr-4">
+                <p className="text-xs font-black uppercase tracking-[0.22em] text-[#F6C945]">Live Status</p>
+                <div className={`mt-2 flex items-center gap-2 text-xl font-black ${locked && lockOnHit ? "text-rose-300" : "text-emerald-300"}`}><span className={`h-2.5 w-2.5 rounded-full ${locked && lockOnHit ? "bg-rose-400" : "bg-emerald-400"}`} />{locked && lockOnHit ? "Locked" : "Active"}</div>
+                <p className="mt-2 text-xs text-slate-400">Last update: {new Date().toLocaleString()}</p>
+              </div>
+              <TopStatusMetric icon="wallet" label="Account Equity" value={currency(equity)} />
+              <TopStatusMetric icon="trend" label="Today’s PnL" value={`${todayTradePnl >= 0 ? "+" : ""}${currency(Number(todayTradePnl.toFixed(2)))}`} tone={todayTradePnl >= 0 ? "positive" : "negative"} />
+              <TopStatusMetric icon="growth" label="Weekly PnL" value={`${weeklyProgress >= 0 ? "+" : ""}${currency(Number(weeklyProgress.toFixed(2)))}`} tone={weeklyProgress >= 0 ? "positive" : "negative"} />
+              <TopStatusMetric icon="activity" label="Monthly PnL" value={`${monthlyProgress >= 0 ? "+" : ""}${currency(Number(monthlyProgress.toFixed(2)))}`} tone={monthlyProgress >= 0 ? "positive" : "negative"} />
+            </div>
+
+            <div className="grid gap-4 xl:grid-cols-[1fr_390px]">
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-2 md:gap-4 lg:grid-cols-4">
+                  <DashCard title="Equity" value={currency(equity)} hint={`Start: ${currency(startBalance)}`} tone={equity >= startBalance ? "positive" : "negative"} featured icon="wallet" spark="up" />
+                  <DashCard
+                    title="Realised PnL"
+                    value={currency(totalTradePnlAllTime)}
+                    hint={`All journal trades: ${closed}`}
+                    tone={totalTradePnlAllTime > 0 ? "positive" : totalTradePnlAllTime < 0 ? "negative" : "blue"}
+                    featured
+                    icon="trend"
+                    spark="flat"
+                  />
+                  <DashCard title="Overall Win Rate" value={`${fmt(winRate)}%`} hint={`${wins}W / ${losses}L / ${bes}BE`} tone={winRate >= 50 ? "purple" : closed > 0 ? "warning" : "purple"} featured icon="pie" />
+                  <DashCard title="Discipline Score" value={`${disciplineScore}/100`} hint={currentRuleBadges.length ? `${currentRuleBadges.length} rules active` : "Checklist pending"} tone={disciplineScore >= 80 ? "positive" : disciplineScore >= 60 ? "gold" : "negative"} featured icon="shield" progress={disciplineScore} />
+                </div>
+
+                <Card className="border-slate-800/80 bg-gradient-to-br from-[#0b1220] to-[#111827] text-slate-100 shadow-xl shadow-black/20">
+                  <CardContent className="p-5">
+                    <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                      <h4 className="text-lg font-black uppercase tracking-[0.22em] text-[#F6C945]">Equity Curve <span className="text-slate-500">(All Time)</span></h4>
+                      <div className="flex rounded-xl border border-slate-700 bg-black/20 p-1 text-xs font-black text-slate-300">
+                        <span className="rounded-lg px-3 py-1">7D</span><span className="rounded-lg bg-[#D4AF37] px-3 py-1 text-black">30D</span><span className="rounded-lg px-3 py-1">90D</span><span className="rounded-lg px-3 py-1">ALL</span>
+                      </div>
+                    </div>
+                    <div className="h-72">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={equitySeries} margin={{ top: 8, right: 12, bottom: 20, left: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
+                          <XAxis stroke="#94a3b8" />
+                          <YAxis stroke="#94a3b8" />
+                          <RTooltip labelFormatter={(v) => new Date(v).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", year: "numeric" })} />
+                          <Line type="monotone" dataKey="equity" stroke="#D4AF37" dot={false} strokeWidth={3} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <div className="space-y-4">
+                <Card className="border-slate-800/80 bg-gradient-to-br from-[#0b1220] to-[#111827] text-slate-100 shadow-xl shadow-black/20">
+                  <CardContent className="p-5">
+                    <div className="mb-4 flex items-center justify-between gap-3">
+                      <h4 className="text-sm font-black uppercase tracking-[0.24em] text-[#F6C945]">Recent Activity</h4>
+                      <button type="button" onClick={() => setActiveTab('journal')} className="text-xs font-bold text-sky-300 hover:text-sky-200">View Journal →</button>
+                    </div>
+                    <div className="space-y-3">
+                      {recentDashboardTrades.length ? recentDashboardTrades.map((t) => (
+                        <div key={t.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-800 bg-black/20 p-3">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2"><span className={`grid h-8 w-8 place-items-center rounded-full border ${Number(t.pnl || 0) >= 0 ? "border-emerald-400/40 bg-emerald-500/10 text-emerald-300" : "border-rose-400/40 bg-rose-500/10 text-rose-300"}`}><TrendingUp className="h-4 w-4" /></span><span className="truncate font-black text-white">{t.symbol || "Market"}</span></div>
+                            <div className="mt-1 text-xs text-slate-500">{t.ts ? new Date(t.ts).toLocaleString() : "Manual trade"}</div>
+                          </div>
+                          <div className="text-right">
+                            <div className={`text-sm font-black ${Number(t.pnl || 0) >= 0 ? "text-emerald-300" : "text-rose-300"}`}>{Number(t.pnl || 0) >= 0 ? "+" : ""}{currency(Number(t.pnl || 0))}</div>
+                            <div className="text-xs text-slate-500">{Number(t.pnl || 0) >= 0 ? "Win" : Number(t.pnl || 0) < 0 ? "Loss" : "BE"}</div>
+                          </div>
+                        </div>
+                      )) : <div className="rounded-xl border border-slate-800 bg-black/20 p-4 text-sm text-slate-400">No journal trades yet.</div>}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <div className="rounded-2xl border border-[#D4AF37]/25 bg-black/25 p-5">
+                  <p className="text-xs font-black uppercase tracking-[0.24em] text-[#F6C945]">Trading Command Centre</p>
+                  <div className="mt-4 flex items-center gap-4">
+                    <span className="grid h-12 w-12 place-items-center rounded-full border border-[#D4AF37]/30 bg-[#D4AF37]/10 text-[#F6C945]">⚡</span>
+                    <p className="text-sm leading-6 text-slate-300">All systems operational. Stay disciplined. Trust the process.</p>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div className="mt-4">
@@ -3359,22 +3094,6 @@ function PageInner() {
 
           <BadgeShowcase badge={badge} tradeCount={badgeTradeCount} />
 
-          <Card className="border-slate-800/80 bg-gradient-to-br from-[#0b1220] to-[#111827] text-slate-100 shadow-xl shadow-black/20">
-            <CardContent className="p-5">
-              <h4 className="text-lg font-semibold mb-2 text-white">Equity Curve (All Time)</h4>
-              <div className="h-72">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={equitySeries} margin={{ top: 8, right: 12, bottom: 20, left: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-                    <XAxis stroke="#94a3b8" />
-                    <YAxis stroke="#94a3b8" />
-                    <RTooltip labelFormatter={(v) => new Date(v).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", year: "numeric" })} />
-                    <Line type="monotone" dataKey="equity" stroke="#22c55e" dot={false} strokeWidth={2} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
         </TabsContent>
 
         {/* ANALYTICS */}
@@ -3688,132 +3407,7 @@ function PageInner() {
         </TabsContent>
 
       
-        {/* Watchlist */}
-        <TabsContent value="watchlist" className="mt-6 space-y-6">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between gap-4">
-              <div>
-                <CardTitle>Daily Watchlist</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Updated by the UST admin — everyone sees the same latest plan.
-                </p>
-                <p className="text-xs opacity-70 mt-1">Signed in UID: {(user as any)?.id || (user as any)?.user?.id || "—"} {isAdmin ? "(admin)" : ""}</p>
-              </div>
 
-              <Button
-                variant="secondary"
-                onClick={() => void loadWatchlist()}
-                disabled={watchlistLoading}
-              >
-                {watchlistLoading ? "Refreshing..." : "Refresh"}
-              </Button>
-            </CardHeader>
-
-            <CardContent>
-              {watchlistError ? (
-                <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm">
-                  {watchlistError}
-                  <div className="mt-2 text-xs opacity-80">
-                    If this is your first time using it: create the Supabase table{" "}
-                    <code className="px-1">ust_watchlist</code> and allow{" "}
-                    <code className="px-1">SELECT</code> for everyone.
-                  </div>
-                </div>
-              ) : null}
-
-              <div className="space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
-                  <span>
-                    Latest update:{" "}
-                    <span className="text-foreground">
-                      {watchlistLatest?.created_at
-                        ? new Date(watchlistLatest.created_at).toLocaleString()
-                        : "—"}
-                    </span>
-                  </span>
-                </div>
-
-                <WatchlistTradePlan content={getWatchlistContent(watchlistLatest) || ""} />
-
-                {watchlistHistory?.length ? (
-                  <div className="space-y-2">
-                    <p className="text-xs font-medium text-muted-foreground">
-                      Recent history
-                    </p>
-                    <div className="grid gap-2">
-                      {watchlistHistory.map((w) => (
-                        <div
-                          key={w.id}
-                          className="flex items-start justify-between gap-3 rounded-md border bg-background/20 p-3"
-                        >
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-medium">
-                              {w.content?.split("\n")?.[0] ?? "Watchlist"}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {w.created_at
-                                ? new Date(w.created_at).toLocaleString()
-                                : ""}
-                            </p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            </CardContent>
-          </Card>
-
-          {isAdmin ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>Admin Editor</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Edit the watchlist here and publish — it updates for everyone.
-                </p>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <textarea
-                  value={watchlistDraft}
-                  onChange={(e) => setWatchlistDraft(e.target.value)}
-                  placeholder="Paste your daily watchlist here…"
-                  className="min-h-[220px] w-full rounded-md border bg-background/30 p-3 text-sm outline-none focus:ring-2 focus:ring-primary/40"
-                />
-
-                <div className="rounded-md border border-yellow-500/20 bg-yellow-500/5 p-3">
-                  <p className="text-sm font-medium text-yellow-300">Clean Watchlist Mode</p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Screenshots have been removed from Watchlist to keep the daily plan clean. Use A-Setups or Trade Journal for chart screenshots.
-                  </p>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    onClick={() => void publishWatchlist()}
-                    disabled={watchlistSaving || watchlistLoading || !watchlistDraft.trim()}
-                  >
-                    {watchlistSaving ? "Publishing..." : "Publish Watchlist"}
-                  </Button>
-
-                  <Button
-                    variant="secondary"
-                    onClick={() => setWatchlistDraft(getWatchlistContent(watchlistLatest) ?? "")}
-                    disabled={watchlistSaving || watchlistLoading}
-                  >
-                    Reset to Latest
-                  </Button>
-                </div>
-
-                <p className="text-xs text-muted-foreground">
-                  Tip: set <code className="px-1">NEXT_PUBLIC_UST_ADMIN_USER_ID</code>{" "}
-                  or <code className="px-1">NEXT_PUBLIC_UST_ADMIN_EMAIL</code> so only
-                  you can see this editor.
-                </p>
-              </CardContent>
-            </Card>
-          ) : null}
-        </TabsContent>
 
 
         <TabsList className="fixed inset-x-3 bottom-3 z-50 grid h-[72px] grid-cols-5 gap-1 rounded-2xl border border-slate-300 bg-white/95 p-2 shadow-2xl shadow-black/20 backdrop-blur md:hidden dark:border-slate-700/80 dark:bg-slate-950/95 dark:shadow-black/50">
@@ -3821,7 +3415,7 @@ function PageInner() {
           <TabsTrigger value="journal" className="group flex h-full flex-col items-center justify-center rounded-xl px-1 py-1 text-[10px] font-bold leading-none text-slate-600 data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:text-slate-400 dark:data-[state=active]:text-black"><BookOpen className="mb-1 h-5 w-5 text-[#B68E12] group-data-[state=active]:text-black dark:text-[#F6C945] dark:group-data-[state=active]:text-black" /><span>Journal</span></TabsTrigger>
           <TabsTrigger value="calendar" className="group flex h-full flex-col items-center justify-center rounded-xl px-1 py-1 text-[10px] font-bold leading-none text-slate-600 data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:text-slate-400 dark:data-[state=active]:text-black"><CalendarDays className="mb-1 h-5 w-5 text-[#B68E12] group-data-[state=active]:text-black dark:text-[#F6C945] dark:group-data-[state=active]:text-black" /><span>Calendar</span></TabsTrigger>
           <TabsTrigger value="analytics" className="group flex h-full flex-col items-center justify-center rounded-xl px-1 py-1 text-[10px] font-bold leading-none text-slate-600 data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:text-slate-400 dark:data-[state=active]:text-black"><BarChart3 className="mb-1 h-5 w-5 text-[#B68E12] group-data-[state=active]:text-black dark:text-[#F6C945] dark:group-data-[state=active]:text-black" /><span>Stats</span></TabsTrigger>
-          <TabsTrigger value="checklist" className="group flex h-full flex-col items-center justify-center rounded-xl px-1 py-1 text-[10px] font-bold leading-none text-slate-600 data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:text-slate-400 dark:data-[state=active]:text-black"><MoreHorizontal className="mb-1 h-5 w-5 text-[#B68E12] group-data-[state=active]:text-black dark:text-[#F6C945] dark:group-data-[state=active]:text-black" /><span>More</span></TabsTrigger>
+          <TabsTrigger value="checklist" className="group flex h-full flex-col items-center justify-center rounded-xl px-1 py-1 text-[10px] font-bold leading-none text-slate-600 data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:text-slate-400 dark:data-[state=active]:text-black"><ClipboardCheck className="mb-1 h-5 w-5 text-[#B68E12] group-data-[state=active]:text-black dark:text-[#F6C945] dark:group-data-[state=active]:text-black" /><span>Checklist</span></TabsTrigger>
         </TabsList>
 
 </Tabs>
@@ -3833,6 +3427,37 @@ function PageInner() {
    Reusable UI blocks
 ============================================================================ */
 type DashTone = "neutral" | "positive" | "negative" | "warning" | "gold" | "blue" | "purple";
+
+function TopStatusMetric({
+  icon,
+  label,
+  value,
+  tone = "positive",
+}: {
+  icon: "wallet" | "trend" | "growth" | "activity";
+  label: string;
+  value: string;
+  tone?: "positive" | "negative" | "neutral";
+}) {
+  const iconClass = "h-6 w-6";
+  const Icon =
+    icon === "wallet" ? <Wallet className={iconClass} /> :
+    icon === "trend" ? <TrendingUp className={iconClass} /> :
+    icon === "growth" ? <TrendingUp className={iconClass} /> :
+    <Activity className={iconClass} />;
+  const valueClass = tone === "negative" ? "text-rose-300" : tone === "neutral" ? "text-slate-100" : "text-emerald-300";
+
+  return (
+    <div className="flex items-center gap-4 lg:border-r lg:border-slate-700/70 lg:pr-4 last:border-r-0">
+      <div className="hidden text-emerald-300/80 sm:block">{Icon}</div>
+      <div className="min-w-0">
+        <p className="text-xs font-bold uppercase tracking-wide text-slate-400">{label}</p>
+        <p className={`mt-1 truncate text-xl font-black ${valueClass}`}>{value}</p>
+      </div>
+    </div>
+  );
+}
+
 type DashIcon = "wallet" | "trend" | "growth" | "down" | "calendar" | "shield" | "pie" | "bars" | "trophy" | "scale";
 
 function SectionLabel({ title, icon }: { title: string; icon?: DashIcon }) {
@@ -4977,127 +4602,6 @@ function SmartCoachPanel({
         </div>
       </CardContent>
     </Card>
-  );
-}
-
-function WatchlistTradePlan({ content }: { content: string }) {
-  const cleanContent = (content || "").trim();
-  const lines = cleanContent.split(/\n+/).map((x) => x.trim()).filter(Boolean);
-
-  const assetRegex = /(volatility\s*\d+|v\d+|gold|xauusd|xau|silver|xagusd|btc|btcusd|nas|nas100|us30|boom|crash|eurusd|gbpusd|usdjp[y]?)/i;
-  const assetLines = lines.filter((l) => assetRegex.test(l)).slice(0, 8);
-  const plans = assetLines.length ? assetLines : lines.slice(0, 5);
-
-  const getCleanTitle = (line: string) => line.replace(/^[-•*\d.)\s]+/, "").replace(/^[📌🎯🧠⚠️✅🔴🟡🟢]+\s*/, "");
-  const getBias = (text: string) => /sell|short|bearish|down/i.test(text) ? "SELL" : /buy|long|bullish|up/i.test(text) ? "BUY" : "MONITOR";
-  const getStatus = (text: string) => {
-    if (/ready|trigger|confirmed|all conditions|valid|execute/i.test(text)) return { label: "READY", icon: "🟢", tone: "text-emerald-300 border-emerald-500/30 bg-emerald-500/10" };
-    if (/forming|wait|watch|monitor|pending|setup/i.test(text)) return { label: "FORMING", icon: "🟡", tone: "text-yellow-300 border-yellow-500/30 bg-yellow-500/10" };
-    return { label: "WAIT", icon: "🔴", tone: "text-rose-300 border-rose-500/30 bg-rose-500/10" };
-  };
-  const getConfidence = (text: string) => {
-    let score = 45;
-    if (/ready|confirmed|all conditions|valid/i.test(text)) score += 30;
-    if (/entry|break|above|below|ema|liquidity|structure|ssl/i.test(text)) score += 15;
-    if (/wait|forming|monitor|pending/i.test(text)) score -= 5;
-    if (/sell|buy|short|long/i.test(text)) score += 10;
-    return Math.max(25, Math.min(95, score));
-  };
-  const getCoachNote = (text: string) => {
-    const status = getStatus(text).label;
-    if (status === "READY") return "Only execute if risk is within plan and checklist is complete.";
-    if (status === "FORMING") return "Wait for confirmation. No early entry.";
-    return "Do not force a trade. Mark levels and stay patient.";
-  };
-
-  const readyCount = plans.filter((p) => getStatus(p).label === "READY").length;
-  const formingCount = plans.filter((p) => getStatus(p).label === "FORMING").length;
-  const avgConfidence = plans.length ? Math.round(plans.reduce((a, p) => a + getConfidence(p), 0) / plans.length) : 0;
-  const primaryAction = readyCount > 0 ? "Trade only the READY setup after checklist confirmation." : formingCount > 0 ? "Wait. Setups are forming but not ready yet." : "Stand aside until the market gives clarity.";
-
-  return (
-    <div className="space-y-4">
-      <div className="rounded-2xl border border-yellow-500/20 bg-[radial-gradient(circle_at_top_left,rgba(246,201,69,0.12),transparent_30%),#07111f] p-4">
-        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h3 className="text-lg font-black text-white">📌 Live Watchlist Logic</h3>
-            <p className="text-xs text-slate-400">Converted into clean trade-plan cards. Screenshots are disabled here to avoid old broken image leftovers.</p>
-          </div>
-          <span className="rounded-full bg-yellow-500/15 px-3 py-1 text-xs font-black text-yellow-300">UST DECISION ENGINE</span>
-        </div>
-
-        <div className="mb-4 grid gap-3 md:grid-cols-4">
-          <div className="rounded-xl border border-slate-700 bg-slate-950/50 p-3">
-            <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">Markets</p>
-            <p className="mt-1 text-2xl font-black text-white">{plans.length}</p>
-          </div>
-          <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3">
-            <p className="text-[11px] uppercase tracking-[0.16em] text-emerald-300/80">Ready</p>
-            <p className="mt-1 text-2xl font-black text-emerald-300">{readyCount}</p>
-          </div>
-          <div className="rounded-xl border border-yellow-500/20 bg-yellow-500/10 p-3">
-            <p className="text-[11px] uppercase tracking-[0.16em] text-yellow-300/80">Forming</p>
-            <p className="mt-1 text-2xl font-black text-yellow-300">{formingCount}</p>
-          </div>
-          <div className="rounded-xl border border-sky-500/20 bg-sky-500/10 p-3">
-            <p className="text-[11px] uppercase tracking-[0.16em] text-sky-300/80">Confidence</p>
-            <p className="mt-1 text-2xl font-black text-sky-300">{avgConfidence}%</p>
-          </div>
-        </div>
-
-        <div className="mb-4 rounded-xl border border-sky-400/20 bg-sky-500/10 p-3 text-sm text-sky-100">
-          <span className="font-black">Coach Action:</span> {primaryAction}
-        </div>
-
-        {plans.length ? (
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {plans.map((line, idx) => {
-              const bias = getBias(line);
-              const status = getStatus(line);
-              const confidence = getConfidence(line);
-              return (
-                <div key={`${line}-${idx}`} className="rounded-xl border border-slate-700 bg-slate-950/50 p-3 shadow-lg shadow-black/20">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-black text-white">{getCleanTitle(line)}</div>
-                      <div className={`mt-1 text-xs font-bold ${bias === "SELL" ? "text-rose-300" : bias === "BUY" ? "text-emerald-300" : "text-sky-300"}`}>{bias} Bias</div>
-                    </div>
-                    <span className={`shrink-0 rounded-full border px-2 py-1 text-[11px] font-black ${status.tone}`}>{status.icon} {status.label}</span>
-                  </div>
-
-                  <div className="mt-3">
-                    <div className="mb-1 flex items-center justify-between text-[11px] text-slate-400">
-                      <span>Setup Confidence</span>
-                      <span className="font-black text-white">{confidence}%</span>
-                    </div>
-                    <div className="h-2 overflow-hidden rounded-full bg-slate-800">
-                      <div className="h-full rounded-full bg-yellow-400" style={{ width: `${confidence}%` }} />
-                    </div>
-                  </div>
-
-                  <div className="mt-3 grid grid-cols-3 gap-2 text-[11px] text-slate-400">
-                    <div className="rounded bg-slate-900/80 p-2">Entry<br/><span className="text-slate-200">Confirm</span></div>
-                    <div className="rounded bg-slate-900/80 p-2">SL<br/><span className="text-rose-300">Structure</span></div>
-                    <div className="rounded bg-slate-900/80 p-2">TP<br/><span className="text-emerald-300">Liquidity</span></div>
-                  </div>
-
-                  <div className="mt-3 rounded-lg border border-slate-700/80 bg-slate-900/40 p-2 text-xs text-slate-300">
-                    {getCoachNote(line)}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="rounded-xl border border-slate-700 bg-slate-950/40 p-4 text-sm text-slate-400">No watchlist posted yet.</div>
-        )}
-      </div>
-
-      <div className="rounded-lg border bg-card/40 p-4">
-        <div className="mb-2 text-xs font-black uppercase tracking-[0.18em] text-slate-500">Original Admin Plan</div>
-        {cleanContent ? <pre className="whitespace-pre-wrap break-words text-sm leading-relaxed">{cleanContent}</pre> : <p className="text-sm text-muted-foreground">No watchlist posted yet.</p>}
-      </div>
-    </div>
   );
 }
 
