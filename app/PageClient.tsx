@@ -2726,6 +2726,61 @@ function PageInner() {
     <div className="mx-auto max-w-7xl space-y-3 px-3 pb-24 pt-3 sm:px-4 sm:py-6">
       {/* Header */}
       <div className="rounded-3xl border border-[#D4AF37]/20 bg-[radial-gradient(circle_at_top_left,rgba(212,175,55,0.12),transparent_35%),rgba(2,6,23,0.86)] p-3 shadow-xl shadow-black/25 backdrop-blur md:border-0 md:bg-transparent md:p-0 md:shadow-none">
+        {/* Desktop: full premium header restored */}
+        <div className="hidden items-center justify-between gap-4 md:flex">
+          <div className="flex min-w-0 items-center gap-3">
+            <img
+              src="/ust-logo.png"
+              alt="Ultimate Scalper Tool"
+              className="h-10 w-auto shrink-0 select-none lg:h-12"
+            />
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-3">
+                <h1 className="truncate text-2xl font-black tracking-tight bg-gradient-to-b from-yellow-200 via-yellow-400 to-amber-700 bg-clip-text text-transparent drop-shadow-[0_2px_2px_rgba(0,0,0,0.45)] [text-shadow:0_0_18px_rgba(212,175,55,0.25)] lg:text-3xl">
+                  Ultimate Scalper Tool
+                </h1>
+                <span className="text-xl font-semibold text-slate-100 lg:text-2xl">
+                  Strategy Console
+                </span>
+                <span
+                  className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-bold ${
+                    locked && lockOnHit
+                      ? "border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/15 dark:text-rose-300"
+                      : "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/15 dark:text-emerald-300"
+                  }`}
+                >
+                  <span
+                    className={`h-2 w-2 rounded-full ${locked && lockOnHit ? "bg-rose-500" : "bg-emerald-500"}`}
+                  />
+                  {locked && lockOnHit ? "Locked" : "Active"}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex shrink-0 items-center gap-2">
+            <ThemeToggle />
+            <DashboardSyncButton addTradesBulkFn={addTradesBulk} />
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setActiveTab("analytics")}
+              className="rounded-xl border-slate-700/80 bg-slate-950/50 px-4 py-2 text-sm font-bold text-slate-100 hover:border-[#D4AF37]/70 hover:bg-slate-900"
+            >
+              <BarChart3 className="mr-2 h-4 w-4 text-[#F6C945]" />
+              Leaderboards
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={async () => { await supabase.auth.signOut(); }}
+              className="rounded-xl border-[#D4AF37]/50 bg-slate-950/50 px-4 py-2 text-sm font-bold text-slate-100 hover:bg-[#D4AF37] hover:text-black"
+            >
+              Sign Out
+            </Button>
+          </div>
+        </div>
+
         {/* Mobile: compact command header so the Trading Command Centre appears immediately */}
         <div className="space-y-2 md:hidden">
           <div className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-2">
