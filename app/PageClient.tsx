@@ -97,8 +97,8 @@ type TradeRow = {
   pnl: number;
 
   // For withdrawals:
-  kind?: "trade" | "withdrawal";
-  amount?: number; // positive number withdrawn (e.g. 200 = $200)
+  kind?: "trade" | "withdrawal" | "deposit";
+  amount?: number; // positive cash movement (withdrawal or deposit)
 
   notes?: string;
   ts?: number;
@@ -910,6 +910,7 @@ const STRATEGIES = [
   "Ultimate M1 Trend setup",
   "Ultimate M1 Range setup",
   "Withdrawals",
+  "Deposits",
 ] as const;
 type StrategyName = (typeof STRATEGIES)[number];
 
@@ -1268,9 +1269,11 @@ function PageInner() {
     "ust-monthly-target",
     0,
   );
-  // Withdrawal logger UI
+  // Cash movement logger UI
   const [withdrawAmt, setWithdrawAmt] = useState<number>(0);
   const [withdrawNote, setWithdrawNote] = useState<string>("");
+  const [depositAmt, setDepositAmt] = useState<number>(0);
+  const [depositNote, setDepositNote] = useState<string>("");
 
   // --- MIGRATE old "Withdrawals" entries so they stop counting as losses ---
   useEffect(() => {
@@ -2298,7 +2301,7 @@ function PageInner() {
       trades
         .map((t) => ({
           ...t,
-          kind: (t.kind ?? "trade") as "trade" | "withdrawal",
+          kind: (t.kind ?? "trade") as "trade" | "withdrawal" | "deposit",
         }))
         .filter((t) => t.kind === "trade"),
     [trades],
@@ -2309,9 +2312,20 @@ function PageInner() {
       trades
         .map((t) => ({
           ...t,
-          kind: (t.kind ?? "trade") as "trade" | "withdrawal",
+          kind: (t.kind ?? "trade") as "trade" | "withdrawal" | "deposit",
         }))
         .filter((t) => t.kind === "withdrawal"),
+    [trades],
+  );
+
+  const depositRows = useMemo(
+    () =>
+      trades
+        .map((t) => ({
+          ...t,
+          kind: (t.kind ?? "trade") as "trade" | "withdrawal" | "deposit",
+        }))
+        .filter((t) => t.kind === "deposit"),
     [trades],
   );
 
@@ -2325,13 +2339,18 @@ function PageInner() {
     [withdrawalRows],
   );
 
-  // Equity = starting capital + trading PnL - withdrawals
-  const equity = useMemo(
-    () => startBalance + totalTradePnlAllTime - totalWithdrawnAllTime,
-    [startBalance, totalTradePnlAllTime, totalWithdrawnAllTime],
+  const totalDepositedAllTime = useMemo(
+    () => depositRows.reduce((acc, d) => acc + (d.amount || 0), 0),
+    [depositRows],
   );
 
-  // Monthly withdrawals (current month)
+  // Equity = starting capital + deposits + trading PnL - withdrawals
+  const equity = useMemo(
+    () => startBalance + totalDepositedAllTime + totalTradePnlAllTime - totalWithdrawnAllTime,
+    [startBalance, totalDepositedAllTime, totalTradePnlAllTime, totalWithdrawnAllTime],
+  );
+
+  // Monthly withdrawals / deposits (current month)
   const monthlyWithdrawn = useMemo(() => {
     const now = new Date();
     const y = now.getFullYear();
@@ -2342,6 +2361,17 @@ function PageInner() {
       .filter((w) => (w.ts || 0) >= start && (w.ts || 0) < end)
       .reduce((acc, w) => acc + (w.amount || 0), 0);
   }, [withdrawalRows]);
+
+  const monthlyDeposited = useMemo(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = now.getMonth();
+    const start = new Date(y, m, 1, 0, 0, 0, 0).getTime();
+    const end = new Date(y, m + 1, 1, 0, 0, 0, 0).getTime();
+    return depositRows
+      .filter((d) => (d.ts || 0) >= start && (d.ts || 0) < end)
+      .reduce((acc, d) => acc + (d.amount || 0), 0);
+  }, [depositRows]);
   /* === Guardrails (derived; checklist-only, read-only) === */
   const realizedProfit = useMemo(
     () => Math.max(0, equity - startBalance),
@@ -2620,7 +2650,10 @@ function PageInner() {
         equity: running,
       });
     sorted.forEach((tr) => {
-      running += tr.pnl || 0;
+      const kind = tr.kind ?? "trade";
+      if (kind === "withdrawal") running -= tr.amount || 0;
+      else if (kind === "deposit") running += tr.amount || 0;
+      else running += tr.pnl || 0;
       pts.push({
         t: new Date(tr.ts || Date.now()).toLocaleTimeString(),
         equity: Number(running.toFixed(2)),
@@ -2641,7 +2674,7 @@ function PageInner() {
     const row: TradeRow = {
       id,
       ts: Date.now(),
-      kind: (t.kind ?? "trade") as "trade" | "withdrawal",
+      kind: (t.kind ?? "trade") as "trade" | "withdrawal" | "deposit",
       // default to manual if not provided
       source: t.source ?? "manual",
       ...t,
@@ -2661,7 +2694,7 @@ function PageInner() {
       for (const r of rows) {
         const row = {
           ...r,
-          kind: (r.kind ?? "trade") as "trade" | "withdrawal",
+          kind: (r.kind ?? "trade") as "trade" | "withdrawal" | "deposit",
           source: r.source ?? "auto",
         };
         const key = tradeUniqueKey(row);
@@ -4711,11 +4744,25 @@ function PageInner() {
               icon="growth"
             />
             <DashCard
+              title="Total Deposited"
+              value={`+${currency(Number(totalDepositedAllTime.toFixed(2)))}`}
+              hint="All time"
+              tone={totalDepositedAllTime > 0 ? "positive" : "neutral"}
+              icon="growth"
+            />
+            <DashCard
               title="Total Withdrawn"
               value={`-${currency(Number(totalWithdrawnAllTime.toFixed(2)))}`}
               hint="All time"
               tone={totalWithdrawnAllTime > 0 ? "negative" : "neutral"}
               icon="down"
+            />
+            <DashCard
+              title="Monthly Deposits"
+              value={`+${currency(Number(monthlyDeposited.toFixed(2)))}`}
+              hint="Current month"
+              tone={monthlyDeposited > 0 ? "positive" : "neutral"}
+              icon="calendar"
             />
             <DashCard
               title="Monthly Withdrawals"
@@ -5075,7 +5122,7 @@ function PageInner() {
                 equity × risk%.
               </p>
               <div className="space-y-3">
-                {MARKET_OPTIONS.filter((m) => m !== "Withdrawals").map(
+                {MARKET_OPTIONS.filter((m) => m !== "Withdrawals" && m !== "Deposits").map(
                   (mkt) => (
                     <MarketSizerRowDeriv
                       key={mkt}
@@ -5222,6 +5269,73 @@ function PageInner() {
             </CardContent>
           </Card>
 
+          {/* Record Deposit (adds capital, does not count as trading profit) */}
+          <Card className="border-emerald-400/40 mb-4">
+            <CardContent className="p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold">Record Deposit</h3>
+                <span className="text-xs text-slate-500">
+                  Adds to equity only (not trading profit)
+                </span>
+              </div>
+
+              <div className="grid md:grid-cols-12 gap-3 items-end">
+                <div className="md:col-span-4">
+                  <Label>Amount (USD)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    placeholder="e.g. 500"
+                    value={depositAmt}
+                    onChange={(e) =>
+                      setDepositAmt(Number(e.target.value) || 0)
+                    }
+                  />
+                </div>
+
+                <div className="md:col-span-6">
+                  <Label>Note (optional)</Label>
+                  <Input
+                    placeholder="e.g. Added capital / topped up account"
+                    value={depositNote}
+                    onChange={(e) => setDepositNote(e.target.value)}
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <Button
+                    className="w-full bg-emerald-500 text-white hover:bg-emerald-400"
+                    disabled={depositAmt <= 0}
+                    onClick={() => {
+                      const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+                      setTrades((prev) => [
+                        {
+                          id,
+                          ts: Date.now(),
+                          kind: "deposit",
+                          amount: Number(depositAmt.toFixed(2)),
+                          pnl: 0,
+                          symbol: "Deposits",
+                          notes: depositNote || "Deposit recorded",
+                          source: "manual",
+                        },
+                        ...prev,
+                      ]);
+                      setDepositAmt(0);
+                      setDepositNote("");
+                      push({
+                        title: "Deposit recorded",
+                        desc: "Saved (does not count as trading profit).",
+                      });
+                    }}
+                  >
+                    Save
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           <MultiQuickLogger
             initialRows={1}
             maxRows={1}
@@ -5248,7 +5362,7 @@ function PageInner() {
 
         {/* CALENDAR */}
         <TabsContent value="calendar">
-          <OldCalendar trades={tradeRows} withdrawals={withdrawalRows} />
+          <OldCalendar trades={tradeRows} withdrawals={withdrawalRows} deposits={depositRows} />
         </TabsContent>
 
         {/* A-SETUPS */}
@@ -6567,7 +6681,7 @@ function JournalGrouped({
 }) {
   const [journalSearch, setJournalSearch] = React.useState("");
   const [journalFilter, setJournalFilter] = React.useState<
-    "all" | "wins" | "losses" | "withdrawals"
+    "all" | "wins" | "losses" | "withdrawals" | "deposits"
   >("all");
   const [selectedTrade, setSelectedTrade] = React.useState<TradeRow | null>(
     null,
@@ -6580,10 +6694,11 @@ function JournalGrouped({
   const hist: string[] = histRaw ? JSON.parse(histRaw) : [];
   const sessionsSorted = [...hist].map(Number).sort((a, b) => a - b);
   const all = [...trades].sort((a, b) => (a.ts || 0) - (b.ts || 0));
-  const tradeOnly = all.filter((t) => (t.kind ?? "trade") !== "withdrawal");
+  const tradeOnly = all.filter((t) => !["withdrawal", "deposit"].includes(t.kind ?? "trade"));
   const withdrawalsOnly = all.filter(
     (t) => (t.kind ?? "trade") === "withdrawal",
   );
+  const depositsOnly = all.filter((t) => (t.kind ?? "trade") === "deposit");
   const wins = tradeOnly.filter((t) => (t.pnl || 0) > 0).length;
   const losses = tradeOnly.filter((t) => (t.pnl || 0) < 0).length;
   const be = tradeOnly.filter((t) => (t.pnl || 0) === 0).length;
@@ -6592,6 +6707,7 @@ function JournalGrouped({
     (a, t) => a + (t.amount || 0),
     0,
   );
+  const totalDeposited = depositsOnly.reduce((a, t) => a + (t.amount || 0), 0);
   const winRate = tradeOnly.length ? (wins / tradeOnly.length) * 100 : 0;
   const avgPnl = tradeOnly.length ? totalPnl / tradeOnly.length : 0;
   const bestTrade = tradeOnly.length
@@ -6611,11 +6727,12 @@ function JournalGrouped({
     const kind = t.kind ?? "trade";
     const matchesFilter =
       journalFilter === "all" ||
-      (journalFilter === "wins" && kind !== "withdrawal" && (t.pnl || 0) > 0) ||
+      (journalFilter === "wins" && !["withdrawal", "deposit"].includes(kind) && (t.pnl || 0) > 0) ||
       (journalFilter === "losses" &&
-        kind !== "withdrawal" &&
+        !["withdrawal", "deposit"].includes(kind) &&
         (t.pnl || 0) < 0) ||
-      (journalFilter === "withdrawals" && kind === "withdrawal");
+      (journalFilter === "withdrawals" && kind === "withdrawal") ||
+      (journalFilter === "deposits" && kind === "deposit");
     return matchesText && matchesFilter;
   });
 
@@ -6641,12 +6758,12 @@ function JournalGrouped({
 
   const totalAll = (rows: TradeRow[]) =>
     rows.reduce(
-      (a, t) => a + ((t.kind ?? "trade") === "withdrawal" ? 0 : t.pnl || 0),
+      (a, t) => a + (["withdrawal", "deposit"].includes(t.kind ?? "trade") ? 0 : t.pnl || 0),
       0,
     );
   const priorPnlBefore = (ts: number) =>
     all
-      .filter((t) => (t.ts || 0) < ts && (t.kind ?? "trade") !== "withdrawal")
+      .filter((t) => (t.ts || 0) < ts && !["withdrawal", "deposit"].includes(t.kind ?? "trade"))
       .reduce((a, t) => a + (t.pnl || 0), 0);
   const qualityLabel =
     winRate >= 60 && totalPnl >= 0
@@ -6700,7 +6817,7 @@ function JournalGrouped({
                 className="border-slate-700 bg-slate-950/60 text-white placeholder:text-slate-500"
               />
               <div className="flex flex-wrap gap-2">
-                {(["all", "wins", "losses", "withdrawals"] as const).map(
+                {(["all", "wins", "losses", "withdrawals", "deposits"] as const).map(
                   (f) => (
                     <Button
                       key={f}
@@ -6727,7 +6844,7 @@ function JournalGrouped({
                       : startBalance;
                     const pct = formatPct(total, baseEquity);
                     const rowsTradeOnly = b.rows.filter(
-                      (r) => (r.kind ?? "trade") !== "withdrawal",
+                      (r) => !["withdrawal", "deposit"].includes(r.kind ?? "trade"),
                     );
                     const sw = rowsTradeOnly.filter(
                       (r) => (r.pnl || 0) > 0,
@@ -6776,14 +6893,15 @@ function JournalGrouped({
                           .slice()
                           .reverse()
                           .map((t) => {
-                            const isWithdrawal =
-                              (t.kind ?? "trade") === "withdrawal";
-                            const amount = isWithdrawal
+                            const kind = t.kind ?? "trade";
+                            const isWithdrawal = kind === "withdrawal";
+                            const isDeposit = kind === "deposit";
+                            const amount = isWithdrawal || isDeposit
                               ? t.amount || 0
                               : t.pnl || 0;
                             const amountTone = isWithdrawal
                               ? "text-[#F6C945]"
-                              : amount >= 0
+                              : isDeposit || amount >= 0
                                 ? "text-emerald-400"
                                 : "text-rose-400";
                             return (
@@ -6809,6 +6927,11 @@ function JournalGrouped({
                                       Withdrawal
                                     </span>
                                   )}
+                                  {isDeposit && (
+                                    <span className="rounded-full bg-emerald-500 px-2 py-[2px] text-[10px] font-black text-white">
+                                      Deposit
+                                    </span>
+                                  )}
                                 </div>
                                 <div className="text-slate-300 md:col-span-4">
                                   {t.notes || "—"}
@@ -6821,7 +6944,7 @@ function JournalGrouped({
                                 <div
                                   className={`font-black md:col-span-1 md:text-right ${amountTone}`}
                                 >
-                                  {isWithdrawal ? "-" : amount >= 0 ? "+" : ""}
+                                  {isWithdrawal ? "-" : isDeposit || amount >= 0 ? "+" : ""}
                                   {currency(Number(amount.toFixed(2)))}
                                 </div>
                                 <div className="md:col-span-1 md:text-right">
@@ -6917,11 +7040,13 @@ function JournalGrouped({
                         Result
                       </p>
                       <p
-                        className={`text-xl font-black ${(selectedTrade.kind ?? "trade") === "withdrawal" ? "text-[#F6C945]" : (selectedTrade.pnl || 0) >= 0 ? "text-emerald-400" : "text-rose-400"}`}
+                        className={`text-xl font-black ${(selectedTrade.kind ?? "trade") === "withdrawal" ? "text-[#F6C945]" : (selectedTrade.kind ?? "trade") === "deposit" ? "text-emerald-400" : (selectedTrade.pnl || 0) >= 0 ? "text-emerald-400" : "text-rose-400"}`}
                       >
                         {(selectedTrade.kind ?? "trade") === "withdrawal"
                           ? `-${currency(selectedTrade.amount || 0)}`
-                          : `${(selectedTrade.pnl || 0) >= 0 ? "+" : ""}${currency(selectedTrade.pnl || 0)}`}
+                          : (selectedTrade.kind ?? "trade") === "deposit"
+                            ? `+${currency(selectedTrade.amount || 0)}`
+                            : `${(selectedTrade.pnl || 0) >= 0 ? "+" : ""}${currency(selectedTrade.pnl || 0)}`}
                       </p>
                     </div>
                     <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-3">
@@ -6995,7 +7120,7 @@ function JournalStat({
 function AnalyticsPanel({ trades }: { trades: TradeRow[] }) {
   const analytics = useMemo(() => {
     const tradeOnly = trades
-      .filter((t) => (t.kind ?? "trade") !== "withdrawal")
+      .filter((t) => !["withdrawal", "deposit"].includes(t.kind ?? "trade"))
       .slice()
       .sort((a, b) => (a.ts || 0) - (b.ts || 0));
 
@@ -8024,9 +8149,11 @@ function GoalProgress({
 function OldCalendar({
   trades,
   withdrawals,
+  deposits,
 }: {
   trades: { ts?: number; pnl?: number; symbol?: string; notes?: string }[];
   withdrawals: { ts?: number; amount?: number }[];
+  deposits: { ts?: number; amount?: number }[];
 }) {
   const [viewDate, setViewDate] = useState(() => {
     const d = new Date();
@@ -8109,6 +8236,7 @@ function OldCalendar({
         wins: number;
         losses: number;
         withdrawals: number;
+        deposits: number;
         symbols: Set<string>;
         items: { ts?: number; pnl?: number; symbol?: string; notes?: string }[];
       }
@@ -8121,6 +8249,7 @@ function OldCalendar({
           wins: 0,
           losses: 0,
           withdrawals: 0,
+          deposits: 0,
           symbols: new Set(),
           items: [],
         });
@@ -8142,6 +8271,11 @@ function OldCalendar({
     withdrawals.forEach((w) => {
       if (!w.ts) return;
       ensure(keyFromTs(w.ts)).withdrawals += Number(w.amount || 0);
+    });
+
+    deposits.forEach((d) => {
+      if (!d.ts) return;
+      ensure(keyFromTs(d.ts)).deposits += Number(d.amount || 0);
     });
 
     const monthKeys = Array.from(byDay.keys()).filter((key) => {
@@ -8191,7 +8325,7 @@ function OldCalendar({
       worstDay,
       monthlyWinRate: monthlyTrades ? (monthlyWins / monthlyTrades) * 100 : 0,
     };
-  }, [trades, withdrawals, viewDate]);
+  }, [trades, withdrawals, deposits, viewDate]);
 
   const selectedDay = selectedKey ? calendarStats.byDay.get(selectedKey) : null;
 
@@ -8372,7 +8506,7 @@ function OldCalendar({
             const day = calendarStats.byDay.get(k);
             const dayPnl = day?.pnl || 0;
             const hasActivity =
-              !!day && (day.trades > 0 || day.withdrawals > 0);
+              !!day && (day.trades > 0 || day.withdrawals > 0 || day.deposits > 0);
             const compactPnl = `${dayPnl >= 0 ? "+" : "-"}$${Math.abs(dayPnl).toFixed(0)}`;
             const cellTone = !hasActivity
               ? "border-slate-800 bg-slate-950/35 text-slate-500"
@@ -8460,7 +8594,7 @@ function OldCalendar({
                 const day = calendarStats.byDay.get(k);
                 const dayPnl = day?.pnl || 0;
                 const hasActivity =
-                  !!day && (day.trades > 0 || day.withdrawals > 0);
+                  !!day && (day.trades > 0 || day.withdrawals > 0 || day.deposits > 0);
                 const winRate = day?.trades ? (day.wins / day.trades) * 100 : 0;
                 const pct =
                   startBalance > 0 ? (dayPnl / startBalance) * 100 : 0;
@@ -8616,6 +8750,13 @@ function OldCalendar({
                     </strong>
                   </div>
                 </div>
+
+                {selectedDay.deposits > 0 && (
+                  <div className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-3 text-sm text-emerald-200">
+                    Deposit: +
+                    {currency(Number(selectedDay.deposits.toFixed(2)))}
+                  </div>
+                )}
 
                 {selectedDay.withdrawals > 0 && (
                   <div className="rounded-xl border border-rose-400/30 bg-rose-500/10 p-3 text-sm text-rose-200">
