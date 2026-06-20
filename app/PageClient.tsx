@@ -74,6 +74,8 @@ const SHEETS_TOKEN = process.env.NEXT_PUBLIC_READ_TOKEN || "MYUSTLOGGER2025";
 const DEFAULT_ACCOUNT = process.env.NEXT_PUBLIC_DEFAULT_UST_ACCOUNT || "";
 
 function ThemeToggle() {
+  // Dark mode is now permanent for the premium UST interface.
+  // This keeps the build safe without depending on a missing ThemeToggle component.
   return null;
 }
 
@@ -1362,10 +1364,23 @@ async function recordSessionToLeaderboard(
    Page wrapper
 ============================================================================ */
 function PageClientWrapper() {
+  useEffect(() => {
+    try {
+      localStorage.setItem("theme", "dark");
+      document.documentElement.classList.remove("light");
+      document.documentElement.classList.add("dark");
+      document.documentElement.style.colorScheme = "dark";
+      document.body.classList.add("bg-slate-950", "text-slate-100");
+      document.body.style.backgroundColor = "#020617";
+    } catch {}
+  }, []);
+
   return (
     <ToastProvider>
       <AuthGate>
-        <PageInner />
+        <div className="min-h-screen bg-slate-950 text-slate-100">
+          <PageInner />
+        </div>
       </AuthGate>
     </ToastProvider>
   );
@@ -1380,15 +1395,13 @@ function PageInner() {
   const [activeTab, setActiveTab] = useState<string>("dashboard");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  // Default UST to dark mode on first visit. Users can still switch theme afterwards.
+  // UST is now permanently dark mode for a consistent premium trading console.
   useEffect(() => {
     try {
-      const savedTheme = localStorage.getItem("theme");
-      if (!savedTheme) {
-        localStorage.setItem("theme", "dark");
-        document.documentElement.classList.add("dark");
-        document.documentElement.style.colorScheme = "dark";
-      }
+      localStorage.setItem("theme", "dark");
+      document.documentElement.classList.remove("light");
+      document.documentElement.classList.add("dark");
+      document.documentElement.style.colorScheme = "dark";
     } catch {}
   }, []);
 
@@ -3061,7 +3074,6 @@ function PageInner() {
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
-            <ThemeToggle />
             <DashboardSyncButton addTradesBulkFn={addTradesBulk} />
             <Button
               type="button"
@@ -3095,8 +3107,7 @@ function PageInner() {
               UST Strategy Console
             </h1>
             <div className="scale-80 origin-center">
-              <ThemeToggle />
-            </div>
+              </div>
             <span
               className={`shrink-0 inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-semibold ${
                 locked && lockOnHit
