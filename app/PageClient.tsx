@@ -6,12 +6,6 @@ import * as React from "react";
 import AuthGate from "@/components/AuthGate";
 import { useSupabaseUser } from "@/lib/useSupabaseUser";
 import { supabase } from "@/lib/supabase";
-import ThemeToggle from "@/components/ThemeToggle";
-import {
-  SHEETS_WEBAPP_URL as SHEETS_URL,
-  READ_TOKEN as SHEETS_TOKEN,
-  DEFAULT_UST_ACCOUNT as DEFAULT_ACCOUNT,
-} from "@/lib/env";
 
 /* ========== shadcn/ui ========== */
 import { Button } from "@/components/ui/button";
@@ -34,20 +28,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-/* New: solid, searchable combobox pieces */
-import {
-  Popover,
-  PopoverTrigger,
-  PopoverContent,
-} from "@/components/ui/popover";
-import {
-  Command,
-  CommandInput,
-  CommandList,
-  CommandEmpty,
-  CommandItem,
-  CommandGroup,
-} from "@/components/ui/command";
 import {
   ChevronsUpDown,
   Check,
@@ -86,6 +66,68 @@ import {
   Tooltip as RTooltip,
   Legend,
 } from "recharts";
+
+/* ========== Local fallbacks for this project build ==========
+   These remove dependency on files/components that are not present in the current repo. */
+const SHEETS_URL = process.env.NEXT_PUBLIC_SHEETS_WEBAPP_URL || "";
+const SHEETS_TOKEN = process.env.NEXT_PUBLIC_READ_TOKEN || "MYUSTLOGGER2025";
+const DEFAULT_ACCOUNT = process.env.NEXT_PUBLIC_DEFAULT_UST_ACCOUNT || "";
+
+function ThemeToggle() {
+  return null;
+}
+
+type AnyProps = React.HTMLAttributes<HTMLElement> & {
+  asChild?: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  value?: string;
+  onSelect?: (value: string) => void;
+  heading?: string;
+  placeholder?: string;
+};
+
+function Popover({ children }: AnyProps) {
+  return <div className="relative">{children}</div>;
+}
+function PopoverTrigger({ children }: AnyProps) {
+  return <>{children}</>;
+}
+function PopoverContent({ children, className = "", ...props }: AnyProps) {
+  return (
+    <div className={`mt-2 rounded-2xl border border-white/10 bg-slate-950 p-2 shadow-xl ${className}`} {...props}>
+      {children}
+    </div>
+  );
+}
+function Command({ children, className = "", ...props }: AnyProps) {
+  return <div className={className} {...props}>{children}</div>;
+}
+function CommandInput({ className = "", placeholder = "Search…", ...props }: AnyProps) {
+  return <input className={`w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none ${className}`} placeholder={placeholder} {...(props as any)} />;
+}
+function CommandList({ children, className = "", ...props }: AnyProps) {
+  return <div className={`mt-2 max-h-64 overflow-auto ${className}`} {...props}>{children}</div>;
+}
+function CommandEmpty({ children, className = "", ...props }: AnyProps) {
+  return <div className={`px-3 py-2 text-sm text-slate-400 ${className}`} {...props}>{children}</div>;
+}
+function CommandGroup({ children, heading, className = "", ...props }: AnyProps) {
+  return (
+    <div className={className} {...props}>
+      {heading ? <div className="px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-500">{heading}</div> : null}
+      {children}
+    </div>
+  );
+}
+function CommandItem({ children, onSelect, value = "", className = "", ...props }: AnyProps) {
+  return (
+    <button type="button" className={`flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm hover:bg-white/10 ${className}`} onClick={() => onSelect?.(String(value))} {...(props as any)}>
+      {children}
+    </button>
+  );
+}
+
 
 // ====== AUTO IMPORT HELPERS (UST ⇄ Google Sheets) ======
 
