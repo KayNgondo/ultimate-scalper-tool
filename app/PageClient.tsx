@@ -415,6 +415,7 @@ async function pushSmartRiskToSheets(input: {
   monthlyTarget?: number;
   plannedTrades?: number;
   plannedRewardR?: number;
+  autoStopDailyTarget?: boolean;
 }) {
   if (!SHEETS_URL || !SHEETS_TOKEN || !input.account || !(input.riskPct > 0)) {
     return { ok: false, error: "Missing Sheets URL, token, account, or risk percentage." };
@@ -431,6 +432,7 @@ async function pushSmartRiskToSheets(input: {
     u.searchParams.set("monthly_target", String(Number(input.monthlyTarget || 0)));
     u.searchParams.set("planned_trades", String(Number(input.plannedTrades || 0)));
     u.searchParams.set("planned_reward_r", String(Number(input.plannedRewardR || 0)));
+    u.searchParams.set("auto_stop_daily_target", input.autoStopDailyTarget ? "true" : "false");
     u.searchParams.set("source", "UST Journal Checklist");
 
     const r = await fetch(u.toString(), { cache: "no-store" });
@@ -5718,6 +5720,8 @@ function PageInner() {
                 targetRiskPct={targetRiskPct}
                 targetRiskAmount={targetRiskAmountPerTrade}
                 setRecommendedRiskPct={setRiskPct}
+                todayTradePnl={todayTradePnl}
+                dailyTargetFromPlan={plannedDailyTarget}
               />
 
               <div className="grid lg:grid-cols-2 gap-4">
@@ -6416,6 +6420,8 @@ function CapitalAndRiskCard({
   targetRiskPct = 0,
   targetRiskAmount = 0,
   setRecommendedRiskPct,
+  todayTradePnl = 0,
+  dailyTargetFromPlan = 0,
 }: {
   startBalance: number;
   setStartBalance: (v: number) => void;
@@ -6429,6 +6435,8 @@ function CapitalAndRiskCard({
   targetRiskPct?: number;
   targetRiskAmount?: number;
   setRecommendedRiskPct?: (v: number) => void;
+  todayTradePnl?: number;
+  dailyTargetFromPlan?: number;
 }) {
   const [autoAccount] = useLS<string>("ust:autoAccount", DEFAULT_ACCOUNT || "");
   const [plannedTrades] = useLocalStorage<number>("ust-checklist-planned-trades-per-day", 3);
@@ -6437,6 +6445,8 @@ function CapitalAndRiskCard({
   const [pushStatus, setPushStatus] = React.useState<string>("");
   const [tradeControlStatus, setTradeControlStatus] = React.useState<string>("");
   const [isTradeControlBusy, setIsTradeControlBusy] = React.useState(false);
+  const [autoStopOnDailyTarget, setAutoStopOnDailyTarget] = useLocalStorage<boolean>("ust-auto-stop-on-daily-target", true);
+  const [lastAutoStopDate, setLastAutoStopDate] = useLocalStorage<string>("ust-auto-stop-last-date", "");
 
   const applySmartRisk = async () => {
     if (!setRecommendedRiskPct || !(recommendedRiskPct > 0)) return;
@@ -6458,6 +6468,7 @@ function CapitalAndRiskCard({
       monthlyTarget: Number(monthlyTargetLocal || 0),
       plannedTrades: Number(plannedTrades || 0),
       plannedRewardR: Number(plannedRewardR || 0),
+      autoStopDailyTarget: autoStopOnDailyTarget,
     });
 
     setPushStatus(
@@ -6484,6 +6495,8 @@ function CapitalAndRiskCard({
       notes: allowTrading ? "Trading allowed from UST Journal" : "Trading stopped from UST Journal",
     });
 
+    if (allowTrading && result.ok) setLastAutoStopDate("");
+
     setTradeControlStatus(
       result.ok
         ? `${allowTrading ? "Start Trading" : "Stop Trading"} command sent to EA bridge for account ${autoAccount}. EA should update within the next sync cycle.`
@@ -6491,6 +6504,37 @@ function CapitalAndRiskCard({
     );
     setIsTradeControlBusy(false);
   };
+
+  const effectiveDailyTarget = Number(dailyTargetFromPlan || 0) > 0
+    ? Number(dailyTargetFromPlan || 0)
+    : Number(targetRiskAmount || 0) * Math.max(1, Number(plannedTrades || 0)) * Math.max(0.1, Number(plannedRewardR || 0));
+  const todayKeyForAutoStop = ymdLocal(new Date());
+  const autoStopReady = autoStopOnDailyTarget && autoAccount && effectiveDailyTarget > 0 && Number(todayTradePnl || 0) >= effectiveDailyTarget;
+
+  React.useEffect(() => {
+    if (!autoStopReady) return;
+    if (lastAutoStopDate === todayKeyForAutoStop) return;
+
+    let cancelled = false;
+    (async () => {
+      setTradeControlStatus("Daily target hit. Sending AUTO STOP TRADING command...");
+      const result = await pushTradingControlToSheets({
+        account: autoAccount,
+        symbol: "ALL",
+        allowTrading: false,
+        notes: `AUTO STOP: Daily target hit. Today PnL ${currency(Number(todayTradePnl || 0))} / target ${currency(effectiveDailyTarget)}.`,
+      });
+      if (cancelled) return;
+      if (result.ok) {
+        setLastAutoStopDate(todayKeyForAutoStop);
+        setTradeControlStatus(`Daily target hit. Auto Stop sent to EA bridge for account ${autoAccount}.`);
+      } else {
+        setTradeControlStatus(`Daily target hit, but Auto Stop failed: ${result.error}`);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [autoStopReady, lastAutoStopDate, todayKeyForAutoStop, autoAccount, todayTradePnl, effectiveDailyTarget, setLastAutoStopDate]);
   return (
     <Card>
       <CardContent className="p-4 grid md:grid-cols-4 gap-4">
