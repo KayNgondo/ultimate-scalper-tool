@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState, useContext, useCallback } from "react";
 import * as React from "react";
 import AuthGate from "@/components/AuthGate";
 import { useSupabaseUser } from "@/lib/useSupabaseUser";
-import useSupabase from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
 import ThemeToggle from "@/components/ThemeToggle";
 import {
   SHEETS_WEBAPP_URL as SHEETS_URL,
@@ -260,8 +260,7 @@ type SheetItem = {
   time?: string;
   account?: string;
   symbol?: string;
-  action?: string; // ORDER_OPEN / ORDER_CLOSE / BALANCE
-  event_type?: "TRADE" | "DEPOSIT" | "WITHDRAWAL" | string;
+  action?: string; // ORDER_OPEN / ORDER_CLOSE / BALANCE / DEAL_*
   side?: string;
   deal_ticket?: string | number;
   order_ticket?: string | number;
@@ -276,7 +275,79 @@ type SheetItem = {
   setup_grade?: string;
   grade?: string;
   session?: string;
+  type?: string;
+  entry?: string;
+  reason?: string;
+  [key: string]: any;
 };
+
+type PlanningCost = { id: string; name: string; amount: number };
+
+function parseAmountFromText(text: string) {
+  const cleaned = String(text || '').replace(/,/g, ' ');
+  const matches = cleaned.match(/-?\d+(?:\.\d+)?/g) || [];
+  const nums = matches.map(Number).filter((n) => Number.isFinite(n) && Math.abs(n) > 0);
+  if (!nums.length) return 0;
+  // Balance-operation comments often contain tickets and timestamps. The cash amount is normally
+  // the meaningful decimal/large value, so use the largest absolute number as a safe fallback.
+  return Math.abs(nums.sort((a, b) => Math.abs(b) - Math.abs(a))[0]);
+}
+
+function detectCashMovement(it: SheetItem): { kind: 'withdrawal' | 'deposit'; amount: number } | null {
+  const text = [
+    it.action,
+    it.type,
+    it.entry,
+    it.side,
+    it.symbol,
+    it.comment,
+    it.reason,
+    it.setup_grade,
+    it.grade,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+
+  const hasWithdrawal = /\b(withdraw|withdrawal|w\/d|cash\s*out|balance\s*out)\b/.test(text);
+  const hasDeposit = /\b(deposit|cash\s*in|balance\s*in|funding|top\s*up|credit)\b/.test(text);
+  if (!hasWithdrawal && !hasDeposit) return null;
+
+  const signedProfit = Number(it.profit || 0);
+  const amount = Math.abs(signedProfit) || parseAmountFromText(String(it.comment || '')) || parseAmountFromText(text);
+  if (!amount) return null;
+
+  if (hasWithdrawal && !hasDeposit) return { kind: 'withdrawal', amount: Number(amount.toFixed(2)) };
+  if (hasDeposit && !hasWithdrawal) return { kind: 'deposit', amount: Number(amount.toFixed(2)) };
+
+  // If both words appear, let the signed value decide. Negative = withdrawal, positive = deposit.
+  return {
+    kind: signedProfit < 0 ? 'withdrawal' : 'deposit',
+    amount: Number(amount.toFixed(2)),
+  };
+}
+
+function businessDaysInMonth(date = new Date()) {
+  const y = date.getFullYear();
+  const m = date.getMonth();
+  let days = 0;
+  for (let d = new Date(y, m, 1); d.getMonth() === m; d.setDate(d.getDate() + 1)) {
+    const day = d.getDay();
+    if (day >= 1 && day <= 5) days++;
+  }
+  return days;
+}
+
+function businessDaysRemainingInMonth(date = new Date()) {
+  const y = date.getFullYear();
+  const m = date.getMonth();
+  let days = 0;
+  for (let d = new Date(y, m, date.getDate()); d.getMonth() === m; d.setDate(d.getDate() + 1)) {
+    const day = d.getDay();
+    if (day >= 1 && day <= 5) days++;
+  }
+  return days;
+}
 
 function buildSheetsUrl(account: string, since?: string) {
   // Guard against missing/invalid env vars to avoid crashing the whole app.
@@ -292,81 +363,98 @@ function buildSheetsUrl(account: string, since?: string) {
   }
 }
 
+async function pushSmartRiskToSheets(input: {
+  account: string;
+  riskPct: number;
+  symbol?: string;
+  dailyTarget?: number;
+  monthlyTarget?: number;
+  plannedTrades?: number;
+  plannedRewardR?: number;
+}) {
+  if (!SHEETS_URL || !SHEETS_TOKEN || !input.account || !(input.riskPct > 0)) {
+    return { ok: false, error: "Missing Sheets URL, token, account, or risk percentage." };
+  }
+
+  try {
+    const u = new URL(SHEETS_URL);
+    u.searchParams.set("readToken", SHEETS_TOKEN);
+    u.searchParams.set("mode", "setRisk");
+    u.searchParams.set("account", input.account);
+    u.searchParams.set("symbol", input.symbol || "ALL");
+    u.searchParams.set("risk_pct", String(Number(input.riskPct.toFixed(2))));
+    u.searchParams.set("daily_target", String(Number(input.dailyTarget || 0)));
+    u.searchParams.set("monthly_target", String(Number(input.monthlyTarget || 0)));
+    u.searchParams.set("planned_trades", String(Number(input.plannedTrades || 0)));
+    u.searchParams.set("planned_reward_r", String(Number(input.plannedRewardR || 0)));
+    u.searchParams.set("source", "UST Journal Checklist");
+
+    const r = await fetch(u.toString(), { cache: "no-store" });
+    const data = await r.json().catch(() => null);
+    if (!data?.ok) {
+      return { ok: false, error: data?.error || "Risk setting was not accepted by Apps Script." };
+    }
+    return { ok: true, data };
+  } catch (err: any) {
+    return { ok: false, error: String(err?.message || err) };
+  }
+}
+
 function normalizeToTradeRows(items: SheetItem[]): TradeRow[] {
   const rows: TradeRow[] = [];
   for (const it of items) {
-    const action = String(it.action || "").toUpperCase();
-    const eventTypeRaw = String(it.event_type || "").toUpperCase();
-    const symbolRaw = String(it.symbol || "").trim();
-    const sideRaw = String(it.side || "").toUpperCase();
-    const commentRaw = String(it.comment || "").toUpperCase();
-
-    const volume = Number(it.volume || 0);
-    const price = Number(it.price || 0);
-    const sl = Number(it.sl || 0);
-    const tp = Number(it.tp || 0);
-    const profit = Number(it.profit || 0);
-    const commission = Number(it.commission || 0);
-    const swap = Number(it.swap || 0);
-
-    const looksLikeCash =
-      eventTypeRaw === "DEPOSIT" ||
-      eventTypeRaw === "WITHDRAWAL" ||
-      sideRaw === "DEPOSIT" ||
-      sideRaw === "WITHDRAWAL" ||
-      action.includes("BALANCE") ||
-      commentRaw.includes("DEPOSIT") ||
-      commentRaw.includes("WITHDRAW") ||
-      symbolRaw.toUpperCase() === "CASH_FLOW" ||
-      (!symbolRaw && volume === 0 && price === 0 && sl === 0 && tp === 0 && profit !== 0) ||
-      (volume === 0 && price === 0 && sl === 0 && tp === 0 && profit !== 0);
-
     const ts = it.timestamp ? new Date(it.timestamp).getTime() : Date.now();
-    const extId = [
-      it.deal_ticket || it.order_ticket || "",
-      symbolRaw || "CASH_FLOW",
-      it.timestamp || "",
-      Number(it.profit || 0).toFixed(2),
-      Number(it.commission || 0).toFixed(2),
-      Number(it.swap || 0).toFixed(2),
-      eventTypeRaw || action || sideRaw,
-    ].join("|");
+    const cash = detectCashMovement(it);
 
-    if (looksLikeCash) {
-      const kind: "deposit" | "withdrawal" =
-        eventTypeRaw === "WITHDRAWAL" || sideRaw === "WITHDRAWAL" || profit < 0
-          ? "withdrawal"
-          : "deposit";
+    if (cash) {
+      const extId = [
+        'cash',
+        cash.kind,
+        it.deal_ticket || it.order_ticket || '',
+        it.timestamp || '',
+        cash.amount.toFixed(2),
+        it.comment || '',
+      ].join('|');
 
       rows.push({
         id: `${ts}-${extId || Math.random().toString(36).slice(2, 6)}`,
         ts,
-        kind,
-        symbol: kind === "deposit" ? "Deposit" : "Withdrawal",
-        amount: Math.abs(profit),
+        kind: cash.kind,
+        symbol: cash.kind === 'withdrawal' ? 'Withdrawals' : 'Deposits',
+        amount: cash.amount,
         pnl: 0,
-        notes: `AUTO • ${kind === "deposit" ? "Deposit" : "Withdrawal"} • ${it.comment || ""}`.trim(),
-        source: "auto",
+        notes: `AUTO • ${cash.kind === 'withdrawal' ? 'Withdrawal' : 'Deposit'} • ${it.comment || it.action || ''}`.trim(),
+        source: 'auto',
         extId,
       });
       continue;
     }
 
-    // import only closed trades into Journal
-    if (action !== "ORDER_CLOSE") continue;
+    // import only closed trades into Journal; open market orders stay out unless they are balance movements above
+    if ((it.action || '').toUpperCase() !== 'ORDER_CLOSE') continue;
 
+    const profit = Number(it.profit || 0);
+    const commission = Number(it.commission || 0);
+    const swap = Number(it.swap || 0);
     const pnl = Number((profit - commission - swap).toFixed(2));
+    const extId = [
+      it.deal_ticket || it.order_ticket || '',
+      it.symbol || 'Unknown',
+      it.timestamp || '',
+      Number(it.profit || 0).toFixed(2),
+      Number(it.commission || 0).toFixed(2),
+      Number(it.swap || 0).toFixed(2),
+    ].join('|');
 
     rows.push({
       id: `${ts}-${extId || Math.random().toString(36).slice(2, 6)}`,
       ts,
-      symbol: it.symbol || "Unknown",
+      kind: 'trade',
+      symbol: it.symbol || 'Unknown',
       pnl,
-      notes: `AUTO • ${it.side || ""} • vol ${it.volume ?? ""} @ ${it.price ?? ""}`,
-      source: "auto",
+      notes: `AUTO • ${it.side || ''} • vol ${it.volume ?? ''} @ ${it.price ?? ''}`,
+      source: 'auto',
       extId,
-      grade: it.setup_grade || it.grade || undefined,
-      session: it.session || undefined,
     });
   }
   // newest first
@@ -962,12 +1050,6 @@ const STRATEGIES = [
 ] as const;
 type StrategyName = (typeof STRATEGIES)[number];
 
-type PlanningCost = {
-  id: string;
-  name: string;
-  amount: number;
-};
-
 type ASetup = { id: string; title: string; dataUrl: string; notes?: string };
 
 type SessionSummary = {
@@ -1252,7 +1334,6 @@ function PageClientWrapper() {
 ============================================================================ */
 function PageInner() {
   const { user } = useSupabaseUser();
-  const supabase = useSupabase();
   const { push } = useToast();
   const [activeTab, setActiveTab] = useState<string>("dashboard");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -1308,6 +1389,15 @@ function PageInner() {
     50,
   );
 
+  const [plannedTradesPerDay, setPlannedTradesPerDay] = useLocalStorage<number>(
+    "ust-checklist-planned-trades-per-day",
+    3,
+  );
+  const [plannedRewardR, setPlannedRewardR] = useLocalStorage<number>(
+    "ust-checklist-planned-reward-r",
+    2,
+  );
+
   /* Discipline & Goals */
   const [maxLoss, setMaxLoss] = useLocalStorage<number>("ust-max-loss", 0);
   const [lockOnHit, setLockOnHit] = useLocalStorage<boolean>(
@@ -1324,50 +1414,44 @@ function PageInner() {
     "ust-monthly-target",
     0,
   );
-
-  const [monthlyCosts, setMonthlyCosts] = useLocalStorage<PlanningCost[]>(
-    "ust-planning-monthly-costs",
+  const [planningCosts, setPlanningCosts] = useLocalStorage<PlanningCost[]>(
+    "ust-planning-costs",
     [
       { id: "rent", name: "Rent / Bond", amount: 0 },
-      { id: "food", name: "Food", amount: 0 },
-      { id: "transport", name: "Transport", amount: 0 },
+      { id: "family", name: "Family Support", amount: 0 },
+      { id: "food", name: "Food & Groceries", amount: 0 },
+      { id: "transport", name: "Transport / Fuel", amount: 0 },
     ],
   );
-
-  const monthlyNeed = useMemo(
-    () => monthlyCosts.reduce((sum, row) => sum + (Number(row.amount) || 0), 0),
-    [monthlyCosts],
+  const monthlyCostTarget = useMemo(
+    () => planningCosts.reduce((sum, c) => sum + (Number(c.amount) || 0), 0),
+    [planningCosts],
   );
-
-  const tradingDaysThisMonth = useMemo(() => {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth();
-    const days = new Date(year, month + 1, 0).getDate();
-    let count = 0;
-    for (let d = 1; d <= days; d++) {
-      const day = new Date(year, month, d).getDay();
-      if (day >= 1 && day <= 5) count++;
-    }
-    return count || 22;
-  }, []);
-
+  const tradingDaysThisMonth = useMemo(() => businessDaysInMonth(), []);
+  const remainingTradingDaysThisMonth = useMemo(() => businessDaysRemainingInMonth(), []);
   const plannedDailyTarget = useMemo(
-    () => (tradingDaysThisMonth > 0 ? monthlyNeed / tradingDaysThisMonth : 0),
-    [monthlyNeed, tradingDaysThisMonth],
+    () => monthlyCostTarget / Math.max(1, tradingDaysThisMonth),
+    [monthlyCostTarget, tradingDaysThisMonth],
   );
+  const dashboardDailyTarget = useMemo(() => {
+    const planned = Number(plannedDailyTarget);
+    if (Number.isFinite(planned) && planned > 0) return planned;
 
-  const plannedWeeklyTarget = useMemo(
-    () => plannedDailyTarget * 5,
-    [plannedDailyTarget],
-  );
+    const monthly = Number(monthlyTarget);
+    if (Number.isFinite(monthly) && monthly > 0) {
+      return monthly / Math.max(1, tradingDaysThisMonth);
+    }
+
+    return 0;
+  }, [plannedDailyTarget, monthlyTarget, tradingDaysThisMonth]);
 
   useEffect(() => {
-    if (monthlyNeed > 0) {
-      setMonthlyTarget(Number(monthlyNeed.toFixed(2)));
-      setWeeklyTarget(Number(plannedWeeklyTarget.toFixed(2)));
+    if (monthlyCostTarget > 0) {
+      setMonthlyTarget(Number(monthlyCostTarget.toFixed(2)));
+      setWeeklyTarget(Number((plannedDailyTarget * 5).toFixed(2)));
     }
-  }, [monthlyNeed, plannedWeeklyTarget, setMonthlyTarget, setWeeklyTarget]);
+  }, [monthlyCostTarget, plannedDailyTarget, setMonthlyTarget, setWeeklyTarget]);
+
   // Cash movement logger UI
   const [withdrawAmt, setWithdrawAmt] = useState<number>(0);
   const [withdrawNote, setWithdrawNote] = useState<string>("");
@@ -1382,28 +1466,30 @@ function PageInner() {
       const next = prev.map((t) => {
         const kind = t.kind ?? "trade";
 
+        const noteText = String(`${t.symbol || ""} ${t.notes || ""}`).toLowerCase();
         const looksLikeWithdrawal =
           kind === "trade" &&
-          (String(t.symbol || "").toLowerCase() === "withdrawals" ||
-            String(t.notes || "")
-              .toLowerCase()
-              .includes("withdraw"));
+          (String(t.symbol || "").toLowerCase() === "withdrawals" || noteText.includes("withdraw"));
+        const looksLikeDeposit =
+          kind === "trade" &&
+          (String(t.symbol || "").toLowerCase() === "deposits" || noteText.includes("deposit"));
 
-        if (!looksLikeWithdrawal) {
+        if (!looksLikeWithdrawal && !looksLikeDeposit) {
           // ensure kind exists going forward
           if (!t.kind) changed = true;
           return { ...t, kind };
         }
 
         changed = true;
-        const amt = Math.abs(Number(t.pnl || 0));
+        const amt = Math.abs(Number(t.amount || t.pnl || 0));
+        const newKind = looksLikeWithdrawal ? "withdrawal" : "deposit";
         return {
           ...t,
-          kind: "withdrawal",
+          kind: newKind,
           amount: amt,
           pnl: 0,
-          symbol: "Withdrawals",
-          notes: t.notes || "Withdrawal recorded",
+          symbol: newKind === "withdrawal" ? "Withdrawals" : "Deposits",
+          notes: t.notes || (newKind === "withdrawal" ? "Withdrawal recorded" : "Deposit recorded"),
         };
       });
 
@@ -2506,14 +2592,57 @@ function PageInner() {
     return Math.min(dailyCap, maxSessionLossGuard);
   }, [maxLoss, maxSessionLossGuard]);
 
-  // Per-trade guidance so 6 losses == giveback
+  // Smart integrated planning risk guidance
+  const planningMonthlyProgress = useMemo(() => {
+    const now = new Date();
+    return tradeRows
+      .filter((t) => t.ts && isSameMonth(new Date(t.ts), now))
+      .reduce((a, t) => a + (t.pnl || 0), 0);
+  }, [tradeRows]);
+  const remainingMonthlyTarget = useMemo(
+    () => Math.max(0, monthlyCostTarget - planningMonthlyProgress),
+    [monthlyCostTarget, planningMonthlyProgress],
+  );
+  const requiredDailyTarget = useMemo(
+    () => remainingMonthlyTarget / Math.max(1, remainingTradingDaysThisMonth),
+    [remainingMonthlyTarget, remainingTradingDaysThisMonth],
+  );
+
+  // Target risk answers: "what % should I risk per trade to reach my planned daily target?"
+  const targetRiskAmountPerTrade = useMemo(() => {
+    const tradesPerDay = Math.max(1, Number(plannedTradesPerDay) || 1);
+    const rewardR = Math.max(0.1, Number(plannedRewardR) || 1);
+    return requiredDailyTarget > 0 ? requiredDailyTarget / (tradesPerDay * rewardR) : 0;
+  }, [requiredDailyTarget, plannedTradesPerDay, plannedRewardR]);
+
+  const targetRiskPct = useMemo(
+    () => (equity > 0 ? (targetRiskAmountPerTrade / equity) * 100 : 0),
+    [targetRiskAmountPerTrade, equity],
+  );
+
+  // Per-trade protection budget so 6 losses == giveback. This remains the safety ceiling.
   const sixLossBudget = useMemo(
     () => (givebackLockAmt > 0 ? givebackLockAmt / 6 : 0),
     [givebackLockAmt],
   );
-  const recommendedRiskPct = useMemo(
+  const givebackRiskPct = useMemo(
     () => (equity > 0 ? (sixLossBudget / equity) * 100 : 0),
     [sixLossBudget, equity],
+  );
+
+  // Final smart recommendation integrates Planning Page + giveback safety.
+  // If profit-only/giveback is active, UST will not recommend more than the giveback-safe risk.
+  const recommendedRiskPct = useMemo(() => {
+    const target = Number.isFinite(targetRiskPct) ? Math.max(0, targetRiskPct) : 0;
+    const safety = Number.isFinite(givebackRiskPct) ? Math.max(0, givebackRiskPct) : 0;
+    if (target > 0 && safety > 0) return Math.min(target, safety);
+    if (target > 0) return target;
+    return safety;
+  }, [targetRiskPct, givebackRiskPct]);
+
+  const smartRiskAmount = useMemo(
+    () => (equity * recommendedRiskPct) / 100,
+    [equity, recommendedRiskPct],
   );
 
   const riskAmount = useMemo(() => (equity * riskPct) / 100, [equity, riskPct]);
@@ -2675,17 +2804,17 @@ function PageInner() {
 
   const weeklyProgress = useMemo(
     () =>
-      trades
+      tradeRows
         .filter((t) => t.ts && isSameISOWeek(new Date(t.ts), today))
         .reduce((a, t) => a + (t.pnl || 0), 0),
-    [trades, today],
+    [tradeRows, today],
   );
   const monthlyProgress = useMemo(
     () =>
-      trades
+      tradeRows
         .filter((t) => t.ts && isSameMonth(new Date(t.ts), today))
         .reduce((a, t) => a + (t.pnl || 0), 0),
-    [trades, today],
+    [tradeRows, today],
   );
 
   const recentDashboardTrades = useMemo(
@@ -2713,12 +2842,12 @@ function PageInner() {
       });
     else if (s >= 150)
       setBadge({
-        name: "Elite • 150 Trades Controlled",
+        name: "Elite • 150 Trades Mastered",
         imagePath: "/badges/elite.png",
       });
     else if (s >= 100)
       setBadge({
-        name: "Diamond • 100 Trades Consistent",
+        name: "Diamond • 100 Trades Certified",
         imagePath: "/badges/diamond.png",
       });
     else if (s >= 75)
@@ -2728,24 +2857,21 @@ function PageInner() {
       });
     else if (s >= 50)
       setBadge({
-        name: "Gold • 50 Trades Verified",
+        name: "Gold • 50 Trades Consistent",
         imagePath: "/badges/gold.png",
       });
     else if (s >= 25)
       setBadge({
-        name: "Silver • 25 Trades Logged",
+        name: "Silver • 25 Trades Survived",
         imagePath: "/badges/silver.png",
-      });
-    else if (s >= 10)
-      setBadge({
-        name: "Bronze • 10 Trades Started",
-        imagePath: "/badges/bronze.png",
       });
     else setBadge(null);
   }, [badgeTradeCount]);
 
   const equitySeries = useMemo(() => {
-    const sorted = [...trades].sort((a, b) => (a.ts || 0) - (b.ts || 0));
+    // Dashboard curve = trading progress curve. Cash movements are excluded so withdrawals
+    // do not punish the visual performance path. True account equity is still shown in cards.
+    const sorted = [...tradeRows].sort((a, b) => (a.ts || 0) - (b.ts || 0));
     const pts: { t: string; equity: number }[] = [];
     let running = startBalance;
     if (sorted.length)
@@ -2754,10 +2880,7 @@ function PageInner() {
         equity: running,
       });
     sorted.forEach((tr) => {
-      const kind = tr.kind ?? "trade";
-      // Withdrawal-safe performance curve:
-      // deposits and withdrawals are tracked separately, but the curve shows trading progress only.
-      if (kind === "trade") running += tr.pnl || 0;
+      running += tr.pnl || 0;
       pts.push({
         t: new Date(tr.ts || Date.now()).toLocaleTimeString(),
         equity: Number(running.toFixed(2)),
@@ -2765,7 +2888,7 @@ function PageInner() {
     });
     if (!pts.length) pts.push({ t: "Start", equity: startBalance });
     return pts;
-  }, [trades, startBalance]);
+  }, [tradeRows, startBalance]);
 
   /* Trades helpers */
   function addTrade(
@@ -2901,7 +3024,7 @@ function PageInner() {
             <Button
               type="button"
               variant="outline"
-              onClick={() => { window.location.href = "/leaderboard"; }}
+              onClick={() => setActiveTab("battle")}
               className="rounded-xl border-slate-700/80 bg-slate-950/50 px-4 py-2 text-sm font-bold text-slate-100 hover:border-[#D4AF37]/70 hover:bg-slate-900"
             >
               <BarChart3 className="mr-2 h-4 w-4 text-[#F6C945]" />
@@ -4615,10 +4738,10 @@ function PageInner() {
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-2 md:gap-4 lg:grid-cols-4">
                   <DashCard
-                    title="Growth"
-                    value={`${fmt(startBalance ? (totalTradePnlAllTime / startBalance) * 100 : 0)}%`}
-                    hint="Based on realised trade PnL ÷ starting capital"
-                    tone={totalTradePnlAllTime >= 0 ? "positive" : "negative"}
+                    title="Account Growth"
+                    value={`${allTimeGrowthPct >= 0 ? "+" : ""}${fmt(allTimeGrowthPct)}%`}
+                    hint={`Trading PnL: ${currency(totalTradePnlAllTime)}`}
+                    tone={allTimeGrowthPct >= 0 ? "positive" : "negative"}
                     featured
                     icon="growth"
                     spark="up"
@@ -4677,7 +4800,7 @@ function PageInner() {
                   <CardContent className="p-5">
                     <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                       <h4 className="text-lg font-black uppercase tracking-[0.22em] text-[#F6C945]">
-                        Equity Curve{" "}
+                        Progress Curve{" "}
                         <span className="text-slate-500">(All Time)</span>
                       </h4>
                       <div className="flex rounded-xl border border-slate-700 bg-black/20 p-1 text-xs font-black text-slate-300">
@@ -4952,12 +5075,12 @@ function PageInner() {
                 </div>
                 <div className="mb-3 flex items-center justify-between text-sm text-slate-300">
                   <span>Daily Target</span>
-                  <span>{currency(sessionTarget || 0)}</span>
+                  <span>{currency(dashboardDailyTarget)}</span>
                 </div>
                 <div className="text-3xl font-black text-[#F6C945]">
-                  {sessionTarget > 0
+                  {dashboardDailyTarget > 0
                     ? fmt(
-                        Math.max(0, Math.min(100, (pnl / sessionTarget) * 100)),
+                        Math.max(0, Math.min(100, (pnl / dashboardDailyTarget) * 100)),
                       )
                     : "0"}
                   %
@@ -4966,14 +5089,14 @@ function PageInner() {
                   <div
                     className="h-full rounded-full bg-gradient-to-r from-[#F6C945] to-amber-400"
                     style={{
-                      width: `${sessionTarget > 0 ? Math.max(0, Math.min(100, (pnl / sessionTarget) * 100)) : 0}%`,
+                      width: `${dashboardDailyTarget > 0 ? Math.max(0, Math.min(100, (pnl / dashboardDailyTarget) * 100)) : 0}%`,
                     }}
                   />
                 </div>
                 <div className="mt-2 flex justify-between text-xs text-slate-400">
                   <span>{currency(Math.max(0, pnl))} achieved</span>
                   <span>
-                    {currency(Math.max(0, (sessionTarget || 0) - pnl))}{" "}
+                    {currency(Math.max(0, dashboardDailyTarget - Math.max(0, pnl)))}{" "}
                     remaining
                   </span>
                 </div>
@@ -5469,9 +5592,17 @@ function PageInner() {
           <OldCalendar trades={tradeRows} withdrawals={withdrawalRows} deposits={depositRows} />
         </TabsContent>
 
-        {/* A-SETUPS */}
+        {/* PLANNING */}
         <TabsContent value="asetups">
-          <PlanningPage costs={monthlyCosts} setCosts={setMonthlyCosts} monthlyNeed={monthlyNeed} tradingDays={tradingDaysThisMonth} dailyTarget={plannedDailyTarget} weeklyTarget={plannedWeeklyTarget} />
+          <PlanningPage
+            costs={planningCosts}
+            setCosts={setPlanningCosts}
+            monthlyTarget={monthlyCostTarget}
+            dailyTarget={plannedDailyTarget}
+            weeklyTarget={weeklyTarget}
+            tradingDays={tradingDaysThisMonth}
+            monthlyProgress={monthlyProgress}
+          />
         </TabsContent>
 
         {/* CHECKLIST — Review & Targets (standalone tab; no guardrails wired) */}
@@ -5496,6 +5627,11 @@ function PageInner() {
                 equity={equity}
                 riskAmount={riskAmount}
                 tradesCount={trades.length}
+                recommendedRiskPct={recommendedRiskPct}
+                recommendedRiskAmount={smartRiskAmount}
+                targetRiskPct={targetRiskPct}
+                targetRiskAmount={targetRiskAmountPerTrade}
+                setRecommendedRiskPct={setRiskPct}
               />
 
               <div className="grid lg:grid-cols-2 gap-4">
@@ -5564,6 +5700,46 @@ function PageInner() {
                     </div>
                   </div>
 
+                  <div className="rounded-md border border-[#D4AF37]/30 bg-[#D4AF37]/10 p-3">
+                    <div className="mb-2 text-sm font-semibold text-slate-900 dark:text-yellow-200">
+                      🧠 Smart Planning Risk
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label>Planned Trades Per Day</Label>
+                        <Input
+                          type="number"
+                          min="1"
+                          value={plannedTradesPerDay}
+                          onChange={(e) => setPlannedTradesPerDay(Math.max(1, Number(e.target.value) || 1))}
+                        />
+                      </div>
+                      <div>
+                        <Label>Expected Average R</Label>
+                        <Input
+                          type="number"
+                          step="0.1"
+                          min="0.1"
+                          value={plannedRewardR}
+                          onChange={(e) => setPlannedRewardR(Math.max(0.1, Number(e.target.value) || 1))}
+                        />
+                      </div>
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
+                      <div className="text-slate-600 dark:text-slate-300">Monthly target remaining</div>
+                      <div className="font-medium">{currency(remainingMonthlyTarget)}</div>
+                      <div className="text-slate-600 dark:text-slate-300">Required daily target</div>
+                      <div className="font-medium">{currency(requiredDailyTarget)}</div>
+                      <div className="text-slate-600 dark:text-slate-300">Target risk needed</div>
+                      <div className="font-black text-blue-600 dark:text-blue-300">{targetRiskPct.toFixed(2)}% / {currency(targetRiskAmountPerTrade)}</div>
+                      <div className="text-slate-600 dark:text-slate-300">UST smart risk</div>
+                      <div className="font-black text-emerald-600 dark:text-emerald-300">{recommendedRiskPct.toFixed(2)}% / {currency(smartRiskAmount)}</div>
+                    </div>
+                    <div className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+                      Formula: remaining monthly target ÷ remaining Mon–Fri days ÷ planned trades ÷ expected R. UST then applies the giveback safety ceiling when active.
+                    </div>
+                  </div>
+
                   <div className="rounded-md border p-3 bg-slate-50">
                     <div className="text-sm font-medium mb-1">
                       Live Snapshot (read-only)
@@ -5608,6 +5784,8 @@ function PageInner() {
                           `Start: ${currency(startBalance)} • Equity: ${currency(equity)}`,
                           `Profit: ${currency(Math.max(0, equity - startBalance))}`,
                           `Profit-Only threshold: ${thresholdPct}% (${currency((thresholdPct / 100) * startBalance)})`,
+                          `Planning target remaining: ${currency(remainingMonthlyTarget)} • Daily needed: ${currency(requiredDailyTarget)}`,
+                          `UST smart risk: ${recommendedRiskPct.toFixed(2)}% (${currency(smartRiskAmount)})`,
                           givebackPct
                             ? `Giveback lock (info): ${givebackPct}%`
                             : null,
@@ -5710,10 +5888,10 @@ function PageInner() {
                         </div>
 
                         <div className="text-slate-600 dark:text-slate-300">
-                          Recommended Risk % per Trade
+                          Giveback Safety Risk %
                         </div>
                         <div className="font-medium">
-                          {recommendedRiskPct.toFixed(2)}%
+                          {givebackRiskPct.toFixed(2)}%
                         </div>
                       </div>
                       <div className="text-[11px] text-slate-500 mt-2">
@@ -6147,6 +6325,11 @@ function CapitalAndRiskCard({
   equity,
   riskAmount,
   tradesCount,
+  recommendedRiskPct = 0,
+  recommendedRiskAmount = 0,
+  targetRiskPct = 0,
+  targetRiskAmount = 0,
+  setRecommendedRiskPct,
 }: {
   startBalance: number;
   setStartBalance: (v: number) => void;
@@ -6155,7 +6338,47 @@ function CapitalAndRiskCard({
   equity: number;
   riskAmount: number;
   tradesCount: number;
+  recommendedRiskPct?: number;
+  recommendedRiskAmount?: number;
+  targetRiskPct?: number;
+  targetRiskAmount?: number;
+  setRecommendedRiskPct?: (v: number) => void;
 }) {
+  const [autoAccount] = useLS<string>("ust:autoAccount", DEFAULT_ACCOUNT || "");
+  const [plannedTrades] = useLocalStorage<number>("ust-checklist-planned-trades-per-day", 3);
+  const [plannedRewardR] = useLocalStorage<number>("ust-checklist-planned-reward-r", 2);
+  const [monthlyTargetLocal] = useLocalStorage<number>("ust-monthly-target", 0);
+  const [pushStatus, setPushStatus] = React.useState<string>("");
+
+  const applySmartRisk = async () => {
+    if (!setRecommendedRiskPct || !(recommendedRiskPct > 0)) return;
+
+    const appliedRisk = Number(recommendedRiskPct.toFixed(2));
+    setRecommendedRiskPct(appliedRisk);
+    setPushStatus("Sending risk to EA bridge...");
+
+    const dailyTarget =
+      Number(targetRiskAmount || 0) *
+      Math.max(1, Number(plannedTrades || 0)) *
+      Math.max(0.1, Number(plannedRewardR || 0));
+
+    const result = await pushSmartRiskToSheets({
+      account: autoAccount,
+      symbol: "ALL",
+      riskPct: appliedRisk,
+      dailyTarget,
+      monthlyTarget: Number(monthlyTargetLocal || 0),
+      plannedTrades: Number(plannedTrades || 0),
+      plannedRewardR: Number(plannedRewardR || 0),
+    });
+
+    setPushStatus(
+      result.ok
+        ? `Smart Risk ${appliedRisk.toFixed(2)}% sent to EA bridge for account ${autoAccount || "not set"}.`
+        : `Smart Risk saved locally, but EA bridge failed: ${result.error}`,
+    );
+  };
+
   return (
     <Card>
       <CardContent className="p-4 grid md:grid-cols-4 gap-4">
@@ -6201,6 +6424,34 @@ function CapitalAndRiskCard({
         </div>
         <InfoStat label="Current Equity" value={currency(equity)} />
         <InfoStat label="Risk Amount (auto)" value={currency(riskAmount)} />
+        <div className="md:col-span-4 rounded-xl border border-[#D4AF37]/30 bg-[#D4AF37]/10 p-3">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="text-sm font-black text-slate-900 dark:text-yellow-200">
+                UST Smart Risk Recommendation
+              </div>
+              <div className="mt-1 text-xs text-slate-600 dark:text-slate-300">
+                Planning target requires {targetRiskPct.toFixed(2)}% ({currency(targetRiskAmount)}) per trade.
+                Recommended now: {recommendedRiskPct.toFixed(2)}% ({currency(recommendedRiskAmount)}).
+              </div>
+            </div>
+            {setRecommendedRiskPct && recommendedRiskPct > 0 && (
+              <Button
+                type="button"
+                size="sm"
+                className="bg-[#D4AF37] text-black hover:bg-[#F6C945]"
+                onClick={applySmartRisk}
+              >
+                Apply Smart Risk
+              </Button>
+            )}
+          </div>
+          {pushStatus && (
+            <div className="mt-2 text-xs text-slate-600 dark:text-slate-300">
+              {pushStatus}
+            </div>
+          )}
+        </div>
       </CardContent>
     </Card>
   );
@@ -6237,20 +6488,14 @@ function BadgeShowcase({
 }) {
   const tiers = [
     {
-      key: "Bronze",
-      name: "Bronze • 10 Trades Started",
-      at: 10,
-      img: "/badges/bronze.png",
-    },
-    {
       key: "Silver",
-      name: "Silver • 25 Trades Logged",
+      name: "Silver • 25 Trades Survived",
       at: 25,
       img: "/badges/silver.png",
     },
     {
       key: "Gold",
-      name: "Gold • 50 Trades Verified",
+      name: "Gold • 50 Trades Consistent",
       at: 50,
       img: "/badges/gold.png",
     },
@@ -6262,13 +6507,13 @@ function BadgeShowcase({
     },
     {
       key: "Diamond",
-      name: "Diamond • 100 Trades Consistent",
+      name: "Diamond • 100 Trades Certified",
       at: 100,
       img: "/badges/diamond.png",
     },
     {
       key: "Elite",
-      name: "Elite • 150 Trades Controlled",
+      name: "Elite • 150 Trades Mastered",
       at: 150,
       img: "/badges/elite.png",
     },
@@ -6281,7 +6526,7 @@ function BadgeShowcase({
   ];
   const current =
     badge ??
-    (tradeCount >= 10 ? { name: tiers[0].name, imagePath: tiers[0].img } : null);
+    (tradeCount >= 25 ? { name: tiers[0].name, imagePath: tiers[0].img } : null);
   const nextTier = tiers.find((t) => tradeCount < t.at);
   const pct = nextTier
     ? Math.min(100, Math.round((tradeCount / nextTier.at) * 100))
@@ -7448,7 +7693,7 @@ function AnalyticsPanel({ trades }: { trades: TradeRow[] }) {
           <CardContent className="p-5">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
-                <h4 className="text-lg font-black text-white">Equity Curve</h4>
+                <h4 className="text-lg font-black text-white">Progress Curve</h4>
                 <p className="text-xs text-slate-400">
                   Cumulative PnL progression across closed trades.
                 </p>
@@ -7928,146 +8173,343 @@ function SmartCoachPanel({
 }
 
 /* =========================================================================
-   Planning Page
+   A-Setups Gallery
 ============================================================================ */
 function PlanningPage({
   costs,
   setCosts,
-  monthlyNeed,
-  tradingDays,
+  monthlyTarget,
   dailyTarget,
   weeklyTarget,
+  tradingDays,
+  monthlyProgress,
 }: {
   costs: PlanningCost[];
-  setCosts: React.Dispatch<React.SetStateAction<PlanningCost[]>>;
-  monthlyNeed: number;
-  tradingDays: number;
+  setCosts: (rows: PlanningCost[]) => void;
+  monthlyTarget: number;
   dailyTarget: number;
   weeklyTarget: number;
+  tradingDays: number;
+  monthlyProgress: number;
 }) {
+  const remaining = Math.max(0, monthlyTarget - monthlyProgress);
+  const progressPct = monthlyTarget > 0 ? Math.min(100, (monthlyProgress / monthlyTarget) * 100) : 0;
+
   function updateCost(id: string, patch: Partial<PlanningCost>) {
-    setCosts((rows) => rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+    setCosts(costs.map((c) => (c.id === id ? { ...c, ...patch } : c)));
   }
 
   function addCost() {
-    setCosts((rows) => [
-      ...rows,
-      {
-        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        name: "New monthly cost",
-        amount: 0,
-      },
+    setCosts([
+      ...costs,
+      { id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, name: "New Cost", amount: 0 },
     ]);
   }
 
   function removeCost(id: string) {
-    setCosts((rows) => (rows.length > 1 ? rows.filter((r) => r.id !== id) : rows));
+    setCosts(costs.filter((c) => c.id !== id));
   }
-
-  const yearlyTarget = monthlyNeed * 12;
-  const requiredCapitalAt25Pct = monthlyNeed > 0 ? monthlyNeed / 0.25 : 0;
-  const requiredCapitalAt10Pct = monthlyNeed > 0 ? monthlyNeed / 0.10 : 0;
 
   return (
     <div className="grid gap-5">
-      <Card className="overflow-hidden border-[#D4AF37]/25 bg-[radial-gradient(circle_at_top_left,rgba(246,201,69,0.14),transparent_30%),linear-gradient(135deg,#050814_0%,#0B1220_60%,#111827_100%)] text-slate-100 shadow-2xl shadow-black/25">
+      <Card className="overflow-hidden border-[#D4AF37]/25 bg-[radial-gradient(circle_at_top_left,rgba(246,201,69,0.14),transparent_30%),#07111f] text-slate-100">
         <CardHeader>
-          <CardTitle className="text-white">
-            🎯 UST Planning Page
-          </CardTitle>
+          <CardTitle className="text-white">🧭 UST Planning Page</CardTitle>
           <CardDescription className="text-slate-400">
-            Convert realistic monthly needs into daily, weekly, monthly and yearly trading goals.
+            Build the month from real life costs first. UST then turns that number into realistic monthly, weekly and daily targets.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="rounded-2xl border border-emerald-400/25 bg-emerald-500/10 p-4">
-              <div className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Monthly Needs</div>
-              <div className="mt-2 text-2xl font-black text-emerald-300">{currency(monthlyNeed)}</div>
-            </div>
-            <div className="rounded-2xl border border-sky-400/25 bg-sky-500/10 p-4">
-              <div className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Trading Days</div>
-              <div className="mt-2 text-2xl font-black text-sky-300">{tradingDays}</div>
-            </div>
-            <div className="rounded-2xl border border-[#D4AF37]/25 bg-[#D4AF37]/10 p-4">
-              <div className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Daily Target</div>
-              <div className="mt-2 text-2xl font-black text-[#F6C945]">{currency(Number(dailyTarget.toFixed(2)))}</div>
-            </div>
-            <div className="rounded-2xl border border-purple-400/25 bg-purple-500/10 p-4">
-              <div className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Weekly Target</div>
-              <div className="mt-2 text-2xl font-black text-purple-300">{currency(Number(weeklyTarget.toFixed(2)))}</div>
-            </div>
+          <div className="grid gap-3 md:grid-cols-4">
+            <DashCard title="Monthly Cost Target" value={currency(monthlyTarget)} hint="Auto-fills monthly target" tone="blue" icon="scale" />
+            <DashCard title="Weekly Target" value={currency(weeklyTarget)} hint="Auto-filled from planning" tone="positive" icon="calendar" />
+            <DashCard title="Daily Target" value={currency(dailyTarget)} hint={`${tradingDays} Mon–Fri days this month`} tone="positive" icon="growth" />
+            <DashCard title="Remaining" value={currency(remaining)} hint={`${fmt(progressPct)}% covered this month`} tone={remaining <= 0 && monthlyTarget > 0 ? "positive" : "neutral"} icon="wallet" />
           </div>
 
-          <div className="flex flex-col gap-3 rounded-2xl border border-slate-800/80 bg-black/25 p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="rounded-2xl border border-slate-700/70 bg-slate-950/50 p-3">
+            <div className="mb-3 flex items-center justify-between gap-3">
               <div>
-                <h4 className="text-sm font-black uppercase tracking-[0.24em] text-[#F6C945]">Monthly Cost Builder</h4>
-                <p className="mt-1 text-xs text-slate-400">Add the real costs that trading must support. UST will calculate targets automatically.</p>
+                <h3 className="font-black text-white">Monthly Costs</h3>
+                <p className="text-xs text-slate-400">Add every expected cost as a row. The total becomes the trading target for the month.</p>
               </div>
-              <Button className="bg-[#D4AF37] font-black text-black hover:bg-[#F6C945]" onClick={addCost}>
-                + Add Cost
+              <Button type="button" onClick={addCost} className="bg-[#D4AF37] text-black hover:bg-[#F6C945]">
+                Add Cost
               </Button>
             </div>
 
             <div className="space-y-2">
-              {costs.map((row) => (
-                <div key={row.id} className="grid gap-3 rounded-xl border border-slate-800/80 bg-slate-950/50 p-3 md:grid-cols-12 md:items-end">
-                  <div className="md:col-span-7">
-                    <Label className="text-slate-300">Monthly Cost</Label>
-                    <Input
-                      className="mt-1 border-slate-700 bg-slate-950 text-slate-100"
-                      value={row.name}
-                      onChange={(e) => updateCost(row.id, { name: e.target.value })}
-                    />
-                  </div>
-                  <div className="md:col-span-3">
-                    <Label className="text-slate-300">Amount</Label>
-                    <Input
-                      className="mt-1 border-slate-700 bg-slate-950 text-slate-100"
-                      type="number"
-                      step="0.01"
-                      value={row.amount}
-                      onChange={(e) => updateCost(row.id, { amount: Number(e.target.value) || 0 })}
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <Button
-                      variant="outline"
-                      className="w-full border-rose-500/30 bg-rose-500/10 text-rose-200 hover:bg-rose-500/20"
-                      onClick={() => removeCost(row.id)}
-                    >
-                      Remove
-                    </Button>
-                  </div>
+              {costs.map((cost) => (
+                <div key={cost.id} className="grid gap-2 rounded-xl border border-slate-800 bg-slate-900/60 p-2 md:grid-cols-[1fr_180px_auto]">
+                  <Input
+                    value={cost.name}
+                    onChange={(e) => updateCost(cost.id, { name: e.target.value })}
+                    placeholder="Cost name"
+                    className="bg-slate-950/70 text-slate-100"
+                  />
+                  <Input
+                    type="number"
+                    value={cost.amount}
+                    onChange={(e) => updateCost(cost.id, { amount: Number(e.target.value) || 0 })}
+                    placeholder="Amount"
+                    className="bg-slate-950/70 text-slate-100"
+                  />
+                  <Button type="button" variant="outline" onClick={() => removeCost(cost.id)} className="border-rose-500/40 text-rose-300 hover:bg-rose-500/10">
+                    Remove
+                  </Button>
                 </div>
               ))}
+              {!costs.length && (
+                <div className="rounded-xl border border-dashed border-slate-700 p-6 text-center text-sm text-slate-400">
+                  No costs added yet. Add your first monthly cost to create a plan.
+                </div>
+              )}
             </div>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-3">
-            <div className="rounded-2xl border border-emerald-400/20 bg-emerald-500/10 p-4">
-              <div className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Monthly Goal</div>
-              <div className="mt-2 text-xl font-black text-emerald-300">{currency(monthlyNeed)}</div>
-            </div>
-            <div className="rounded-2xl border border-sky-400/20 bg-sky-500/10 p-4">
-              <div className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Yearly Goal</div>
-              <div className="mt-2 text-xl font-black text-sky-300">{currency(yearlyTarget)}</div>
-            </div>
-            <div className="rounded-2xl border border-[#D4AF37]/20 bg-[#D4AF37]/10 p-4">
-              <div className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Capital Guidance</div>
-              <div className="mt-2 text-sm font-bold text-[#F6C945]">10%/month: {currency(requiredCapitalAt10Pct)}</div>
-              <div className="mt-1 text-sm font-bold text-[#F6C945]">25%/month: {currency(requiredCapitalAt25Pct)}</div>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-[#D4AF37]/25 bg-[#D4AF37]/10 p-4 text-sm text-yellow-100">
-            These planning numbers automatically populate the existing weekly and monthly target fields. This keeps UST focused on realistic needs instead of random daily pressure.
+          <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/10 p-4">
+            <h3 className="font-black text-emerald-300">Planning Logic</h3>
+            <p className="mt-1 text-sm text-slate-300">
+              Monthly target = total planned costs. Daily target = monthly target divided by Monday–Friday trading days in the current month. Weekly target = daily target × 5.
+            </p>
           </div>
         </CardContent>
       </Card>
     </div>
   );
+}
+
+function ASetupsGallery() {
+  const [items, setItems] = useLocalStorage<ASetup[]>("ust-asetups", []);
+  const [title, setTitle] = useState("");
+  const [notes, setNotes] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+
+  async function addItem() {
+    if (!file) return;
+    const dataUrl = await fileToDataUrl(file);
+    const id = `${Date.now()}-${Math.random().toString(36).slice(0, 6)}`;
+    setItems([{ id, title: title || file.name, dataUrl, notes }, ...items]);
+    setTitle("");
+    setNotes("");
+    setFile(null);
+  }
+
+  function conditionsFromNotes(text?: string) {
+    return String(text || "")
+      .split(/\n|,|;/)
+      .map((x) => x.trim())
+      .filter(Boolean)
+      .slice(0, 8);
+  }
+
+  function setupScore(text?: string) {
+    const conditions = conditionsFromNotes(text);
+    if (!conditions.length) return 55;
+    return Math.min(95, 55 + conditions.length * 8);
+  }
+
+  function setupStatus(score: number) {
+    if (score >= 80)
+      return {
+        label: "🟢 READY",
+        cls: "border-emerald-400/40 bg-emerald-500/10 text-emerald-300",
+      };
+    if (score >= 65)
+      return {
+        label: "🟡 FORMING",
+        cls: "border-yellow-400/40 bg-yellow-500/10 text-yellow-300",
+      };
+    return {
+      label: "🔵 STUDY",
+      cls: "border-sky-400/40 bg-sky-500/10 text-sky-300",
+    };
+  }
+
+  return (
+    <div className="grid gap-5">
+      <Card className="overflow-hidden border-yellow-500/20 bg-[radial-gradient(circle_at_top_left,rgba(246,201,69,0.12),transparent_28%),#07111f]">
+        <CardHeader>
+          <CardTitle className="text-white">
+            🎯 A-Setup Execution Library
+          </CardTitle>
+          <CardDescription className="text-slate-400">
+            Turn screenshots into repeatable execution cards with conditions,
+            strength score and action status.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 md:grid-cols-12">
+          <div className="md:col-span-3">
+            <Label>Setup Name</Label>
+            <Input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Ultimate Trend Buy A-Setup"
+            />
+          </div>
+          <div className="md:col-span-5">
+            <Label>Execution Checklist</Label>
+            <Input
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Price above EMA315, SSL above EMA315, Pullback complete"
+            />
+          </div>
+          <div className="md:col-span-2">
+            <Label>Chart Image</Label>
+            <input
+              className="mt-2 text-sm"
+              type="file"
+              accept="image/*"
+              onChange={(e) => setFile(e.target.files?.[0] || null)}
+            />
+          </div>
+          <div className="md:col-span-2 self-end">
+            <Button
+              className="w-full bg-yellow-500 text-black hover:bg-yellow-400"
+              disabled={!file}
+              onClick={addItem}
+            >
+              Add Setup
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-3 md:grid-cols-3">
+        <Card className="border-emerald-500/20 bg-emerald-500/5">
+          <CardContent className="p-4">
+            <div className="text-xs text-slate-400">Execution Rule</div>
+            <div className="text-lg font-black text-emerald-300">80%+ only</div>
+          </CardContent>
+        </Card>
+        <Card className="border-yellow-500/20 bg-yellow-500/5">
+          <CardContent className="p-4">
+            <div className="text-xs text-slate-400">Library Size</div>
+            <div className="text-lg font-black text-yellow-300">
+              {items.length} setups
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-sky-500/20 bg-sky-500/5">
+          <CardContent className="p-4">
+            <div className="text-xs text-slate-400">Purpose</div>
+            <div className="text-lg font-black text-sky-300">
+              Trade less, better
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {!items.length && (
+        <Card>
+          <CardContent className="p-6 text-sm text-slate-600 dark:text-slate-300">
+            Upload screenshots for your A-Setups once. UST will display them as
+            execution cards so traders know exactly what is allowed.
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+        {items.map((it) => {
+          const conditions = conditionsFromNotes(it.notes);
+          const score = setupScore(it.notes);
+          const status = setupStatus(score);
+          return (
+            <Card
+              key={it.id}
+              className="overflow-hidden border-slate-800 bg-[#0B1220] shadow-xl shadow-black/20"
+            >
+              <CardContent className="p-0">
+                <div className="p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="truncate text-lg font-black text-white">
+                        {it.title}
+                      </div>
+                      <div className="text-xs text-slate-400">
+                        A-Setup execution card
+                      </div>
+                    </div>
+                    <span
+                      className={`shrink-0 rounded-full border px-2 py-1 text-[11px] font-black ${status.cls}`}
+                    >
+                      {status.label}
+                    </span>
+                  </div>
+
+                  <div>
+                    <div className="mb-1 flex items-center justify-between text-xs">
+                      <span className="font-bold text-slate-300">
+                        Setup Strength
+                      </span>
+                      <span className="font-black text-yellow-300">
+                        {score}%
+                      </span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-slate-800">
+                      <div
+                        className="h-full rounded-full bg-yellow-400"
+                        style={{ width: `${score}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <img
+                  src={it.dataUrl}
+                  alt={it.title}
+                  className="w-full border-y border-slate-800 object-contain"
+                />
+
+                <div className="p-4 space-y-3">
+                  <div className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">
+                    Checklist
+                  </div>
+                  {conditions.length ? (
+                    <ul className="space-y-1 text-xs text-slate-200">
+                      {conditions.map((c) => (
+                        <li key={c}>✅ {c}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-xs text-slate-400">
+                      Add conditions so this becomes a true execution rule.
+                    </p>
+                  )}
+
+                  <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-2 text-xs text-emerald-200">
+                    Execute only when live market matches this card and your
+                    Smart Coach remains active.
+                  </div>
+
+                  <div className="flex justify-end">
+                    <Button
+                      variant="destructive"
+                      onClick={() =>
+                        setItems(items.filter((x) => x.id !== it.id))
+                      }
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+async function fileToDataUrl(file: File): Promise<string> {
+  const buf = await file.arrayBuffer();
+  const blob = new Blob([buf], { type: file.type });
+  return await new Promise<string>((res) => {
+    const r = new FileReader();
+    r.onload = () => res(String(r.result));
+    r.readAsDataURL(blob);
+  });
 }
 
 /* =========================================================================
