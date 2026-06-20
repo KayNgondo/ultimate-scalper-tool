@@ -9,23 +9,34 @@ export function useSupabaseUser() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    let mounted = true;
+    let active = true;
 
-    supabase.auth.getUser().then(({ data }) => {
-      if (!mounted) return;
-      setUser(data?.user ?? null);
+    async function loadUser() {
+      const { data: sessionData } = await supabase.auth.getSession();
+
+      if (!active) return;
+
+      if (sessionData?.session?.user) {
+        setUser(sessionData.session.user);
+      } else {
+        const { data: userData } = await supabase.auth.getUser();
+        setUser(userData?.user ?? null);
+      }
+
       setLoading(false);
-    });
+    }
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!mounted) return;
+    loadUser();
+
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!active) return;
       setUser(session?.user ?? null);
       setLoading(false);
     });
 
     return () => {
-      mounted = false;
-      listener?.subscription?.unsubscribe();
+      active = false;
+      data?.subscription?.unsubscribe();
     };
   }, [supabase]);
 
