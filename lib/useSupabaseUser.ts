@@ -1,32 +1,34 @@
-// Simple auth hook built on Supabase
-"use client";
+// lib/useSupabase.ts
+'use client';
 
-import { useEffect, useState } from "react";
-import { supabase } from "./supabase";
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
-export function useSupabaseUser() {
-  const [user, setUser] = useState<ReturnType<typeof supabase.auth.getUser> extends Promise<infer _T> ? any : any>(null);
-  const [loading, setLoading] = useState(true);
+type DB = any;
 
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      const { data } = await supabase.auth.getUser();
-      if (mounted) {
-        setUser(data.user ?? null);
-        setLoading(false);
-      }
-    })();
+let _client: SupabaseClient<DB> | null = null;
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-    });
+export default function useSupabase(): SupabaseClient<DB> {
+  if (_client) return _client;
 
-    return () => {
-      mounted = false;
-      sub.subscription.unsubscribe();
-    };
-  }, []);
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  return { user, loading };
+  if (!url || !anon) {
+    throw new Error(
+      '[useSupabase] Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY.'
+    );
+  }
+
+  _client = createClient<DB>(url, anon, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+      flowType: 'pkce',
+    },
+  });
+
+  return _client;
 }
+
+export const getSupabase = () => useSupabase();
