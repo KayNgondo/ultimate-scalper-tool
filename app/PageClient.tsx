@@ -71,12 +71,18 @@ function useToast() {
 /* =========================================================================
    Utils / State
 ============================================================================ */
+type TradeKind = "trade" | "deposit" | "withdrawal";
 type TradeRow = {
   id: string;
   symbol: string;
   pnl: number;
   notes?: string;
   ts?: number;
+  kind?: TradeKind;
+  action?: string;
+  deal_ticket?: string | number;
+  order_ticket?: string | number;
+  comment?: string;
 };
 
 const MARKET_OPTIONS = [
@@ -85,7 +91,14 @@ const MARKET_OPTIONS = [
   "Volatility 75",
   "Volatility 25 (1s)",
   "Volatility 25",
-  "Volatility 10 (1s)", // added market
+  "Volatility 10 (1s)",
+  "Volatility 90 Index",
+  "XAUUSD",
+  "XAGUSD",
+  "US Tech 100",
+  "Germany 40",
+  "GBPUSD",
+  "GBPJPY",
   "Withdrawals",
 ] as const;
 type MarketName = (typeof MARKET_OPTIONS)[number];
@@ -123,6 +136,39 @@ function formatPct(numerator: number, denominator?: number | null) {
   const den = Number(denominator) || 0;
   if (den <= 0) return null;
   return `${((Number(numerator) / den) * 100).toFixed(2)}%`;
+}
+
+
+function classifyCashFlow(row: Partial<TradeRow> & Record<string, any>): TradeKind {
+  const symbol = String(row.symbol || "").trim();
+  const action = String(row.action || "").toUpperCase();
+  const comment = String(row.comment || row.notes || "").toUpperCase();
+  const volume = Number(row.volume ?? 0);
+  const price = Number(row.price ?? 0);
+  const sl = Number(row.sl ?? 0);
+  const tp = Number(row.tp ?? 0);
+  const pnl = Number(row.pnl ?? row.profit ?? 0);
+
+  const looksLikeBalanceDeal =
+    !symbol ||
+    action.includes("BALANCE") ||
+    comment.includes("BALANCE") ||
+    comment.includes("DEPOSIT") ||
+    comment.includes("WITHDRAW") ||
+    (volume === 0 && price === 0 && sl === 0 && tp === 0 && Math.abs(pnl) > 0);
+
+  if (!looksLikeBalanceDeal) return "trade";
+  return pnl >= 0 ? "deposit" : "withdrawal";
+}
+
+function isTradeRow(row: TradeRow) {
+  return (row.kind || "trade") === "trade";
+}
+function isDepositRow(row: TradeRow) {
+  return row.kind === "deposit";
+}
+function isWithdrawalRow(row: TradeRow) {
+  return row.kind === "withdrawal";
 }
 
 function ymdLocal(d: Date) {
@@ -227,19 +273,43 @@ function PageInner() {
 
   const [weeklyTarget, setWeeklyTarget] = useLocalStorage<number>("ust-weekly-target", 0);
   const [monthlyTarget, setMonthlyTarget] = useLocalStorage<number>("ust-monthly-target", 0);
+  const [dailyTarget, setDailyTarget] = useLocalStorage<number>("ust-daily-target", 0);
+  const [monthlyCosts, setMonthlyCosts] = useLocalStorage<PlanningCost[]>("ust-monthly-costs", [
+    { id: "rent", name: "Rent / Bond", amount: 0 },
+    { id: "food", name: "Food", amount: 0 },
+    { id: "transport", name: "Transport", amount: 0 },
+    { id: "family", name: "Family support", amount: 0 },
+  ]);
 
   /* Derived */
+  const tradeRows = useMemo(() => trades.filter(isTradeRow), [trades]);
+  const depositRows = useMemo(() => trades.filter(isDepositRow), [trades]);
+  const withdrawalRows = useMemo(() => trades.filter(isWithdrawalRow), [trades]);
+
   const totalPnlAllTime = useMemo(
-    () => trades.reduce((acc, t) => acc + (t.pnl || 0), 0),
-    [trades]
+    () => tradeRows.reduce((acc, t) => acc + (t.pnl || 0), 0),
+    [tradeRows]
   );
-  const equity = useMemo(() => startBalance + totalPnlAllTime, [startBalance, totalPnlAllTime]);
+  const totalDeposited = useMemo(
+    () => depositRows.reduce((acc, t) => acc + Math.abs(t.pnl || 0), 0),
+    [depositRows]
+  );
+  const totalWithdrawn = useMemo(
+    () => withdrawalRows.reduce((acc, t) => acc + Math.abs(t.pnl || 0), 0),
+    [withdrawalRows]
+  );
+  const equity = useMemo(
+    () => startBalance + totalDeposited - totalWithdrawn + totalPnlAllTime,
+    [startBalance, totalDeposited, totalWithdrawn, totalPnlAllTime]
+  );
+  const progressEquity = useMemo(() => startBalance + totalPnlAllTime, [startBalance, totalPnlAllTime]);
   const riskAmount = useMemo(() => (equity * riskPct) / 100, [equity, riskPct]);
-  const allTimeGrowthPct = startBalance ? ((equity - startBalance) / startBalance) * 100 : 0;
+  const allTimeGrowthPct = startBalance ? (totalPnlAllTime / startBalance) * 100 : 0;
+  const tradeCount = tradeRows.length;
 
   const sessionTrades = useMemo(
-    () => trades.filter((t) => !sessionId || (t.ts || 0) >= Number(sessionId)),
-    [trades, sessionId]
+    () => tradeRows.filter((t) => !sessionId || (t.ts || 0) >= Number(sessionId)),
+    [tradeRows, sessionId]
   );
   const pnl = useMemo(() => sessionTrades.reduce((a, t) => a + (t.pnl || 0), 0), [sessionTrades]);
   const closed = sessionTrades.length;
@@ -251,10 +321,10 @@ function PageInner() {
   // session % base = startBalance + pnl from trades BEFORE sessionId
   const priorPnl = useMemo(() => {
     if (!sessionId) return 0;
-    return trades
+    return tradeRows
       .filter((t) => (t.ts || 0) < Number(sessionId))
       .reduce((a, t) => a + (t.pnl || 0), 0);
-  }, [trades, sessionId]);
+  }, [tradeRows, sessionId]);
   const sessionBaseEquity = startBalance + priorPnl;
   const sessionPct = formatPct(pnl, sessionBaseEquity);
 
@@ -262,10 +332,10 @@ function PageInner() {
   const todayKey = ymdLocal(today);
   const todayPnl = useMemo(
     () =>
-      trades
+      tradeRows
         .filter((t) => t.ts && ymdLocal(new Date(t.ts)) === todayKey)
         .reduce((a, t) => a + (t.pnl || 0), 0),
-    [trades, todayKey]
+    [tradeRows, todayKey]
   );
 
   // Lock when max-loss hit
@@ -297,12 +367,12 @@ function PageInner() {
   }
 
   const weeklyProgress = useMemo(
-    () => trades.filter((t) => t.ts && isSameISOWeek(new Date(t.ts), today)).reduce((a, t) => a + (t.pnl || 0), 0),
-    [trades, today]
+    () => tradeRows.filter((t) => t.ts && isSameISOWeek(new Date(t.ts), today)).reduce((a, t) => a + (t.pnl || 0), 0),
+    [tradeRows, today]
   );
   const monthlyProgress = useMemo(
-    () => trades.filter((t) => t.ts && isSameMonth(new Date(t.ts), today)).reduce((a, t) => a + (t.pnl || 0), 0),
-    [trades, today]
+    () => tradeRows.filter((t) => t.ts && isSameMonth(new Date(t.ts), today)).reduce((a, t) => a + (t.pnl || 0), 0),
+    [tradeRows, today]
   );
 
   const sessionsCount = useMemo(() => {
@@ -315,28 +385,29 @@ function PageInner() {
 
   const [badge, setBadge] = useState<{ name: string; imagePath: string } | null>(null);
   useEffect(() => {
-    const s = sessionsCount;
-    if (s >= 30) setBadge({ name: "Legendary • 30 Sessions Untouchable", imagePath: "/badges/legendary.png" });
-    else if (s >= 25) setBadge({ name: "Elite • 25 Sessions Mastered", imagePath: "/badges/elite.png" });
-    else if (s >= 20) setBadge({ name: "Diamond • 20 Sessions Mastered", imagePath: "/badges/diamond.png" });
-    else if (s >= 15) setBadge({ name: "Platinum • 15 Sessions Dominated", imagePath: "/badges/platinum.png" });
-    else if (s >= 10) setBadge({ name: "Gold • 10 Sessions Conquered", imagePath: "/badges/gold.png" });
-    else if (s >= 5) setBadge({ name: "Silver • 5 Sessions Survived", imagePath: "/badges/silver.png" });
+    const s = tradeCount;
+    if (s >= 200) setBadge({ name: "Legendary • 200 Trades Proven", imagePath: "/badges/legendary.png" });
+    else if (s >= 150) setBadge({ name: "Elite • 150 Trades Controlled", imagePath: "/badges/elite.png" });
+    else if (s >= 100) setBadge({ name: "Diamond • 100 Trades Consistent", imagePath: "/badges/diamond.png" });
+    else if (s >= 75) setBadge({ name: "Platinum • 75 Trades Disciplined", imagePath: "/badges/platinum.png" });
+    else if (s >= 50) setBadge({ name: "Gold • 50 Trades Verified", imagePath: "/badges/gold.png" });
+    else if (s >= 25) setBadge({ name: "Silver • 25 Trades Logged", imagePath: "/badges/silver.png" });
+    else if (s >= 10) setBadge({ name: "Bronze • 10 Trades Started", imagePath: "/badges/bronze.png" });
     else setBadge(null);
-  }, [sessionsCount]);
+  }, [tradeCount]);
 
   const equitySeries = useMemo(() => {
-    const sorted = [...trades].sort((a, b) => (a.ts || 0) - (b.ts || 0));
+    const sorted = [...tradeRows].sort((a, b) => (a.ts || 0) - (b.ts || 0));
     const pts: { t: string; equity: number }[] = [];
     let running = startBalance;
-    if (sorted.length) pts.push({ t: new Date(sorted[0].ts || Date.now()).toLocaleTimeString(), equity: running });
+    if (sorted.length) pts.push({ t: new Date(sorted[0].ts || Date.now()).toLocaleDateString(), equity: running });
     sorted.forEach((tr) => {
       running += tr.pnl || 0;
-      pts.push({ t: new Date(tr.ts || Date.now()).toLocaleTimeString(), equity: Number(running.toFixed(2)) });
+      pts.push({ t: new Date(tr.ts || Date.now()).toLocaleDateString(), equity: Number(running.toFixed(2)) });
     });
     if (!pts.length) pts.push({ t: "Start", equity: startBalance });
     return pts;
-  }, [trades, startBalance]);
+  }, [tradeRows, startBalance]);
 
   /* Trades helpers */
   function addTrade(t: Omit<TradeRow, "id" | "ts">) {
@@ -359,6 +430,24 @@ function PageInner() {
     }
     return ts;
   }
+
+  const monthlyNeed = useMemo(
+    () => monthlyCosts.reduce((a, x) => a + (Number(x.amount) || 0), 0),
+    [monthlyCosts]
+  );
+  const tradingDaysThisMonth = useMemo(() => countWeekdaysInMonth(today), [todayKey]);
+  const plannedDailyTarget = useMemo(
+    () => tradingDaysThisMonth > 0 ? monthlyNeed / tradingDaysThisMonth : 0,
+    [monthlyNeed, tradingDaysThisMonth]
+  );
+  const plannedWeeklyTarget = useMemo(() => plannedDailyTarget * 5, [plannedDailyTarget]);
+
+  useEffect(() => {
+    if (monthlyNeed <= 0) return;
+    setDailyTarget(Number(plannedDailyTarget.toFixed(2)));
+    setWeeklyTarget(Number(plannedWeeklyTarget.toFixed(2)));
+    setMonthlyTarget(Number(monthlyNeed.toFixed(2)));
+  }, [monthlyNeed, plannedDailyTarget, plannedWeeklyTarget, setDailyTarget, setWeeklyTarget, setMonthlyTarget]);
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-6 space-y-4">
@@ -410,11 +499,11 @@ function PageInner() {
           <TabsTrigger value="risk">Risk &amp; Sizing</TabsTrigger>
           <TabsTrigger value="journal">Trade Journal</TabsTrigger>
           <TabsTrigger value="calendar">Calendar</TabsTrigger>
-          <TabsTrigger value="asetups">A-Setups</TabsTrigger>
+          <TabsTrigger value="asetups">Planning</TabsTrigger>
 
           {/* External link to dedicated page */}
           <a
-            href="/leaderboard"
+            href="/leaderboards"
             className="inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium ring-offset-background transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           >
             Leaderboard
@@ -430,14 +519,15 @@ function PageInner() {
               value={currency(pnl)}
               hint={`Closed trades: ${closed}${sessionPct ? ` • ${sessionPct}` : ""}`}
             />
-            <DashCard title="Sessions" value={`${sessionsCount}`} hint={badge ? badge.name : "Starter"} />
-            <DashCard title="Equity" value={currency(equity)} hint={`Start: ${currency(startBalance)}`} />
+            <DashCard title="Trade Badge" value={`${tradeCount} trades`} hint={badge ? badge.name : "Starter"} />
+            <DashCard title="Account Equity" value={currency(equity)} hint={`Progress equity: ${currency(progressEquity)}`} />
           </div>
 
           <div className="grid md:grid-cols-3 gap-4">
             <DashCard title="Starting Capital" value={currency(startBalance)} />
-            <DashCard title="All-time PnL" value={`${totalPnlAllTime >= 0 ? "+" : ""}${currency(Number(totalPnlAllTime.toFixed(2)))}`} />
-            <DashCard title="All-time Growth" value={`${fmt(allTimeGrowthPct)}%`} hint="Based on starting capital" />
+            <DashCard title="Trade PnL" value={`${totalPnlAllTime >= 0 ? "+" : ""}${currency(Number(totalPnlAllTime.toFixed(2)))}`} hint="Excludes deposits and withdrawals" />
+            <DashCard title="Withdrawn" value={`-${currency(Number(totalWithdrawn.toFixed(2)))}`} hint={`Deposited: ${currency(totalDeposited)}`} />
+            <DashCard title="Growth" value={`${fmt(allTimeGrowthPct)}%`} hint="Based on trade PnL ÷ starting capital" />
           </div>
 
           <div className="grid lg:grid-cols-2 gap-4">
@@ -509,28 +599,24 @@ function PageInner() {
 
             <Card>
               <CardContent className="p-5 space-y-4">
-                <h4 className="text-lg font-semibold">Goals</h4>
-                <div className="grid md:grid-cols-2 gap-3">
-                  <div>
-                    <Label>Weekly Target (USD)</Label>
-                    <Input type="number" value={weeklyTarget} onChange={(e) => setWeeklyTarget(Number(e.target.value) || 0)} />
-                  </div>
-                  <div>
-                    <Label>Monthly Target (USD)</Label>
-                    <Input type="number" value={monthlyTarget} onChange={(e) => setMonthlyTarget(Number(e.target.value) || 0)} />
-                  </div>
+                <h4 className="text-lg font-semibold">Targets from Planning Page</h4>
+                <div className="grid md:grid-cols-3 gap-3">
+                  <InfoStat label="Daily Target" value={currency(dailyTarget)} />
+                  <InfoStat label="Weekly Target" value={currency(weeklyTarget)} />
+                  <InfoStat label="Monthly Target" value={currency(monthlyTarget)} />
                 </div>
+                <GoalProgress label="Daily Target Progress" progress={Number(todayPnl.toFixed(2))} target={dailyTarget || 0} />
                 <GoalProgress label="Weekly Progress" progress={Number(weeklyProgress.toFixed(2))} target={weeklyTarget || 0} />
                 <GoalProgress label="Monthly Progress" progress={Number(monthlyProgress.toFixed(2))} target={monthlyTarget || 0} />
               </CardContent>
             </Card>
           </div>
 
-          <BadgeShowcase badge={badge} sessionsCount={sessionsCount} />
+          <BadgeShowcase badge={badge} tradeCount={tradeCount} />
 
           <Card>
             <CardContent className="p-5">
-              <h4 className="text-lg font-semibold mb-2">Equity Curve (All Time)</h4>
+              <h4 className="text-lg font-semibold mb-2">Progress Equity Curve (withdrawal-safe)</h4>
               <div className="h-72">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={equitySeries}>
@@ -594,7 +680,7 @@ function PageInner() {
                 <Label>Risk % per Trade</Label>
                 <Input type="number" step="0.1" value={riskPct} onChange={(e) => setRiskPct(Number(e.target.value) || 0)} />
               </div>
-              <InfoStat label="Current Equity" value={currency(equity)} />
+              <InfoStat label="Account Equity" value={currency(equity)} />
               <InfoStat label="Risk Amount (auto)" value={currency(riskAmount)} />
             </CardContent>
           </Card>
@@ -642,12 +728,12 @@ function PageInner() {
 
         {/* CALENDAR */}
         <TabsContent value="calendar">
-          <OldCalendar trades={trades} />
+          <OldCalendar trades={tradeRows} />
         </TabsContent>
 
         {/* A-SETUPS */}
         <TabsContent value="asetups">
-          <ASetupsGallery />
+          <PlanningPage costs={monthlyCosts} setCosts={setMonthlyCosts} monthlyNeed={monthlyNeed} tradingDays={tradingDaysThisMonth} dailyTarget={plannedDailyTarget} weeklyTarget={plannedWeeklyTarget} />
         </TabsContent>
       </Tabs>
     </div>
@@ -682,23 +768,24 @@ function InfoStat({ label, value }: { label: string; value: string }) {
 ============================================================================ */
 function BadgeShowcase({
   badge,
-  sessionsCount,
+  tradeCount,
 }: {
   badge: { name: string; imagePath: string } | null;
-  sessionsCount: number;
+  tradeCount: number;
 }) {
   const tiers = [
-    { key: "Silver", name: "Silver • 5 Sessions Survived", at: 5, img: "/badges/silver.png" },
-    { key: "Gold", name: "Gold • 10 Sessions Conquered", at: 10, img: "/badges/gold.png" },
-    { key: "Platinum", name: "Platinum • 15 Sessions Dominated", at: 15, img: "/badges/platinum.png" },
-    { key: "Diamond", name: "Diamond • 20 Sessions Mastered", at: 20, img: "/badges/diamond.png" },
-    { key: "Elite", name: "Elite • 25 Sessions Mastered", at: 25, img: "/badges/elite.png" },
-    { key: "Legendary", name: "Legendary • 30 Sessions Untouchable", at: 30, img: "/badges/legendary.png" },
+    { key: "Bronze", name: "Bronze • 10 Trades Started", at: 10, img: "/badges/bronze.png" },
+    { key: "Silver", name: "Silver • 25 Trades Logged", at: 25, img: "/badges/silver.png" },
+    { key: "Gold", name: "Gold • 50 Trades Verified", at: 50, img: "/badges/gold.png" },
+    { key: "Platinum", name: "Platinum • 75 Trades Disciplined", at: 75, img: "/badges/platinum.png" },
+    { key: "Diamond", name: "Diamond • 100 Trades Consistent", at: 100, img: "/badges/diamond.png" },
+    { key: "Elite", name: "Elite • 150 Trades Controlled", at: 150, img: "/badges/elite.png" },
+    { key: "Legendary", name: "Legendary • 200 Trades Proven", at: 200, img: "/badges/legendary.png" },
   ];
-  const current = badge ?? (sessionsCount >= 5 ? { name: tiers[0].name, imagePath: tiers[0].img } : null);
-  const nextTier = tiers.find((t) => sessionsCount < t.at);
-  const pct = nextTier ? Math.min(100, Math.round((sessionsCount / nextTier.at) * 100)) : 100;
-  const left = nextTier ? Math.max(0, nextTier.at - sessionsCount) : 0;
+  const current = badge ?? (tradeCount >= 10 ? { name: tiers[0].name, imagePath: tiers[0].img } : null);
+  const nextTier = tiers.find((t) => tradeCount < t.at);
+  const pct = nextTier ? Math.min(100, Math.round((tradeCount / nextTier.at) * 100)) : 100;
+  const left = nextTier ? Math.max(0, nextTier.at - tradeCount) : 0;
 
   return (
     <Card>
@@ -714,9 +801,9 @@ function BadgeShowcase({
             </div>
           </div>
           <div className="md:col-span-2">
-            <div className="text-xl font-semibold">{current?.name || "Starter • Keep building sessions"}</div>
+            <div className="text-xl font-semibold">{current?.name || "Starter • Keep building trades"}</div>
             <div className="text-sm text-slate-600 mt-1">
-              Sessions completed: <strong>{sessionsCount}</strong>
+              Journal trades counted: <strong>{tradeCount}</strong>
             </div>
             {nextTier ? (
               <>
@@ -727,7 +814,7 @@ function BadgeShowcase({
                   <div className="h-2 bg-indigo-500 transition-all" style={{ width: `${pct}%` }} />
                 </div>
                 <div className="text-xs text-slate-500 mt-1">
-                  {left} more session(s) to {nextTier.key}.
+                  {left} more trade(s) to {nextTier.key}.
                 </div>
               </>
             ) : (
@@ -1015,23 +1102,24 @@ function JournalGrouped({
    Analytics
 ============================================================================ */
 function AnalyticsPanel({ trades }: { trades: TradeRow[] }) {
+  const tradeOnly = useMemo(() => trades.filter(isTradeRow), [trades]);
   const byStrategy = useMemo(() => {
     const map: Record<string, number> = {};
-    trades.forEach((t) => {
+    tradeOnly.forEach((t) => {
       const key = t.notes === "Ultimate M1 Range setup" ? "Ultimate M1 Range setup" : "Ultimate M1 Trend setup";
       map[key] = (map[key] || 0) + (t.pnl || 0);
     });
     return Object.entries(map).map(([name, pnl]) => ({ name, pnl: Number(pnl.toFixed(2)) }));
-  }, [trades]);
+  }, [tradeOnly]);
 
   const byMarket = useMemo(() => {
     const map: Record<string, number> = {};
-    trades.forEach((t) => {
+    tradeOnly.forEach((t) => {
       const key = t.symbol || "Unknown";
       map[key] = (map[key] || 0) + (t.pnl || 0);
     });
     return Object.entries(map).map(([name, pnl]) => ({ name, pnl: Number(pnl.toFixed(2)) }));
-  }, [trades]);
+  }, [tradeOnly]);
 
   return (
     <div className="grid lg:grid-cols-2 gap-4">
@@ -1224,81 +1312,104 @@ function MarketAnalyzer({ riskAmount }: { riskAmount: number }) {
 }
 
 /* =========================================================================
-   A-Setups Gallery
+   Planning Page
 ============================================================================ */
-function ASetupsGallery() {
-  const [items, setItems] = useLocalStorage<ASetup[]>("ust-asetups", []);
-  const [title, setTitle] = useState("");
-  const [notes, setNotes] = useState("");
-  const [file, setFile] = useState<File | null>(null);
+type PlanningCost = { id: string; name: string; amount: number };
 
-  async function addItem() {
-    if (!file) return;
-    const dataUrl = await fileToDataUrl(file);
-    const id = `${Date.now()}-${Math.random().toString(36).slice(0, 6)}`;
-    setItems([{ id, title: title || file.name, dataUrl, notes }, ...items]);
-    setTitle("");
-    setNotes("");
-    setFile(null);
+function countWeekdaysInMonth(d: Date) {
+  const y = d.getFullYear();
+  const m = d.getMonth();
+  const last = new Date(y, m + 1, 0).getDate();
+  let count = 0;
+  for (let day = 1; day <= last; day++) {
+    const dow = new Date(y, m, day).getDay();
+    if (dow >= 1 && dow <= 5) count++;
+  }
+  return count;
+}
+
+function PlanningPage({
+  costs,
+  setCosts,
+  monthlyNeed,
+  tradingDays,
+  dailyTarget,
+  weeklyTarget,
+}: {
+  costs: PlanningCost[];
+  setCosts: React.Dispatch<React.SetStateAction<PlanningCost[]>>;
+  monthlyNeed: number;
+  tradingDays: number;
+  dailyTarget: number;
+  weeklyTarget: number;
+}) {
+  function updateCost(id: string, patch: Partial<PlanningCost>) {
+    setCosts((rows) => rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  }
+  function addCost() {
+    setCosts((rows) => [
+      ...rows,
+      { id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, name: "New cost", amount: 0 },
+    ]);
+  }
+  function removeCost(id: string) {
+    setCosts((rows) => rows.length > 1 ? rows.filter((r) => r.id !== id) : rows);
   }
 
+  const yearlyTarget = monthlyNeed * 12;
+  const requiredCapitalAt25Pct = monthlyNeed > 0 ? monthlyNeed / 0.25 : 0;
+
   return (
-    <div className="grid gap-4">
+    <div className="space-y-4">
       <Card>
-        <CardContent className="p-4 grid md:grid-cols-12 gap-3">
-          <div className="md:col-span-3">
-            <Label>Title</Label>
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ultimate Trend Buy A-Setup" />
+        <CardContent className="p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <h4 className="text-xl font-semibold">UST Planning Page</h4>
+              <p className="text-sm text-slate-600">Turn real monthly needs into realistic daily, weekly, monthly and yearly goals.</p>
+            </div>
+            <Button onClick={addCost}>+ Add cost</Button>
           </div>
-          <div className="md:col-span-5">
-            <Label>Notes / Checklist</Label>
-            <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Price above EMA315, SSL above EMA315, …" />
-          </div>
-          <div className="md:col-span-2">
-            <Label>Image</Label>
-            <input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} />
-          </div>
-          <div className="md:col-span-2 self-end">
-            <Button disabled={!file} onClick={addItem}>Upload</Button>
+
+          <div className="space-y-2">
+            {costs.map((row) => (
+              <div key={row.id} className="grid md:grid-cols-12 gap-3 items-end rounded-lg border bg-white p-3">
+                <div className="md:col-span-7">
+                  <Label>Monthly Cost</Label>
+                  <Input value={row.name} onChange={(e) => updateCost(row.id, { name: e.target.value })} />
+                </div>
+                <div className="md:col-span-3">
+                  <Label>Amount</Label>
+                  <Input type="number" step="0.01" value={row.amount} onChange={(e) => updateCost(row.id, { amount: Number(e.target.value) || 0 })} />
+                </div>
+                <div className="md:col-span-2">
+                  <Button variant="destructive" onClick={() => removeCost(row.id)}>Remove</Button>
+                </div>
+              </div>
+            ))}
           </div>
         </CardContent>
       </Card>
 
-      {!items.length && (
-        <Card>
-          <CardContent className="p-6 text-sm text-slate-600">
-            Upload screenshots for your A-Setups once. Review them at the start of every session.
-          </CardContent>
-        </Card>
-      )}
-
-      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {items.map((it) => (
-          <Card key={it.id}>
-            <CardContent className="p-3 space-y-2">
-              <div className="font-semibold">{it.title}</div>
-              <img src={it.dataUrl} alt={it.title} className="w-full rounded-md border object-contain" />
-              {it.notes && <div className="text-xs text-slate-600">{it.notes}</div>}
-              <div className="flex justify-end">
-                <Button variant="destructive" onClick={() => setItems(items.filter((x) => x.id !== it.id))}>
-                  Remove
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+      <div className="grid md:grid-cols-4 gap-4">
+        <InfoStat label="Monthly Needs" value={currency(monthlyNeed)} />
+        <InfoStat label="Trading Days This Month" value={String(tradingDays)} />
+        <InfoStat label="Realistic Daily Target" value={currency(Number(dailyTarget.toFixed(2)))} />
+        <InfoStat label="Weekly Target" value={currency(Number(weeklyTarget.toFixed(2)))} />
       </div>
+
+      <Card>
+        <CardContent className="p-5 grid md:grid-cols-3 gap-4">
+          <InfoStat label="Monthly Goal" value={currency(monthlyNeed)} />
+          <InfoStat label="Yearly Goal" value={currency(yearlyTarget)} />
+          <InfoStat label="Capital needed at 25%/month" value={currency(requiredCapitalAt25Pct)} />
+          <div className="md:col-span-3 rounded-lg border bg-amber-50 text-amber-900 p-3 text-sm">
+            These numbers automatically feed the dashboard targets. The goal is to make UST users plan around needs and account size instead of chasing random daily money.
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
-}
-async function fileToDataUrl(file: File): Promise<string> {
-  const buf = await file.arrayBuffer();
-  const blob = new Blob([buf], { type: file.type });
-  return await new Promise<string>((res) => {
-    const r = new FileReader();
-    r.onload = () => res(String(r.result));
-    r.readAsDataURL(blob);
-  });
 }
 
 /* =========================================================================
@@ -1362,7 +1473,7 @@ function GoalProgress({
 
       <div className="mt-2 text-xs text-slate-600 flex items-center justify-between">
         <span>Progress: <strong>{currency(Number(progress.toFixed(2)))}</strong></span>
-        <span>Target: <strong>{currency(Number((target || 0).toFixed(2)))}</strong></span>
+        <span>{target ? `Remaining: ${currency(Math.max(0, target - progress))}` : "No target set"}</span>
       </div>
 
       {reached && <div className="mt-1 text-[11px] text-emerald-700">🎯 Goal reached for this period — nice work!</div>}
