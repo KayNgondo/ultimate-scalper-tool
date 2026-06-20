@@ -1,34 +1,35 @@
-// lib/useSupabase.ts
 'use client';
 
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { useEffect, useState } from 'react';
+import useSupabase from '@/lib/useSupabase';
 
-type DB = any;
+export function useSupabaseUser() {
+  const supabase = useSupabase();
+  const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
-let _client: SupabaseClient<DB> | null = null;
+  useEffect(() => {
+    let mounted = true;
 
-export default function useSupabase(): SupabaseClient<DB> {
-  if (_client) return _client;
+    supabase.auth.getUser().then(({ data }) => {
+      if (!mounted) return;
+      setUser(data?.user ?? null);
+      setLoading(false);
+    });
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!mounted) return;
+      setUser(session?.user ?? null);
+      setLoading(false);
+    });
 
-  if (!url || !anon) {
-    throw new Error(
-      '[useSupabase] Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY.'
-    );
-  }
+    return () => {
+      mounted = false;
+      listener?.subscription?.unsubscribe();
+    };
+  }, [supabase]);
 
-  _client = createClient<DB>(url, anon, {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: true,
-      flowType: 'pkce',
-    },
-  });
-
-  return _client;
+  return { user, loading };
 }
 
-export const getSupabase = () => useSupabase();
+export default useSupabaseUser;
