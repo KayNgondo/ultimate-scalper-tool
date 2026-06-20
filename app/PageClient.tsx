@@ -6,12 +6,6 @@ import * as React from "react";
 import AuthGate from "@/components/AuthGate";
 import { useSupabaseUser } from "@/lib/useSupabaseUser";
 import { supabase } from "@/lib/supabase";
-import ThemeToggle from "@/components/ThemeToggle";
-import {
-  SHEETS_WEBAPP_URL as SHEETS_URL,
-  READ_TOKEN as SHEETS_TOKEN,
-  DEFAULT_UST_ACCOUNT as DEFAULT_ACCOUNT,
-} from "@/lib/env";
 
 /* ========== shadcn/ui ========== */
 import { Button } from "@/components/ui/button";
@@ -34,20 +28,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-/* New: solid, searchable combobox pieces */
-import {
-  Popover,
-  PopoverTrigger,
-  PopoverContent,
-} from "@/components/ui/popover";
-import {
-  Command,
-  CommandInput,
-  CommandList,
-  CommandEmpty,
-  CommandItem,
-  CommandGroup,
-} from "@/components/ui/command";
 import {
   ChevronsUpDown,
   Check,
@@ -86,6 +66,70 @@ import {
   Tooltip as RTooltip,
   Legend,
 } from "recharts";
+
+/* ========== Local fallbacks for this project build ==========
+   These remove dependency on files/components that are not present in the current repo. */
+const SHEETS_URL = process.env.NEXT_PUBLIC_SHEETS_WEBAPP_URL || "";
+const SHEETS_TOKEN = process.env.NEXT_PUBLIC_READ_TOKEN || "MYUSTLOGGER2025";
+const DEFAULT_ACCOUNT = process.env.NEXT_PUBLIC_DEFAULT_UST_ACCOUNT || "";
+
+function ThemeToggle() {
+  // Dark mode is now permanent for the premium UST interface.
+  // This keeps the build safe without depending on a missing ThemeToggle component.
+  return null;
+}
+
+type AnyProps = React.HTMLAttributes<HTMLElement> & {
+  asChild?: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  value?: string;
+  onSelect?: (value: string) => void;
+  heading?: string;
+  placeholder?: string;
+};
+
+function Popover({ children }: AnyProps) {
+  return <div className="relative">{children}</div>;
+}
+function PopoverTrigger({ children }: AnyProps) {
+  return <>{children}</>;
+}
+function PopoverContent({ children, className = "", ...props }: AnyProps) {
+  return (
+    <div className={`mt-2 rounded-2xl border border-white/10 bg-slate-950 p-2 shadow-xl ${className}`} {...props}>
+      {children}
+    </div>
+  );
+}
+function Command({ children, className = "", ...props }: AnyProps) {
+  return <div className={className} {...props}>{children}</div>;
+}
+function CommandInput({ className = "", placeholder = "Search…", ...props }: AnyProps) {
+  return <input className={`w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none ${className}`} placeholder={placeholder} {...(props as any)} />;
+}
+function CommandList({ children, className = "", ...props }: AnyProps) {
+  return <div className={`mt-2 max-h-64 overflow-auto ${className}`} {...props}>{children}</div>;
+}
+function CommandEmpty({ children, className = "", ...props }: AnyProps) {
+  return <div className={`px-3 py-2 text-sm text-slate-400 ${className}`} {...props}>{children}</div>;
+}
+function CommandGroup({ children, heading, className = "", ...props }: AnyProps) {
+  return (
+    <div className={className} {...props}>
+      {heading ? <div className="px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-400">{heading}</div> : null}
+      {children}
+    </div>
+  );
+}
+function CommandItem({ children, onSelect, value = "", className = "", ...props }: AnyProps) {
+  return (
+    <button type="button" className={`flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm hover:bg-white/10 ${className}`} onClick={() => onSelect?.(String(value))} {...(props as any)}>
+      {children}
+    </button>
+  );
+}
+
 
 // ====== AUTO IMPORT HELPERS (UST ⇄ Google Sheets) ======
 
@@ -360,6 +404,76 @@ function buildSheetsUrl(account: string, since?: string) {
     return u.toString();
   } catch {
     return null;
+  }
+}
+
+async function pushSmartRiskToSheets(input: {
+  account: string;
+  riskPct: number;
+  symbol?: string;
+  dailyTarget?: number;
+  monthlyTarget?: number;
+  plannedTrades?: number;
+  plannedRewardR?: number;
+}) {
+  if (!SHEETS_URL || !SHEETS_TOKEN || !input.account || !(input.riskPct > 0)) {
+    return { ok: false, error: "Missing Sheets URL, token, account, or risk percentage." };
+  }
+
+  try {
+    const u = new URL(SHEETS_URL);
+    u.searchParams.set("readToken", SHEETS_TOKEN);
+    u.searchParams.set("mode", "setRisk");
+    u.searchParams.set("account", input.account);
+    u.searchParams.set("symbol", input.symbol || "ALL");
+    u.searchParams.set("risk_pct", String(Number(input.riskPct.toFixed(2))));
+    u.searchParams.set("daily_target", String(Number(input.dailyTarget || 0)));
+    u.searchParams.set("monthly_target", String(Number(input.monthlyTarget || 0)));
+    u.searchParams.set("planned_trades", String(Number(input.plannedTrades || 0)));
+    u.searchParams.set("planned_reward_r", String(Number(input.plannedRewardR || 0)));
+    u.searchParams.set("source", "UST Journal Checklist");
+
+    const r = await fetch(u.toString(), { cache: "no-store" });
+    const data = await r.json().catch(() => null);
+    if (!data?.ok) {
+      return { ok: false, error: data?.error || "Risk setting was not accepted by Apps Script." };
+    }
+    return { ok: true, data };
+  } catch (err: any) {
+    return { ok: false, error: String(err?.message || err) };
+  }
+}
+
+
+async function pushTradingControlToSheets(input: {
+  account: string;
+  allowTrading: boolean;
+  symbol?: string;
+  notes?: string;
+}) {
+  if (!SHEETS_URL || !SHEETS_TOKEN || !input.account) {
+    return { ok: false, error: "Missing Sheets URL, token, or account." };
+  }
+
+  try {
+    const u = new URL(SHEETS_URL);
+    u.searchParams.set("readToken", SHEETS_TOKEN);
+    u.searchParams.set("mode", "setTrading");
+    u.searchParams.set("account", input.account);
+    u.searchParams.set("symbol", input.symbol || "ALL");
+    u.searchParams.set("trading_allowed", input.allowTrading ? "true" : "false");
+    u.searchParams.set("control_action", input.allowTrading ? "START" : "STOP");
+    u.searchParams.set("source", "UST Journal Checklist");
+    if (input.notes) u.searchParams.set("notes", input.notes);
+
+    const r = await fetch(u.toString(), { cache: "no-store" });
+    const data = await r.json().catch(() => null);
+    if (!data?.ok) {
+      return { ok: false, error: data?.error || "Trading control was not accepted by Apps Script." };
+    }
+    return { ok: true, data };
+  } catch (err: any) {
+    return { ok: false, error: String(err?.message || err) };
   }
 }
 
@@ -971,11 +1085,11 @@ function ToastProvider({ children }: { children: React.ReactNode }) {
         {items.map((t) => (
           <div
             key={t.id}
-            className="rounded-lg border bg-white shadow px-3 py-2 w-72 dark:border-slate-800 dark:bg-slate-950"
+            className="rounded-lg border border-slate-800 bg-slate-950 text-slate-100 shadow-xl shadow-black/40 px-3 py-2 w-72"
           >
             <div className="text-sm font-medium">{t.title}</div>
             {t.desc ? (
-              <div className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
+              <div className="text-xs text-slate-300 mt-0.5">
                 {t.desc}
               </div>
             ) : null}
@@ -1283,10 +1397,23 @@ async function recordSessionToLeaderboard(
    Page wrapper
 ============================================================================ */
 function PageClientWrapper() {
+  useEffect(() => {
+    try {
+      localStorage.setItem("theme", "dark");
+      document.documentElement.classList.remove("light");
+      document.documentElement.classList.add("dark");
+      document.documentElement.style.colorScheme = "dark";
+      document.body.classList.add("bg-slate-950", "text-slate-100");
+      document.body.style.backgroundColor = "#020617";
+    } catch {}
+  }, []);
+
   return (
     <ToastProvider>
       <AuthGate>
-        <PageInner />
+        <div className="min-h-screen bg-slate-950 text-slate-100">
+          <PageInner />
+        </div>
       </AuthGate>
     </ToastProvider>
   );
@@ -1301,15 +1428,13 @@ function PageInner() {
   const [activeTab, setActiveTab] = useState<string>("dashboard");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  // Default UST to dark mode on first visit. Users can still switch theme afterwards.
+  // UST is now permanently dark mode for a consistent premium trading console.
   useEffect(() => {
     try {
-      const savedTheme = localStorage.getItem("theme");
-      if (!savedTheme) {
-        localStorage.setItem("theme", "dark");
-        document.documentElement.classList.add("dark");
-        document.documentElement.style.colorScheme = "dark";
-      }
+      localStorage.setItem("theme", "dark");
+      document.documentElement.classList.remove("light");
+      document.documentElement.classList.add("dark");
+      document.documentElement.style.colorScheme = "dark";
     } catch {}
   }, []);
 
@@ -2982,7 +3107,6 @@ function PageInner() {
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
-            <ThemeToggle />
             <DashboardSyncButton addTradesBulkFn={addTradesBulk} />
             <Button
               type="button"
@@ -3016,8 +3140,7 @@ function PageInner() {
               UST Strategy Console
             </h1>
             <div className="scale-80 origin-center">
-              <ThemeToggle />
-            </div>
+              </div>
             <span
               className={`shrink-0 inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-semibold ${
                 locked && lockOnHit
@@ -3115,7 +3238,7 @@ function PageInner() {
                   currently being compared.
                 </p>
               </div>
-              <div className="text-xs text-slate-500">
+              <div className="text-xs text-slate-400">
                 Period: {battlePeriodStart || "Start"} →{" "}
                 {battlePeriodEnd || "Today"}
               </div>
@@ -3291,19 +3414,19 @@ function PageInner() {
               </div>
               <div className="grid grid-cols-3 gap-2 text-center text-xs md:min-w-[360px]">
                 <div className="rounded-2xl border border-slate-700 bg-black/25 p-3">
-                  <div className="text-slate-500">Leader</div>
+                  <div className="text-slate-400">Leader</div>
                   <div className="mt-1 font-black text-[#F6C945]">
                     {battleSurvivalSummary.leader?.market || "—"}
                   </div>
                 </div>
                 <div className="rounded-2xl border border-slate-700 bg-black/25 p-3">
-                  <div className="text-slate-500">Avg Progress</div>
+                  <div className="text-slate-400">Avg Progress</div>
                   <div className="mt-1 font-black text-white">
                     {fmt(battleSurvivalSummary.avgProgress)}%
                   </div>
                 </div>
                 <div className="rounded-2xl border border-slate-700 bg-black/25 p-3">
-                  <div className="text-slate-500">Risk Flags</div>
+                  <div className="text-slate-400">Risk Flags</div>
                   <div className="mt-1 font-black text-amber-300">
                     {battleSurvivalSummary.risk}
                   </div>
@@ -3338,7 +3461,7 @@ function PageInner() {
                           <div className="font-black text-white">
                             {m.market}
                           </div>
-                          <div className="text-[11px] text-slate-500">
+                          <div className="text-[11px] text-slate-400">
                             {m.trades}/{m.targetTrades} trades • {m.remaining}{" "}
                             left
                           </div>
@@ -3411,20 +3534,20 @@ function PageInner() {
 
               <div className="mt-5 grid gap-3 sm:grid-cols-3">
                 <div className="rounded-2xl border border-slate-800 bg-black/25 p-3">
-                  <div className="text-xs text-slate-500">Race Progress</div>
+                  <div className="text-xs text-slate-400">Race Progress</div>
                   <div className="mt-1 text-xl font-black text-white">
                     {fmt(battleTransparencyPortal.progressPct)}%
                   </div>
                 </div>
                 <div className="rounded-2xl border border-slate-800 bg-black/25 p-3">
-                  <div className="text-xs text-slate-500">Positive Markets</div>
+                  <div className="text-xs text-slate-400">Positive Markets</div>
                   <div className="mt-1 text-xl font-black text-emerald-300">
                     {battleTransparencyPortal.profitable}/
                     {battleTransparencyPortal.markets}
                   </div>
                 </div>
                 <div className="rounded-2xl border border-slate-800 bg-black/25 p-3">
-                  <div className="text-xs text-slate-500">Avg DD</div>
+                  <div className="text-xs text-slate-400">Avg DD</div>
                   <div className="mt-1 text-xl font-black text-amber-300">
                     {fmt(battleTransparencyPortal.avgDd)}%
                   </div>
@@ -3490,7 +3613,7 @@ function PageInner() {
                       : m.certificationLevel === "Gold Candidate"
                         ? "border-[#D4AF37]/45 bg-[#D4AF37]/10 text-[#F6C945]"
                         : m.certificationLevel === "Silver Candidate"
-                          ? "border-slate-300/30 bg-slate-300/10 text-slate-200"
+                          ? "border-slate-800/80/30 bg-slate-300/10 text-slate-200"
                           : m.certificationLevel === "Bronze Candidate"
                             ? "border-amber-700/40 bg-amber-700/10 text-amber-300"
                             : "border-sky-400/35 bg-sky-500/10 text-sky-300";
@@ -3511,7 +3634,7 @@ function PageInner() {
                           </div>
                         </div>
                         <div className="text-right">
-                          <div className="text-xs text-slate-500">Score</div>
+                          <div className="text-xs text-slate-400">Score</div>
                           <div className="text-xl font-black text-white">
                             {m.certificationScore}
                           </div>
@@ -3747,7 +3870,7 @@ function PageInner() {
                         ? "WATCHLIST"
                         : "RESTRICTED";
                   const statusStyle = insufficient
-                    ? "border-slate-500/30 bg-slate-500/10 text-slate-200"
+                    ? "border-slate-500/30 bg-slate-900/80 text-slate-200"
                     : status === "ACTIVE"
                       ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
                       : status === "WATCHLIST"
@@ -3855,25 +3978,25 @@ function PageInner() {
                       </div>
                       <div className="mt-2 grid grid-cols-4 gap-2 text-center text-xs">
                         <div>
-                          <div className="text-slate-500">Trades</div>
+                          <div className="text-slate-400">Trades</div>
                           <div className="font-bold text-sky-100">
                             {g.trades}
                           </div>
                         </div>
                         <div>
-                          <div className="text-slate-500">Win</div>
+                          <div className="text-slate-400">Win</div>
                           <div className="font-bold text-sky-100">
                             {fmt(g.winRate)}%
                           </div>
                         </div>
                         <div>
-                          <div className="text-slate-500">PF</div>
+                          <div className="text-slate-400">PF</div>
                           <div className="font-bold text-sky-100">
                             {fmt(g.profitFactor)}
                           </div>
                         </div>
                         <div>
-                          <div className="text-slate-500">Avg R</div>
+                          <div className="text-slate-400">Avg R</div>
                           <div className="font-bold text-sky-100">
                             {fmt(g.avgR)}R
                           </div>
@@ -3975,25 +4098,25 @@ function PageInner() {
                       </div>
                       <div className="mt-2 grid grid-cols-4 gap-2 text-center text-xs">
                         <div>
-                          <div className="text-slate-500">Trades</div>
+                          <div className="text-slate-400">Trades</div>
                           <div className="font-bold text-sky-100">
                             {g.trades}
                           </div>
                         </div>
                         <div>
-                          <div className="text-slate-500">Win</div>
+                          <div className="text-slate-400">Win</div>
                           <div className="font-bold text-sky-100">
                             {fmt(g.winRate)}%
                           </div>
                         </div>
                         <div>
-                          <div className="text-slate-500">PF</div>
+                          <div className="text-slate-400">PF</div>
                           <div className="font-bold text-sky-100">
                             {fmt(g.profitFactor)}
                           </div>
                         </div>
                         <div>
-                          <div className="text-slate-500">Avg R</div>
+                          <div className="text-slate-400">Avg R</div>
                           <div className="font-bold text-sky-100">
                             {fmt(g.avgR)}R
                           </div>
@@ -4112,7 +4235,7 @@ function PageInner() {
                           const cell =
                             battleSessionHeatmap.cells[`${day}-${session}`];
                           const tone = !cell?.trades
-                            ? "border-slate-800 bg-slate-950/80 text-slate-500"
+                            ? "border-slate-800 bg-slate-950/80 text-slate-400"
                             : cell.profit > 0
                               ? "border-emerald-400/30 bg-emerald-500/15 text-emerald-200"
                               : cell.profit < 0
@@ -4764,7 +4887,7 @@ function PageInner() {
                     <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                       <h4 className="text-lg font-black uppercase tracking-[0.22em] text-[#F6C945]">
                         Progress Curve{" "}
-                        <span className="text-slate-500">(All Time)</span>
+                        <span className="text-slate-400">(All Time)</span>
                       </h4>
                       <div className="flex rounded-xl border border-slate-700 bg-black/20 p-1 text-xs font-black text-slate-300">
                         <span className="rounded-lg px-3 py-1">7D</span>
@@ -4844,7 +4967,7 @@ function PageInner() {
                                   {t.symbol || "Market"}
                                 </span>
                               </div>
-                              <div className="mt-1 text-xs text-slate-500">
+                              <div className="mt-1 text-xs text-slate-400">
                                 {t.ts
                                   ? new Date(t.ts).toLocaleString()
                                   : "Manual trade"}
@@ -4857,7 +4980,7 @@ function PageInner() {
                                 {Number(t.pnl || 0) >= 0 ? "+" : ""}
                                 {currency(Number(t.pnl || 0))}
                               </div>
-                              <div className="text-xs text-slate-500">
+                              <div className="text-xs text-slate-400">
                                 {Number(t.pnl || 0) >= 0
                                   ? "Win"
                                   : Number(t.pnl || 0) < 0
@@ -5190,7 +5313,7 @@ function PageInner() {
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent className="z-[70] bg-white border shadow-md">
+                      <SelectContent className="z-[70] bg-slate-950 border border-slate-800 text-slate-100 shadow-xl shadow-black/40">
                         <SelectItem value="true">Enabled</SelectItem>
                         <SelectItem value="false">Disabled</SelectItem>
                       </SelectContent>
@@ -5307,7 +5430,7 @@ function PageInner() {
               <h4 className="text-lg font-semibold">
                 Per-Market Lot Size (Deriv)
               </h4>
-              <p className="text-sm text-slate-600 dark:text-slate-300">
+              <p className="text-sm text-slate-300">
                 Enter risk pips for each Deriv market. Risk amount uses current
                 equity × risk%.
               </p>
@@ -5397,7 +5520,7 @@ function PageInner() {
             <CardContent className="p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="font-semibold">Record Withdrawal</h3>
-                <span className="text-xs text-slate-500">
+                <span className="text-xs text-slate-400">
                   Affects equity only (not a trading loss)
                 </span>
               </div>
@@ -5464,7 +5587,7 @@ function PageInner() {
             <CardContent className="p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="font-semibold">Record Deposit</h3>
-                <span className="text-xs text-slate-500">
+                <span className="text-xs text-slate-400">
                   Adds to equity only (not trading profit)
                 </span>
               </div>
@@ -5575,7 +5698,7 @@ function PageInner() {
               <h4 className="text-lg font-semibold">
                 🧭 Checklist — Review & Targets
               </h4>
-              <p className="text-sm text-slate-600 dark:text-slate-300">
+              <p className="text-sm text-slate-300">
                 Use this tab to confirm your plan and set your Start Capital +
                 Risk % before trading. Copy the summary and paste to
                 Telegram/Slack if you like.
@@ -5644,7 +5767,7 @@ function PageInner() {
                           setThresholdPct(Number(e.target.value) || 0)
                         }
                       />
-                      <div className="text-[11px] text-slate-500 mt-1">
+                      <div className="text-[11px] text-slate-400 mt-1">
                         Default 30%
                       </div>
                     </div>
@@ -5657,7 +5780,7 @@ function PageInner() {
                           setGivebackPct(Number(e.target.value) || 0)
                         }
                       />
-                      <div className="text-[11px] text-slate-500 mt-1">
+                      <div className="text-[11px] text-slate-400 mt-1">
                         E.g. 50%
                       </div>
                     </div>
@@ -5689,42 +5812,42 @@ function PageInner() {
                       </div>
                     </div>
                     <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
-                      <div className="text-slate-600 dark:text-slate-300">Monthly target remaining</div>
+                      <div className="text-slate-300">Monthly target remaining</div>
                       <div className="font-medium">{currency(remainingMonthlyTarget)}</div>
-                      <div className="text-slate-600 dark:text-slate-300">Required daily target</div>
+                      <div className="text-slate-300">Required daily target</div>
                       <div className="font-medium">{currency(requiredDailyTarget)}</div>
-                      <div className="text-slate-600 dark:text-slate-300">Target risk needed</div>
-                      <div className="font-black text-blue-600 dark:text-blue-300">{targetRiskPct.toFixed(2)}% / {currency(targetRiskAmountPerTrade)}</div>
-                      <div className="text-slate-600 dark:text-slate-300">UST smart risk</div>
-                      <div className="font-black text-emerald-600 dark:text-emerald-300">{recommendedRiskPct.toFixed(2)}% / {currency(smartRiskAmount)}</div>
+                      <div className="text-slate-300">Target risk needed</div>
+                      <div className="font-black text-blue-300">{targetRiskPct.toFixed(2)}% / {currency(targetRiskAmountPerTrade)}</div>
+                      <div className="text-slate-300">UST smart risk</div>
+                      <div className="font-black text-emerald-300">{recommendedRiskPct.toFixed(2)}% / {currency(smartRiskAmount)}</div>
                     </div>
-                    <div className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+                    <div className="mt-2 text-[11px] text-slate-400">
                       Formula: remaining monthly target ÷ remaining Mon–Fri days ÷ planned trades ÷ expected R. UST then applies the giveback safety ceiling when active.
                     </div>
                   </div>
 
-                  <div className="rounded-md border p-3 bg-slate-50">
+                  <div className="rounded-md border p-3 bg-slate-900/80 text-slate-100 border-slate-800">
                     <div className="text-sm font-medium mb-1">
                       Live Snapshot (read-only)
                     </div>
                     <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
-                      <div className="text-slate-600 dark:text-slate-300">
+                      <div className="text-slate-300">
                         Start Capital
                       </div>
                       <div className="font-medium">
                         {currency(startBalance)}
                       </div>
-                      <div className="text-slate-600 dark:text-slate-300">
+                      <div className="text-slate-300">
                         Equity
                       </div>
                       <div className="font-medium">{currency(equity)}</div>
-                      <div className="text-slate-600 dark:text-slate-300">
+                      <div className="text-slate-300">
                         Profit
                       </div>
                       <div className="font-medium">
                         {currency(Math.max(0, equity - startBalance))}
                       </div>
-                      <div className="text-slate-600 dark:text-slate-300">
+                      <div className="text-slate-300">
                         Threshold
                       </div>
                       <div className="font-medium">
@@ -5781,24 +5904,24 @@ function PageInner() {
                     </Button>
                   </div>
 
-                  <div className="rounded-md border p-3 bg-slate-50">
+                  <div className="rounded-md border p-3 bg-slate-900/80 text-slate-100 border-slate-800">
                     <div className="text-sm font-medium mb-1">
                       Live Snapshot (read-only)
                     </div>
                     <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
-                      <div className="text-slate-600 dark:text-slate-300">
+                      <div className="text-slate-300">
                         Start Capital
                       </div>
                       <div className="font-medium">
                         {currency(startBalance)}
                       </div>
 
-                      <div className="text-slate-600 dark:text-slate-300">
+                      <div className="text-slate-300">
                         Equity
                       </div>
                       <div className="font-medium">{currency(equity)}</div>
 
-                      <div className="text-slate-600 dark:text-slate-300">
+                      <div className="text-slate-300">
                         Profit
                       </div>
                       <div className="font-medium">
@@ -5806,21 +5929,21 @@ function PageInner() {
                         {formatPct(realizedProfit, startBalance)})
                       </div>
 
-                      <div className="text-slate-600 dark:text-slate-300">
+                      <div className="text-slate-300">
                         Mode
                       </div>
                       <div className="font-medium">
                         {profitOnlyMode ? "Profit-Only" : "Standard"}
                       </div>
 
-                      <div className="text-slate-600 dark:text-slate-300">
+                      <div className="text-slate-300">
                         Max Session Loss (min of profit/4 & giveback)
                       </div>
                       <div className="font-medium">
                         {currency(maxSessionLossGuard)}
                       </div>
 
-                      <div className="text-slate-600 dark:text-slate-300">
+                      <div className="text-slate-300">
                         Effective Loss Cap
                       </div>
                       <div className="font-medium">
@@ -5831,40 +5954,40 @@ function PageInner() {
                     </div>
 
                     {/* Giveback Plan — Recommendations */}
-                    <div className="mt-3 rounded-md border bg-white p-3">
+                    <div className="mt-3 rounded-md border bg-slate-950/80 p-3 text-slate-100 border-slate-800">
                       <div className="text-sm font-semibold mb-2">
                         🎯 Giveback Plan — Recommendations
                       </div>
                       <div className="grid md:grid-cols-2 gap-x-6 gap-y-2 text-sm">
-                        <div className="text-slate-600 dark:text-slate-300">
+                        <div className="text-slate-300">
                           Giveback Lock Amount
                         </div>
                         <div className="font-medium">
                           {currency(givebackLockAmt)}
                         </div>
 
-                        <div className="text-slate-600 dark:text-slate-300">
+                        <div className="text-slate-300">
                           Per-Trade Budget (×6 losses)
                         </div>
                         <div className="font-medium">
                           {currency(sixLossBudget)}
                         </div>
 
-                        <div className="text-slate-600 dark:text-slate-300">
+                        <div className="text-slate-300">
                           Giveback Safety Risk %
                         </div>
                         <div className="font-medium">
                           {givebackRiskPct.toFixed(2)}%
                         </div>
                       </div>
-                      <div className="text-[11px] text-slate-500 mt-2">
+                      <div className="text-[11px] text-slate-400 mt-2">
                         These are guidance values only for decision-making. This
                         tab does not change risk elsewhere.
                       </div>
                     </div>
                   </div>
 
-                  <div className="text-[11px] text-slate-500">
+                  <div className="text-[11px] text-slate-400">
                     Note: This tab is informational only and won't change risk
                     or locks elsewhere.
                   </div>
@@ -5874,38 +5997,38 @@ function PageInner() {
           </Card>
         </TabsContent>
 
-        <TabsList className="fixed inset-x-3 bottom-3 z-50 grid h-[72px] grid-cols-5 gap-1 rounded-2xl border border-slate-300 bg-white/95 p-2 shadow-2xl shadow-black/20 backdrop-blur md:hidden dark:border-slate-700/80 dark:bg-slate-950/95 dark:shadow-black/50">
+        <TabsList className="fixed inset-x-3 bottom-3 z-50 grid h-[72px] grid-cols-5 gap-1 rounded-2xl border border-slate-800/80 bg-slate-950/95 p-2 shadow-2xl shadow-black/20 backdrop-blur md:hidden dark:border-slate-700/80 dark:bg-slate-950/95 dark:shadow-black/50">
           <TabsTrigger
             value="dashboard"
-            className="group flex h-full flex-col items-center justify-center rounded-xl px-1 py-1 text-[10px] font-bold leading-none text-slate-600 data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:text-slate-400 dark:data-[state=active]:text-black"
+            className="group flex h-full flex-col items-center justify-center rounded-xl px-1 py-1 text-[10px] font-bold leading-none text-slate-300 data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:text-slate-400 dark:data-[state=active]:text-black"
           >
             <Home className="mb-1 h-5 w-5 text-[#B68E12] group-data-[state=active]:text-black dark:text-[#F6C945] dark:group-data-[state=active]:text-black" />
             <span>Dashboard</span>
           </TabsTrigger>
           <TabsTrigger
             value="journal"
-            className="group flex h-full flex-col items-center justify-center rounded-xl px-1 py-1 text-[10px] font-bold leading-none text-slate-600 data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:text-slate-400 dark:data-[state=active]:text-black"
+            className="group flex h-full flex-col items-center justify-center rounded-xl px-1 py-1 text-[10px] font-bold leading-none text-slate-300 data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:text-slate-400 dark:data-[state=active]:text-black"
           >
             <BookOpen className="mb-1 h-5 w-5 text-[#B68E12] group-data-[state=active]:text-black dark:text-[#F6C945] dark:group-data-[state=active]:text-black" />
             <span>Journal</span>
           </TabsTrigger>
           <TabsTrigger
             value="calendar"
-            className="group flex h-full flex-col items-center justify-center rounded-xl px-1 py-1 text-[10px] font-bold leading-none text-slate-600 data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:text-slate-400 dark:data-[state=active]:text-black"
+            className="group flex h-full flex-col items-center justify-center rounded-xl px-1 py-1 text-[10px] font-bold leading-none text-slate-300 data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:text-slate-400 dark:data-[state=active]:text-black"
           >
             <CalendarDays className="mb-1 h-5 w-5 text-[#B68E12] group-data-[state=active]:text-black dark:text-[#F6C945] dark:group-data-[state=active]:text-black" />
             <span>Calendar</span>
           </TabsTrigger>
           <TabsTrigger
             value="analytics"
-            className="group flex h-full flex-col items-center justify-center rounded-xl px-1 py-1 text-[10px] font-bold leading-none text-slate-600 data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:text-slate-400 dark:data-[state=active]:text-black"
+            className="group flex h-full flex-col items-center justify-center rounded-xl px-1 py-1 text-[10px] font-bold leading-none text-slate-300 data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:text-slate-400 dark:data-[state=active]:text-black"
           >
             <BarChart3 className="mb-1 h-5 w-5 text-[#B68E12] group-data-[state=active]:text-black dark:text-[#F6C945] dark:group-data-[state=active]:text-black" />
             <span>Stats</span>
           </TabsTrigger>
           <TabsTrigger
             value="checklist"
-            className="group flex h-full flex-col items-center justify-center rounded-xl px-1 py-1 text-[10px] font-bold leading-none text-slate-600 data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:text-slate-400 dark:data-[state=active]:text-black"
+            className="group flex h-full flex-col items-center justify-center rounded-xl px-1 py-1 text-[10px] font-bold leading-none text-slate-300 data-[state=active]:bg-[#D4AF37] data-[state=active]:text-black dark:text-slate-400 dark:data-[state=active]:text-black"
           >
             <ClipboardCheck className="mb-1 h-5 w-5 text-[#B68E12] group-data-[state=active]:text-black dark:text-[#F6C945] dark:group-data-[state=active]:text-black" />
             <span>Checklist</span>
@@ -5999,7 +6122,7 @@ function SectionLabel({ title, icon }: { title: string; icon?: DashIcon }) {
           <DashIconView icon={icon} className="h-4 w-4" />
         </div>
       )}
-      <h3 className="text-sm font-extrabold uppercase tracking-[0.18em] text-slate-700 dark:text-slate-100">
+      <h3 className="text-sm font-extrabold uppercase tracking-[0.18em] text-slate-100">
         {title}
       </h3>
       <div className="h-px flex-1 bg-gradient-to-r from-[#D4AF37]/70 to-transparent" />
@@ -6151,7 +6274,7 @@ function DashCard({
       >
         {icon && (
           <div
-            className={`absolute right-3 top-3 grid h-9 w-9 place-items-center rounded-full border bg-white/5 sm:right-4 sm:top-4 sm:h-11 sm:w-11 ${toneText(tone)} border-current/30`}
+            className={`absolute right-3 top-3 grid h-9 w-9 place-items-center rounded-full border border-white/10 bg-white/5 sm:right-4 sm:top-4 sm:h-11 sm:w-11 ${toneText(tone)} border-current/30`}
           >
             <DashIconView icon={icon} className="h-4 w-4 sm:h-5 sm:w-5" />
           </div>
@@ -6272,8 +6395,8 @@ function MiniProgress({
 
 function InfoStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border bg-white p-3">
-      <div className="text-xs text-slate-500">{label}</div>
+    <div className="rounded-lg border bg-slate-950/80 p-3 text-slate-100 border-slate-800">
+      <div className="text-xs text-slate-400">{label}</div>
       <div className="text-lg font-semibold">{value}</div>
     </div>
   );
@@ -6307,6 +6430,67 @@ function CapitalAndRiskCard({
   targetRiskAmount?: number;
   setRecommendedRiskPct?: (v: number) => void;
 }) {
+  const [autoAccount] = useLS<string>("ust:autoAccount", DEFAULT_ACCOUNT || "");
+  const [plannedTrades] = useLocalStorage<number>("ust-checklist-planned-trades-per-day", 3);
+  const [plannedRewardR] = useLocalStorage<number>("ust-checklist-planned-reward-r", 2);
+  const [monthlyTargetLocal] = useLocalStorage<number>("ust-monthly-target", 0);
+  const [pushStatus, setPushStatus] = React.useState<string>("");
+  const [tradeControlStatus, setTradeControlStatus] = React.useState<string>("");
+  const [isTradeControlBusy, setIsTradeControlBusy] = React.useState(false);
+
+  const applySmartRisk = async () => {
+    if (!setRecommendedRiskPct || !(recommendedRiskPct > 0)) return;
+
+    const appliedRisk = Number(recommendedRiskPct.toFixed(2));
+    setRecommendedRiskPct(appliedRisk);
+    setPushStatus("Sending risk to EA bridge...");
+
+    const dailyTarget =
+      Number(targetRiskAmount || 0) *
+      Math.max(1, Number(plannedTrades || 0)) *
+      Math.max(0.1, Number(plannedRewardR || 0));
+
+    const result = await pushSmartRiskToSheets({
+      account: autoAccount,
+      symbol: "ALL",
+      riskPct: appliedRisk,
+      dailyTarget,
+      monthlyTarget: Number(monthlyTargetLocal || 0),
+      plannedTrades: Number(plannedTrades || 0),
+      plannedRewardR: Number(plannedRewardR || 0),
+    });
+
+    setPushStatus(
+      result.ok
+        ? `Smart Risk ${appliedRisk.toFixed(2)}% sent to EA bridge for account ${autoAccount || "not set"}.`
+        : `Smart Risk saved locally, but EA bridge failed: ${result.error}`,
+    );
+  };
+
+
+  const setTradingControl = async (allowTrading: boolean) => {
+    if (!autoAccount) {
+      setTradeControlStatus("Account not set. Confirm the account number first.");
+      return;
+    }
+
+    setIsTradeControlBusy(true);
+    setTradeControlStatus(allowTrading ? "Sending START TRADING command..." : "Sending STOP TRADING command...");
+
+    const result = await pushTradingControlToSheets({
+      account: autoAccount,
+      symbol: "ALL",
+      allowTrading,
+      notes: allowTrading ? "Trading allowed from UST Journal" : "Trading stopped from UST Journal",
+    });
+
+    setTradeControlStatus(
+      result.ok
+        ? `${allowTrading ? "Start Trading" : "Stop Trading"} command sent to EA bridge for account ${autoAccount}. EA should update within the next sync cycle.`
+        : `Trading control failed: ${result.error}`,
+    );
+    setIsTradeControlBusy(false);
+  };
   return (
     <Card>
       <CardContent className="p-4 grid md:grid-cols-4 gap-4">
@@ -6319,7 +6503,7 @@ function CapitalAndRiskCard({
             disabled={tradesCount > 0}
           />
           {tradesCount > 0 && (
-            <div className="text-xs text-slate-500 mt-1">
+            <div className="text-xs text-slate-400 mt-1">
               Locked after first trade.{" "}
               <button
                 className="underline text-rose-600"
@@ -6358,7 +6542,7 @@ function CapitalAndRiskCard({
               <div className="text-sm font-black text-slate-900 dark:text-yellow-200">
                 UST Smart Risk Recommendation
               </div>
-              <div className="mt-1 text-xs text-slate-600 dark:text-slate-300">
+              <div className="mt-1 text-xs text-slate-300">
                 Planning target requires {targetRiskPct.toFixed(2)}% ({currency(targetRiskAmount)}) per trade.
                 Recommended now: {recommendedRiskPct.toFixed(2)}% ({currency(recommendedRiskAmount)}).
               </div>
@@ -6368,12 +6552,56 @@ function CapitalAndRiskCard({
                 type="button"
                 size="sm"
                 className="bg-[#D4AF37] text-black hover:bg-[#F6C945]"
-                onClick={() => setRecommendedRiskPct(Number(recommendedRiskPct.toFixed(2)))}
+                onClick={applySmartRisk}
               >
                 Apply Smart Risk
               </Button>
             )}
           </div>
+          {pushStatus && (
+            <div className="mt-2 text-xs text-slate-300">
+              {pushStatus}
+            </div>
+          )}
+        </div>
+
+        <div className="md:col-span-4 rounded-xl border border-rose-400/30 bg-rose-950/20 p-3">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="text-sm font-black text-rose-200">
+                EA Trading Control
+              </div>
+              <div className="mt-1 text-xs text-slate-300">
+                Use this as the journal-side master switch. Stop Trading blocks new EA entries; Start Trading allows the EA again. Existing open trades remain managed by the EA.
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="border-rose-400/60 bg-rose-500/10 text-rose-100 hover:bg-rose-500/20"
+                disabled={isTradeControlBusy}
+                onClick={() => setTradingControl(false)}
+              >
+                Stop Trading
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                className="bg-emerald-500 text-black hover:bg-emerald-400"
+                disabled={isTradeControlBusy}
+                onClick={() => setTradingControl(true)}
+              >
+                Start Trading
+              </Button>
+            </div>
+          </div>
+          {tradeControlStatus && (
+            <div className="mt-2 text-xs text-slate-300">
+              {tradeControlStatus}
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>
@@ -6461,7 +6689,7 @@ function BadgeShowcase({
       <CardContent className="p-5">
         <div className="grid md:grid-cols-3 gap-5 items-center">
           <div className="flex justify-center">
-            <div className="w-36 h-44 rounded-md border bg-white grid place-items-center overflow-hidden">
+            <div className="w-36 h-44 rounded-md border border-slate-800 bg-slate-950/80 text-slate-100 grid place-items-center overflow-hidden">
               <img
                 src={current?.imagePath || "/badges/silver.png"}
                 alt={current?.name || "Silver"}
@@ -6473,25 +6701,25 @@ function BadgeShowcase({
             <div className="text-xl font-semibold">
               {current?.name || "Starter • Keep building trades"}
             </div>
-            <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            <div className="text-xs text-slate-400 mt-1">
               Badges are now issued from total journal trade count.
             </div>
-            <div className="text-sm text-slate-600 dark:text-slate-300 mt-1">
+            <div className="text-sm text-slate-300 mt-1">
               Journal trades counted: <strong>{tradeCount}</strong>
             </div>
             {nextTier ? (
               <>
-                <div className="text-sm text-slate-600 dark:text-slate-300 mt-2">
+                <div className="text-sm text-slate-300 mt-2">
                   Next badge: <strong>{nextTier.key}</strong> at {nextTier.at}{" "}
                   trades.
                 </div>
-                <div className="w-full h-2 rounded-full bg-slate-50 dark:bg-slate-800 mt-2 overflow-hidden">
+                <div className="w-full h-2 rounded-full bg-slate-900/80 text-slate-100 border-slate-800 dark:bg-slate-800 mt-2 overflow-hidden">
                   <div
                     className="h-2 bg-indigo-500 transition-all"
                     style={{ width: `${pct}%` }}
                   />
                 </div>
-                <div className="text-xs text-slate-500 mt-1">
+                <div className="text-xs text-slate-400 mt-1">
                   {left} more trade(s) to {nextTier.key}.
                 </div>
               </>
@@ -6544,10 +6772,10 @@ function MarketSizerRowDeriv({
       </div>
       <div className="md:col-span-4">
         <Label>Lot Size (auto)</Label>
-        <div className="h-10 grid place-items-center rounded-md border bg-white">
+        <div className="h-10 grid place-items-center rounded-md border border-slate-800 bg-slate-950/80 text-slate-100">
           <strong>{lot}</strong>
         </div>
-        <div className="text-[11px] text-slate-500 mt-1">
+        <div className="text-[11px] text-slate-400 mt-1">
           Risk: {currency(riskAmount)}
         </div>
       </div>
@@ -6573,7 +6801,7 @@ function RiskSizerUniversalPanel({
     <Card>
       <CardContent className="p-4 space-y-3">
         <h4 className="text-lg font-semibold">{title}</h4>
-        <p className="text-sm text-slate-600 dark:text-slate-300">
+        <p className="text-sm text-slate-300">
           Lot size = Risk Amount ÷ (Risk Pips × Pip Value per 1 lot). Enter your
           broker's pip value per lot.
         </p>
@@ -6665,7 +6893,7 @@ function UniversalSizerRow({
       </div>
       <div className="md:col-span-2">
         <Label>Lot Size (auto)</Label>
-        <div className="h-10 grid place-items-center rounded-md border bg-white">
+        <div className="h-10 grid place-items-center rounded-md border border-slate-800 bg-slate-950/80 text-slate-100">
           <strong>{lot}</strong>
         </div>
       </div>
@@ -6752,7 +6980,7 @@ function MarketPicker({
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        className="w-[--radix-popover-trigger-width] p-0 z-[80] bg-white border shadow-lg"
+        className="w-[--radix-popover-trigger-width] p-0 z-[80] bg-slate-950 border border-slate-800 text-slate-100 shadow-xl shadow-black/40"
       >
         <Command>
           <CommandInput placeholder="Search markets or symbols…" />
@@ -6880,7 +7108,7 @@ function MultiQuickLogger({
                 locked ? "opacity-60 pointer-events-none" : ""
               }`}
             >
-              <div className="md:col-span-1 text-xs text-slate-500">
+              <div className="md:col-span-1 text-xs text-slate-400">
                 #{idx + 1}
               </div>
 
@@ -6903,7 +7131,7 @@ function MultiQuickLogger({
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="z-[70] bg-white border shadow-md">
+                  <SelectContent className="z-[70] bg-slate-950 border border-slate-800 text-slate-100 shadow-xl shadow-black/40">
                     {STRATEGIES.map((s) => (
                       <SelectItem key={s} value={s}>
                         {s}
@@ -7092,7 +7320,7 @@ function JournalGrouped({
                 value={journalSearch}
                 onChange={(e) => setJournalSearch(e.target.value)}
                 placeholder="Search market, notes, source..."
-                className="border-slate-700 bg-slate-950/60 text-white placeholder:text-slate-500"
+                className="border-slate-700 bg-slate-950/60 text-white placeholder:text-slate-400"
               />
               <div className="flex flex-wrap gap-2">
                 {(["all", "wins", "losses", "withdrawals", "deposits"] as const).map(
@@ -7305,7 +7533,7 @@ function JournalGrouped({
               {selectedTrade ? (
                 <div className="space-y-3 text-sm">
                   <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-3">
-                    <p className="text-xs uppercase tracking-widest text-slate-500">
+                    <p className="text-xs uppercase tracking-widest text-slate-400">
                       Market
                     </p>
                     <p className="text-lg font-black text-white">
@@ -7314,7 +7542,7 @@ function JournalGrouped({
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-3">
-                      <p className="text-xs uppercase tracking-widest text-slate-500">
+                      <p className="text-xs uppercase tracking-widest text-slate-400">
                         Result
                       </p>
                       <p
@@ -7328,7 +7556,7 @@ function JournalGrouped({
                       </p>
                     </div>
                     <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-3">
-                      <p className="text-xs uppercase tracking-widest text-slate-500">
+                      <p className="text-xs uppercase tracking-widest text-slate-400">
                         Source
                       </p>
                       <p className="text-lg font-black capitalize text-white">
@@ -7337,7 +7565,7 @@ function JournalGrouped({
                     </div>
                   </div>
                   <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-3">
-                    <p className="text-xs uppercase tracking-widest text-slate-500">
+                    <p className="text-xs uppercase tracking-widest text-slate-400">
                       Notes
                     </p>
                     <p className="mt-1 text-slate-300">
@@ -7869,7 +8097,7 @@ function AnalyticsStat({
 function InsightRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-2">
-      <span className="text-xs font-bold uppercase tracking-widest text-slate-500">
+      <span className="text-xs font-bold uppercase tracking-widest text-slate-400">
         {label}
       </span>
       <span className="text-right text-sm font-black text-white">{value}</span>
@@ -8058,7 +8286,7 @@ function SmartCoachPanel({
         </div>
 
         <div className="space-y-2">
-          <div className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
+          <div className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">
             Coach Signals
           </div>
           {suggestions.map((x) => (
@@ -8326,7 +8554,7 @@ function ASetupsGallery() {
 
       {!items.length && (
         <Card>
-          <CardContent className="p-6 text-sm text-slate-600 dark:text-slate-300">
+          <CardContent className="p-6 text-sm text-slate-300">
             Upload screenshots for your A-Setups once. UST will display them as
             execution cards so traders know exactly what is allowed.
           </CardContent>
@@ -8386,7 +8614,7 @@ function ASetupsGallery() {
                 />
 
                 <div className="p-4 space-y-3">
-                  <div className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">
+                  <div className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">
                     Checklist
                   </div>
                   {conditions.length ? (
@@ -8891,7 +9119,7 @@ function OldCalendar({
               !!day && (day.trades > 0 || day.withdrawals > 0 || day.deposits > 0);
             const compactPnl = `${dayPnl >= 0 ? "+" : "-"}$${Math.abs(dayPnl).toFixed(0)}`;
             const cellTone = !hasActivity
-              ? "border-slate-800 bg-slate-950/35 text-slate-500"
+              ? "border-slate-800 bg-slate-950/35 text-slate-400"
               : dayPnl >= 0
                 ? "border-emerald-400/40 bg-emerald-500/15 text-emerald-200 shadow-[0_0_14px_rgba(52,211,153,0.12)]"
                 : "border-rose-400/40 bg-rose-500/15 text-rose-200 shadow-[0_0_14px_rgba(251,113,133,0.12)]";
@@ -9046,7 +9274,7 @@ function OldCalendar({
                         </div>
                       </div>
                     ) : (
-                      <div className="mt-8 text-xs text-slate-500">
+                      <div className="mt-8 text-xs text-slate-400">
                         No trades
                       </div>
                     )}
@@ -9157,7 +9385,7 @@ function OldCalendar({
                         <div className="font-semibold text-slate-100">
                           {t.symbol || "Unknown"}
                         </div>
-                        <div className="text-xs text-slate-500">
+                        <div className="text-xs text-slate-400">
                           {t.ts
                             ? new Date(t.ts).toLocaleTimeString([], {
                                 hour: "2-digit",
@@ -9220,7 +9448,7 @@ function OldCalendar({
                         {currency(Number(pnl.toFixed(2)))}
                       </span>
                     </div>
-                    <div className="mt-1 flex items-center justify-between text-xs text-slate-500">
+                    <div className="mt-1 flex items-center justify-between text-xs text-slate-400">
                       <span>{tradesCount} trades</span>
                       <span>{wr.toFixed(0)}% WR</span>
                     </div>
@@ -9586,7 +9814,7 @@ function AutoImportPanel({
           </button>
         </div>
 
-        <div className="md:col-span-2 text-xs text-slate-500">
+        <div className="md:col-span-2 text-xs text-slate-400">
           Last sync: {lastSync ? new Date(lastSync).toLocaleTimeString() : "—"}
         </div>
       </div>
@@ -9626,7 +9854,7 @@ function AutoImportPanel({
             </button>
           </div>
 
-          <div className="md:col-span-2 text-xs text-slate-500">
+          <div className="md:col-span-2 text-xs text-slate-400">
             Use this for missed/older trades.
           </div>
         </div>
