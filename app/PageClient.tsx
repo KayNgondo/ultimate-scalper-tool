@@ -6445,7 +6445,9 @@ function CapitalAndRiskCard({
   const [pushStatus, setPushStatus] = React.useState<string>("");
   const [tradeControlStatus, setTradeControlStatus] = React.useState<string>("");
   const [isTradeControlBusy, setIsTradeControlBusy] = React.useState(false);
-  const [autoStopOnDailyTarget, setAutoStopOnDailyTarget] = useLocalStorage<boolean>("ust-auto-stop-on-daily-target", true);
+  // UST discipline rule: Daily Target Auto Stop is always ON by default.
+  // This avoids old localStorage values accidentally disabling the protection layer.
+  const autoStopOnDailyTarget = true;
   const [lastAutoStopDate, setLastAutoStopDate] = useLocalStorage<string>("ust-auto-stop-last-date", "");
 
   const applySmartRisk = async () => {
