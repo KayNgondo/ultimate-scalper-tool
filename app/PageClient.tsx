@@ -338,6 +338,17 @@ function businessDaysInMonth(date = new Date()) {
   return days;
 }
 
+function businessDaysRemainingInMonth(date = new Date()) {
+  const y = date.getFullYear();
+  const m = date.getMonth();
+  let days = 0;
+  for (let d = new Date(y, m, date.getDate()); d.getMonth() === m; d.setDate(d.getDate() + 1)) {
+    const day = d.getDay();
+    if (day >= 1 && day <= 5) days++;
+  }
+  return days;
+}
+
 function buildSheetsUrl(account: string, since?: string) {
   // Guard against missing/invalid env vars to avoid crashing the whole app.
   if (!SHEETS_URL || !SHEETS_TOKEN || !account) return null;
@@ -1341,6 +1352,15 @@ function PageInner() {
     50,
   );
 
+  const [plannedTradesPerDay, setPlannedTradesPerDay] = useLocalStorage<number>(
+    "ust-checklist-planned-trades-per-day",
+    3,
+  );
+  const [plannedRewardR, setPlannedRewardR] = useLocalStorage<number>(
+    "ust-checklist-planned-reward-r",
+    2,
+  );
+
   /* Discipline & Goals */
   const [maxLoss, setMaxLoss] = useLocalStorage<number>("ust-max-loss", 0);
   const [lockOnHit, setLockOnHit] = useLocalStorage<boolean>(
@@ -1371,6 +1391,7 @@ function PageInner() {
     [planningCosts],
   );
   const tradingDaysThisMonth = useMemo(() => businessDaysInMonth(), []);
+  const remainingTradingDaysThisMonth = useMemo(() => businessDaysRemainingInMonth(), []);
   const plannedDailyTarget = useMemo(
     () => monthlyCostTarget / Math.max(1, tradingDaysThisMonth),
     [monthlyCostTarget, tradingDaysThisMonth],
@@ -2534,14 +2555,57 @@ function PageInner() {
     return Math.min(dailyCap, maxSessionLossGuard);
   }, [maxLoss, maxSessionLossGuard]);
 
-  // Per-trade guidance so 6 losses == giveback
+  // Smart integrated planning risk guidance
+  const planningMonthlyProgress = useMemo(() => {
+    const now = new Date();
+    return tradeRows
+      .filter((t) => t.ts && isSameMonth(new Date(t.ts), now))
+      .reduce((a, t) => a + (t.pnl || 0), 0);
+  }, [tradeRows]);
+  const remainingMonthlyTarget = useMemo(
+    () => Math.max(0, monthlyCostTarget - planningMonthlyProgress),
+    [monthlyCostTarget, planningMonthlyProgress],
+  );
+  const requiredDailyTarget = useMemo(
+    () => remainingMonthlyTarget / Math.max(1, remainingTradingDaysThisMonth),
+    [remainingMonthlyTarget, remainingTradingDaysThisMonth],
+  );
+
+  // Target risk answers: "what % should I risk per trade to reach my planned daily target?"
+  const targetRiskAmountPerTrade = useMemo(() => {
+    const tradesPerDay = Math.max(1, Number(plannedTradesPerDay) || 1);
+    const rewardR = Math.max(0.1, Number(plannedRewardR) || 1);
+    return requiredDailyTarget > 0 ? requiredDailyTarget / (tradesPerDay * rewardR) : 0;
+  }, [requiredDailyTarget, plannedTradesPerDay, plannedRewardR]);
+
+  const targetRiskPct = useMemo(
+    () => (equity > 0 ? (targetRiskAmountPerTrade / equity) * 100 : 0),
+    [targetRiskAmountPerTrade, equity],
+  );
+
+  // Per-trade protection budget so 6 losses == giveback. This remains the safety ceiling.
   const sixLossBudget = useMemo(
     () => (givebackLockAmt > 0 ? givebackLockAmt / 6 : 0),
     [givebackLockAmt],
   );
-  const recommendedRiskPct = useMemo(
+  const givebackRiskPct = useMemo(
     () => (equity > 0 ? (sixLossBudget / equity) * 100 : 0),
     [sixLossBudget, equity],
+  );
+
+  // Final smart recommendation integrates Planning Page + giveback safety.
+  // If profit-only/giveback is active, UST will not recommend more than the giveback-safe risk.
+  const recommendedRiskPct = useMemo(() => {
+    const target = Number.isFinite(targetRiskPct) ? Math.max(0, targetRiskPct) : 0;
+    const safety = Number.isFinite(givebackRiskPct) ? Math.max(0, givebackRiskPct) : 0;
+    if (target > 0 && safety > 0) return Math.min(target, safety);
+    if (target > 0) return target;
+    return safety;
+  }, [targetRiskPct, givebackRiskPct]);
+
+  const smartRiskAmount = useMemo(
+    () => (equity * recommendedRiskPct) / 100,
+    [equity, recommendedRiskPct],
   );
 
   const riskAmount = useMemo(() => (equity * riskPct) / 100, [equity, riskPct]);
@@ -5526,6 +5590,11 @@ function PageInner() {
                 equity={equity}
                 riskAmount={riskAmount}
                 tradesCount={trades.length}
+                recommendedRiskPct={recommendedRiskPct}
+                recommendedRiskAmount={smartRiskAmount}
+                targetRiskPct={targetRiskPct}
+                targetRiskAmount={targetRiskAmountPerTrade}
+                setRecommendedRiskPct={setRiskPct}
               />
 
               <div className="grid lg:grid-cols-2 gap-4">
@@ -5594,6 +5663,46 @@ function PageInner() {
                     </div>
                   </div>
 
+                  <div className="rounded-md border border-[#D4AF37]/30 bg-[#D4AF37]/10 p-3">
+                    <div className="mb-2 text-sm font-semibold text-slate-900 dark:text-yellow-200">
+                      🧠 Smart Planning Risk
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label>Planned Trades Per Day</Label>
+                        <Input
+                          type="number"
+                          min="1"
+                          value={plannedTradesPerDay}
+                          onChange={(e) => setPlannedTradesPerDay(Math.max(1, Number(e.target.value) || 1))}
+                        />
+                      </div>
+                      <div>
+                        <Label>Expected Average R</Label>
+                        <Input
+                          type="number"
+                          step="0.1"
+                          min="0.1"
+                          value={plannedRewardR}
+                          onChange={(e) => setPlannedRewardR(Math.max(0.1, Number(e.target.value) || 1))}
+                        />
+                      </div>
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
+                      <div className="text-slate-600 dark:text-slate-300">Monthly target remaining</div>
+                      <div className="font-medium">{currency(remainingMonthlyTarget)}</div>
+                      <div className="text-slate-600 dark:text-slate-300">Required daily target</div>
+                      <div className="font-medium">{currency(requiredDailyTarget)}</div>
+                      <div className="text-slate-600 dark:text-slate-300">Target risk needed</div>
+                      <div className="font-black text-blue-600 dark:text-blue-300">{targetRiskPct.toFixed(2)}% / {currency(targetRiskAmountPerTrade)}</div>
+                      <div className="text-slate-600 dark:text-slate-300">UST smart risk</div>
+                      <div className="font-black text-emerald-600 dark:text-emerald-300">{recommendedRiskPct.toFixed(2)}% / {currency(smartRiskAmount)}</div>
+                    </div>
+                    <div className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+                      Formula: remaining monthly target ÷ remaining Mon–Fri days ÷ planned trades ÷ expected R. UST then applies the giveback safety ceiling when active.
+                    </div>
+                  </div>
+
                   <div className="rounded-md border p-3 bg-slate-50">
                     <div className="text-sm font-medium mb-1">
                       Live Snapshot (read-only)
@@ -5638,6 +5747,8 @@ function PageInner() {
                           `Start: ${currency(startBalance)} • Equity: ${currency(equity)}`,
                           `Profit: ${currency(Math.max(0, equity - startBalance))}`,
                           `Profit-Only threshold: ${thresholdPct}% (${currency((thresholdPct / 100) * startBalance)})`,
+                          `Planning target remaining: ${currency(remainingMonthlyTarget)} • Daily needed: ${currency(requiredDailyTarget)}`,
+                          `UST smart risk: ${recommendedRiskPct.toFixed(2)}% (${currency(smartRiskAmount)})`,
                           givebackPct
                             ? `Giveback lock (info): ${givebackPct}%`
                             : null,
@@ -5740,10 +5851,10 @@ function PageInner() {
                         </div>
 
                         <div className="text-slate-600 dark:text-slate-300">
-                          Recommended Risk % per Trade
+                          Giveback Safety Risk %
                         </div>
                         <div className="font-medium">
-                          {recommendedRiskPct.toFixed(2)}%
+                          {givebackRiskPct.toFixed(2)}%
                         </div>
                       </div>
                       <div className="text-[11px] text-slate-500 mt-2">
@@ -6177,6 +6288,11 @@ function CapitalAndRiskCard({
   equity,
   riskAmount,
   tradesCount,
+  recommendedRiskPct = 0,
+  recommendedRiskAmount = 0,
+  targetRiskPct = 0,
+  targetRiskAmount = 0,
+  setRecommendedRiskPct,
 }: {
   startBalance: number;
   setStartBalance: (v: number) => void;
@@ -6185,6 +6301,11 @@ function CapitalAndRiskCard({
   equity: number;
   riskAmount: number;
   tradesCount: number;
+  recommendedRiskPct?: number;
+  recommendedRiskAmount?: number;
+  targetRiskPct?: number;
+  targetRiskAmount?: number;
+  setRecommendedRiskPct?: (v: number) => void;
 }) {
   return (
     <Card>
@@ -6231,6 +6352,29 @@ function CapitalAndRiskCard({
         </div>
         <InfoStat label="Current Equity" value={currency(equity)} />
         <InfoStat label="Risk Amount (auto)" value={currency(riskAmount)} />
+        <div className="md:col-span-4 rounded-xl border border-[#D4AF37]/30 bg-[#D4AF37]/10 p-3">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="text-sm font-black text-slate-900 dark:text-yellow-200">
+                UST Smart Risk Recommendation
+              </div>
+              <div className="mt-1 text-xs text-slate-600 dark:text-slate-300">
+                Planning target requires {targetRiskPct.toFixed(2)}% ({currency(targetRiskAmount)}) per trade.
+                Recommended now: {recommendedRiskPct.toFixed(2)}% ({currency(recommendedRiskAmount)}).
+              </div>
+            </div>
+            {setRecommendedRiskPct && recommendedRiskPct > 0 && (
+              <Button
+                type="button"
+                size="sm"
+                className="bg-[#D4AF37] text-black hover:bg-[#F6C945]"
+                onClick={() => setRecommendedRiskPct(Number(recommendedRiskPct.toFixed(2)))}
+              >
+                Apply Smart Risk
+              </Button>
+            )}
+          </div>
+        </div>
       </CardContent>
     </Card>
   );
