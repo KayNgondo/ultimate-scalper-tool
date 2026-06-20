@@ -1375,6 +1375,17 @@ function PageInner() {
     () => monthlyCostTarget / Math.max(1, tradingDaysThisMonth),
     [monthlyCostTarget, tradingDaysThisMonth],
   );
+  const dashboardDailyTarget = useMemo(() => {
+    const planned = Number(plannedDailyTarget);
+    if (Number.isFinite(planned) && planned > 0) return planned;
+
+    const monthly = Number(monthlyTarget);
+    if (Number.isFinite(monthly) && monthly > 0) {
+      return monthly / Math.max(1, tradingDaysThisMonth);
+    }
+
+    return 0;
+  }, [plannedDailyTarget, monthlyTarget, tradingDaysThisMonth]);
 
   useEffect(() => {
     if (monthlyCostTarget > 0) {
@@ -4963,12 +4974,12 @@ function PageInner() {
                 </div>
                 <div className="mb-3 flex items-center justify-between text-sm text-slate-300">
                   <span>Daily Target</span>
-                  <span>{currency(sessionTarget || 0)}</span>
+                  <span>{currency(dashboardDailyTarget)}</span>
                 </div>
                 <div className="text-3xl font-black text-[#F6C945]">
-                  {sessionTarget > 0
+                  {dashboardDailyTarget > 0
                     ? fmt(
-                        Math.max(0, Math.min(100, (pnl / sessionTarget) * 100)),
+                        Math.max(0, Math.min(100, (pnl / dashboardDailyTarget) * 100)),
                       )
                     : "0"}
                   %
@@ -4977,14 +4988,14 @@ function PageInner() {
                   <div
                     className="h-full rounded-full bg-gradient-to-r from-[#F6C945] to-amber-400"
                     style={{
-                      width: `${sessionTarget > 0 ? Math.max(0, Math.min(100, (pnl / sessionTarget) * 100)) : 0}%`,
+                      width: `${dashboardDailyTarget > 0 ? Math.max(0, Math.min(100, (pnl / dashboardDailyTarget) * 100)) : 0}%`,
                     }}
                   />
                 </div>
                 <div className="mt-2 flex justify-between text-xs text-slate-400">
                   <span>{currency(Math.max(0, pnl))} achieved</span>
                   <span>
-                    {currency(Math.max(0, (sessionTarget || 0) - pnl))}{" "}
+                    {currency(Math.max(0, dashboardDailyTarget - Math.max(0, pnl)))}{" "}
                     remaining
                   </span>
                 </div>
